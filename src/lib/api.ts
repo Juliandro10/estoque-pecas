@@ -1,59 +1,68 @@
-import type { Dashboard, Machine, Movement, Part } from '../types';
+import type { Dashboard, MonthlyReport, Movement, Part, PartStatus, Shift, StockReport } from '../types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
   });
-
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `Erro ${res.status}`);
   }
-
-  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
 export const api = {
   dashboard: () => request<Dashboard>('/dashboard'),
-  machines: {
-    list: () => request<Machine[]>('/machines'),
-    create: (data: Partial<Machine>) =>
-      request<Machine>('/machines', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: number, data: Partial<Machine>) =>
-      request<Machine>(`/machines/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    remove: (id: number) => request<void>(`/machines/${id}`, { method: 'DELETE' }),
-  },
   parts: {
-    list: (params?: { q?: string; machineId?: number; lowOnly?: boolean }) => {
+    list: (params?: { q?: string; status?: PartStatus }) => {
       const search = new URLSearchParams();
       if (params?.q) search.set('q', params.q);
-      if (params?.machineId) search.set('machineId', String(params.machineId));
-      if (params?.lowOnly) search.set('lowOnly', '1');
+      if (params?.status) search.set('status', params.status);
       const qs = search.toString();
       return request<Part[]>(`/parts${qs ? `?${qs}` : ''}`);
     },
-    get: (id: number) => request<Part>(`/parts/${id}`),
-    create: (data: Partial<Part>) =>
-      request<Part>('/parts', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: number, data: Partial<Part>) =>
-      request<Part>(`/parts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    remove: (id: number) => request<void>(`/parts/${id}`, { method: 'DELETE' }),
-  },
-  movements: {
-    list: (partId?: number) =>
-      request<Movement[]>(`/movements${partId ? `?partId=${partId}` : ''}`),
-    create: (data: {
-      part_id: number;
-      type: 'in' | 'out' | 'adjust';
-      quantity: number;
-      reason?: string;
-      reference?: string;
-    }) =>
-      request<{ movement: Movement; part: Part }>('/movements', {
+    setQuantity: (id: number, quantity: number, reason?: string) =>
+      request<Part>(`/parts/${id}/quantity`, {
+        method: 'PUT',
+        body: JSON.stringify({ quantity, reason }),
+      }),
+    withdraw: (
+      id: number,
+      data: {
+        quantity: number;
+        shift: Shift;
+        withdrawn_by: string;
+        requested_by?: string;
+        notes?: string;
+      }
+    ) =>
+      request<{ part: Part; withdrawal: Movement }>(`/parts/${id}/withdraw`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
   },
+  movements: () => request<Movement[]>('/movements'),
+  withdrawals: {
+    list: (shift?: Shift) =>
+      request<Movement[]>(`/withdrawals${shift ? `?shift=${shift}` : ''}`),
+    update: (
+      id: number,
+      data: {
+        quantity: number;
+        shift: Shift;
+        withdrawn_by: string;
+        requested_by?: string;
+        notes?: string;
+      }
+    ) =>
+      request<{ part: Part; movement: Movement }>(`/withdrawals/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    remove: (id: number) =>
+      request<{ part: Part; deleted: Movement }>(`/withdrawals/${id}`, { method: 'DELETE' }),
+  },
+  report: () => request<StockReport>('/report'),
+  monthlyReport: (month: string) => request<MonthlyReport>(`/reports/monthly?month=${month}`),
 };

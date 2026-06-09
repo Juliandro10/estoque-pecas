@@ -9,12 +9,14 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "tsc -b && vite build",
     "start": "tsx server/index.ts",
-    "import-catalog": "tsx scripts/import-catalog.ts",
-    "preview": "vite preview"
+    "app": "npm run build && npm start",
+    "import-catalog": "tsx scripts/import-catalog.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.2"

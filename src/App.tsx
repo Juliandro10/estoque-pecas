@@ -2,9 +2,10 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import { Layout } from './components/Layout';
 import { DashboardPage } from './pages/DashboardPage';
-import { MachinesPage } from './pages/MachinesPage';
-import { MovementsPage } from './pages/MovementsPage';
 import { PartsPage } from './pages/PartsPage';
+import { MonthlyReportsPage } from './pages/MonthlyReportsPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { WithdrawalsPage } from './pages/WithdrawalsPage';
 
 export default function App() {
   return (
@@ -13,8 +14,9 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<DashboardPage />} />
           <Route path="pecas" element={<PartsPage />} />
-          <Route path="maquinas" element={<MachinesPage />} />
-          <Route path="movimentacoes" element={<MovementsPage />} />
+          <Route path="retiradas" element={<WithdrawalsPage />} />
+          <Route path="relatorios" element={<ReportsPage />} />
+          <Route path="relatorios-mensais" element={<MonthlyReportsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

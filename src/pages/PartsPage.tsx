@@ -3,35 +3,31 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { StockBadge } from '../components/StockBadge';
 import { api } from '../lib/api';
-import type { Machine, Part } from '../types';
+import type { Part, PartStatus, Shift } from '../types';
+import { SHIFT_LABELS } from '../types';
 
 export function PartsPage() {
   const [parts, setParts] = useState<Part[]>([]);
-  const [machines, setMachines] = useState<Machine[]>([]);
   const [q, setQ] = useState('');
-  const [machineId, setMachineId] = useState('');
-  const [lowOnly, setLowOnly] = useState(false);
+  const [status, setStatus] = useState<'' | PartStatus>('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [moving, setMoving] = useState<Part | null>(null);
-  const [moveQty, setMoveQty] = useState('');
+  const [withdrawing, setWithdrawing] = useState<Part | null>(null);
+  const [adjusting, setAdjusting] = useState<Part | null>(null);
+  const [qty, setQty] = useState('');
+  const [shift, setShift] = useState<Shift>('cedo');
+  const [withdrawnBy, setWithdrawnBy] = useState('');
+  const [requestedBy, setRequestedBy] = useState('');
+  const [notes, setNotes] = useState('');
+  const [adjustQty, setAdjustQty] = useState('');
 
   async function load() {
     setLoading(true);
     try {
-      const [partsData, machinesData] = await Promise.all([
-        api.parts.list({
-          q: q || undefined,
-          machineId: machineId ? Number(machineId) : undefined,
-          lowOnly,
-        }),
-        api.machines.list(),
-      ]);
-      setParts(partsData);
-      setMachines(machinesData);
+      setParts(await api.parts.list({ q: q || undefined, status: status || undefined }));
       setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar peças.');
+      setError(err instanceof Error ? err.message : 'Erro ao carregar.');
     } finally {
       setLoading(false);
     }
@@ -39,28 +35,44 @@ export function PartsPage() {
 
   useEffect(() => {
     void load();
-  }, [q, machineId, lowOnly]);
+  }, [q, status]);
 
-  function openAdjust(part: Part) {
-    setMoving(part);
-    setMoveQty(String(part.quantity));
+  function openWithdraw(part: Part) {
+    setWithdrawing(part);
+    setQty('1');
+    setShift('cedo');
+    setWithdrawnBy('');
+    setRequestedBy('');
+    setNotes('');
   }
 
-  async function saveQuantity(e: FormEvent) {
+  async function saveWithdraw(e: FormEvent) {
     e.preventDefault();
-    if (!moving) return;
+    if (!withdrawing) return;
     try {
-      await api.movements.create({
-        part_id: moving.id,
-        type: 'adjust',
-        quantity: Number(moveQty),
-        reason: 'Atualização de estoque',
+      await api.parts.withdraw(withdrawing.id, {
+        quantity: Number(qty),
+        shift,
+        withdrawn_by: withdrawnBy,
+        requested_by: requestedBy || undefined,
+        notes: notes || undefined,
       });
-      setMoving(null);
-      setMoveQty('');
+      setWithdrawing(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar quantidade.');
+      setError(err instanceof Error ? err.message : 'Erro ao registrar retirada.');
+    }
+  }
+
+  async function saveAdjust(e: FormEvent) {
+    e.preventDefault();
+    if (!adjusting) return;
+    try {
+      await api.parts.setQuantity(adjusting.id, Number(adjustQty), 'Ajuste de estoque');
+      setAdjusting(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao ajustar.');
     }
   }
 
@@ -69,48 +81,31 @@ export function PartsPage() {
       <header className="page-header">
         <div>
           <h1>Peças</h1>
-          <p>Catálogo pré-carregado — ajuste só a quantidade</p>
+          <p>Registre retiradas ou ajuste o estoque</p>
         </div>
       </header>
 
       {error ? <div className="error-box">{error}</div> : null}
 
       <div className="filters">
-        <input
-          placeholder="Buscar por código, nome, fornecedor…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <select value={machineId} onChange={(e) => setMachineId(e.target.value)}>
-          <option value="">Todas as máquinas</option>
-          {machines.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.code} — {m.name}
-            </option>
-          ))}
+        <input placeholder="Buscar código ou nome…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={status} onChange={(e) => setStatus(e.target.value as '' | PartStatus)}>
+          <option value="">Todos os status</option>
+          <option value="ok">OK</option>
+          <option value="baixo">Baixo</option>
+          <option value="zerado">Zerado</option>
         </select>
-        <label className="check-filter">
-          <input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
-          Só estoque baixo
-        </label>
       </div>
 
       <div className="card table-wrap">
         {loading ? (
           <div className="empty">Carregando…</div>
-        ) : parts.length === 0 ? (
-          <div className="empty">
-            Nenhuma peça no catálogo. Preencha <span className="mono">data/catalogo.json</span> e rode{' '}
-            <span className="mono">npm run estoque:import</span>.
-          </div>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Código</th>
-                <th>Nome</th>
-                <th>Máquina</th>
-                <th>Local</th>
+                <th>Peça</th>
                 <th>Qtd</th>
                 <th>Mín.</th>
                 <th>Status</th>
@@ -122,8 +117,6 @@ export function PartsPage() {
                 <tr key={part.id}>
                   <td className="mono">{part.code}</td>
                   <td>{part.name}</td>
-                  <td>{part.machine_name ?? '—'}</td>
-                  <td>{part.location ?? '—'}</td>
                   <td>
                     {part.quantity} {part.unit}
                   </td>
@@ -134,9 +127,21 @@ export function PartsPage() {
                     <StockBadge part={part} />
                   </td>
                   <td>
-                    <button type="button" className="btn btn-sm" onClick={() => openAdjust(part)}>
-                      Ajustar qtd
-                    </button>
+                    <div className="row-actions">
+                      <button type="button" className="btn btn-sm" onClick={() => openWithdraw(part)}>
+                        Retirada
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setAdjusting(part);
+                          setAdjustQty(String(part.quantity));
+                        }}
+                      >
+                        Ajustar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -145,27 +150,73 @@ export function PartsPage() {
         )}
       </div>
 
-      {moving ? (
-        <Modal title={`Quantidade — ${moving.code}`} onClose={() => setMoving(null)}>
-          <p className="move-info">
-            {moving.name}
-            {moving.machine_name ? ` · ${moving.machine_name}` : ''}
-          </p>
-          <form onSubmit={(e) => void saveQuantity(e)} className="form-grid">
-            <div className="field full">
-              <label>Quantidade em estoque ({moving.unit})</label>
+      {withdrawing ? (
+        <Modal title={`Retirada — ${withdrawing.code}`} onClose={() => setWithdrawing(null)}>
+          <p className="modal-sub">{withdrawing.name} · estoque: {withdrawing.quantity} {withdrawing.unit}</p>
+          <form onSubmit={(e) => void saveWithdraw(e)} className="form-stack">
+            <div className="field">
+              <label>Quantidade retirada</label>
               <input
-                required
                 autoFocus
+                required
                 type="number"
-                min="0"
-                step="any"
-                value={moveQty}
-                onChange={(e) => setMoveQty(e.target.value)}
+                min="1"
+                max={withdrawing.quantity}
+                step="1"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
               />
             </div>
-            <div className="modal-actions full">
-              <button type="button" className="btn btn-ghost" onClick={() => setMoving(null)}>
+            <div className="field">
+              <label>Turno</label>
+              <select value={shift} onChange={(e) => setShift(e.target.value as Shift)}>
+                <option value="cedo">{SHIFT_LABELS.cedo}</option>
+                <option value="tarde">{SHIFT_LABELS.tarde}</option>
+                <option value="noite">{SHIFT_LABELS.noite}</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Quem retirou</label>
+              <input required value={withdrawnBy} onChange={(e) => setWithdrawnBy(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Quem solicitou</label>
+              <input value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Observações</label>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Motivo, máquina, etc." />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setWithdrawing(null)}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn">
+                Registrar
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {adjusting ? (
+        <Modal title={`Ajuste — ${adjusting.code}`} onClose={() => setAdjusting(null)}>
+          <p className="modal-sub">{adjusting.name}</p>
+          <form onSubmit={(e) => void saveAdjust(e)}>
+            <div className="field">
+              <label>Quantidade em estoque ({adjusting.unit})</label>
+              <input
+                autoFocus
+                required
+                type="number"
+                min="0"
+                step="1"
+                value={adjustQty}
+                onChange={(e) => setAdjustQty(e.target.value)}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setAdjusting(null)}>
                 Cancelar
               </button>
               <button type="submit" className="btn">
@@ -175,23 +226,6 @@ export function PartsPage() {
           </form>
         </Modal>
       ) : null}
-
-      <style>{`
-        .check-filter {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          color: var(--muted);
-          padding-top: 10px;
-        }
-        .check-filter input {
-          width: auto;
-        }
-        .move-info {
-          margin: 0 0 16px;
-          color: var(--muted);
-        }
-      `}</style>
     </div>
   );
 }

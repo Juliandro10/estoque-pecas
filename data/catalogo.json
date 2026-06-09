@@ -1,4 +1,23 @@
 {
   "machines": [],
-  "parts": []
+  "parts": [
+    { "code": "AG-3.5.2", "name": "Agulha 3,5.2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "AG-6.2", "name": "Agulha 6,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "AG-7.2", "name": "Agulha 7,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+
+    { "code": "PA-3.5.2", "name": "Platina de Acoplamento 3,5.2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "PA-6.2", "name": "Platina de Acoplamento 6,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "PA-7.2", "name": "Platina de Acoplamento 7,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+
+    { "code": "CPC-3.5.2", "name": "Clavete/Platina de Centro 3,5.2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "CPC-6.2", "name": "Clavete/Platina de Centro 6,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "CPC-7.2", "name": "Clavete/Platina de Centro 7,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+
+    { "code": "SEL-3.5.2", "name": "Seleção 3,5.2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "SEL-6.2", "name": "Seleção 6,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "SEL-7.2", "name": "Seleção 7,2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+
+    { "code": "MS-3.5.2", "name": "Mola de seleção 3,5.2", "quantity": 0, "min_quantity": 10, "unit": "un" },
+    { "code": "MS-6.2", "name": "Mola de seleção 6,2", "quantity": 0, "min_quantity": 10, "unit": "un" }
+  ]
 }

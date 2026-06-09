@@ -6,58 +6,43 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
 const dataPath = path.join(dataDir, 'estoque.json');
 
-export type MachineRow = {
-  id: number;
-  code: string;
-  name: string;
-  location: string | null;
-  notes: string | null;
-  created_at: string;
-};
-
 export type PartRow = {
   id: number;
   code: string;
   name: string;
-  description: string | null;
   quantity: number;
   min_quantity: number;
   unit: string;
-  location: string | null;
-  machine_id: number | null;
-  supplier: string | null;
-  unit_cost: number | null;
-  notes: string | null;
-  created_at: string;
   updated_at: string;
 };
+
+export type Shift = 'cedo' | 'tarde' | 'noite';
 
 export type MovementRow = {
   id: number;
   part_id: number;
-  type: 'in' | 'out' | 'adjust';
+  type: 'adjust' | 'withdrawal';
   quantity: number;
   previous_qty: number;
   new_qty: number;
   reason: string | null;
-  reference: string | null;
+  shift: Shift | null;
+  withdrawn_by: string | null;
+  requested_by: string | null;
+  notes: string | null;
   created_at: string;
 };
 
 type DbState = {
-  machines: MachineRow[];
   parts: PartRow[];
   movements: MovementRow[];
-  nextMachineId: number;
   nextPartId: number;
   nextMovementId: number;
 };
 
 const emptyState = (): DbState => ({
-  machines: [],
   parts: [],
   movements: [],
-  nextMachineId: 1,
   nextPartId: 1,
   nextMovementId: 1,
 });
@@ -65,9 +50,7 @@ const emptyState = (): DbState => ({
 let state: DbState = emptyState();
 
 function ensureDataDir() {
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 }
 
 function load() {
@@ -77,7 +60,17 @@ function load() {
     save();
     return;
   }
-  state = { ...emptyState(), ...JSON.parse(fs.readFileSync(dataPath, 'utf8')) };
+  const raw = { ...emptyState(), ...JSON.parse(fs.readFileSync(dataPath, 'utf8')) };
+  state = {
+    ...raw,
+    movements: (raw.movements ?? []).map((m: MovementRow) => ({
+      shift: null,
+      withdrawn_by: null,
+      requested_by: null,
+      notes: null,
+      ...m,
+    })),
+  };
 }
 
 function save() {
@@ -91,118 +84,119 @@ function now() {
   return new Date().toISOString();
 }
 
-export const store = {
-  getMachines: () => [...state.machines].sort((a, b) => a.name.localeCompare(b.name)),
-  getMachine: (id: number) => state.machines.find((m) => m.id === id),
-  createMachine: (input: Omit<MachineRow, 'id' | 'created_at'>) => {
-    if (state.machines.some((m) => m.code === input.code)) {
-      throw new Error('DUPLICATE_MACHINE');
-    }
-    const row: MachineRow = { id: state.nextMachineId++, ...input, created_at: now() };
-    state.machines.push(row);
-    save();
-    return row;
-  },
-  updateMachine: (id: number, input: Omit<MachineRow, 'id' | 'created_at'>) => {
-    const idx = state.machines.findIndex((m) => m.id === id);
-    if (idx < 0) return null;
-    if (state.machines.some((m) => m.code === input.code && m.id !== id)) {
-      throw new Error('DUPLICATE_MACHINE');
-    }
-    state.machines[idx] = { ...state.machines[idx], ...input };
-    save();
-    return state.machines[idx];
-  },
-  deleteMachine: (id: number) => {
-    const before = state.machines.length;
-    state.machines = state.machines.filter((m) => m.id !== id);
-    state.parts = state.parts.map((p) => (p.machine_id === id ? { ...p, machine_id: null } : p));
-    if (state.machines.length === before) return false;
-    save();
-    return true;
-  },
+export function partStatus(part: Pick<PartRow, 'quantity' | 'min_quantity'>) {
+  if (part.quantity === 0) return 'zerado' as const;
+  if (part.min_quantity > 0 && part.quantity < part.min_quantity) return 'baixo' as const;
+  return 'ok' as const;
+}
 
-  getParts: (filters?: { q?: string; machineId?: number; lowOnly?: boolean }) => {
+export const store = {
+  getParts: (filters?: { q?: string; status?: 'baixo' | 'zerado' | 'ok' }) => {
     let rows = [...state.parts];
     const q = filters?.q?.trim().toLowerCase();
     if (q) {
       rows = rows.filter(
-        (p) =>
-          p.code.toLowerCase().includes(q) ||
-          p.name.toLowerCase().includes(q) ||
-          (p.description ?? '').toLowerCase().includes(q) ||
-          (p.supplier ?? '').toLowerCase().includes(q)
+        (p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
       );
     }
-    if (filters?.machineId) {
-      rows = rows.filter((p) => p.machine_id === filters.machineId);
+    if (filters?.status) {
+      rows = rows.filter((p) => partStatus(p) === filters.status);
     }
-    if (filters?.lowOnly) {
-      rows = rows.filter((p) => p.min_quantity > 0 && p.quantity <= p.min_quantity);
-    }
-    return rows.sort((a, b) => a.name.localeCompare(b.name));
+    return rows.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   },
+
   getPart: (id: number) => state.parts.find((p) => p.id === id),
-  createPart: (input: Omit<PartRow, 'id' | 'created_at' | 'updated_at'>) => {
-    if (state.parts.some((p) => p.code === input.code)) {
-      throw new Error('DUPLICATE_PART');
+
+  upsertPartFromCatalog: (input: {
+    code: string;
+    name: string;
+    quantity?: number;
+    min_quantity?: number;
+    unit?: string;
+  }) => {
+    const existing = state.parts.find((p) => p.code === input.code);
+    if (existing) {
+      existing.name = input.name;
+      existing.min_quantity = Number(input.min_quantity ?? existing.min_quantity);
+      existing.unit = input.unit?.trim() || existing.unit;
+      existing.updated_at = now();
+      save();
+      return { row: existing, created: false };
     }
-    const ts = now();
-    const row: PartRow = { id: state.nextPartId++, ...input, created_at: ts, updated_at: ts };
+    const row: PartRow = {
+      id: state.nextPartId++,
+      code: input.code.trim(),
+      name: input.name.trim(),
+      quantity: Number(input.quantity ?? 0),
+      min_quantity: Number(input.min_quantity ?? 0),
+      unit: input.unit?.trim() || 'un',
+      updated_at: now(),
+    };
     state.parts.push(row);
     save();
-    return row;
-  },
-  updatePart: (id: number, input: Partial<Omit<PartRow, 'id' | 'created_at' | 'updated_at' | 'quantity'>>) => {
-    const idx = state.parts.findIndex((p) => p.id === id);
-    if (idx < 0) return null;
-    if (input.code && state.parts.some((p) => p.code === input.code && p.id !== id)) {
-      throw new Error('DUPLICATE_PART');
-    }
-    state.parts[idx] = { ...state.parts[idx], ...input, updated_at: now() };
-    save();
-    return state.parts[idx];
-  },
-  deletePart: (id: number) => {
-    const before = state.parts.length;
-    state.parts = state.parts.filter((p) => p.id !== id);
-    state.movements = state.movements.filter((m) => m.part_id !== id);
-    if (state.parts.length === before) return false;
-    save();
-    return true;
+    return { row, created: true };
   },
 
-  getMovements: (partId?: number) => {
-    let rows = [...state.movements];
-    if (partId) rows = rows.filter((m) => m.part_id === partId);
-    return rows.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 200);
-  },
-  createMovement: (input: {
-    part_id: number;
-    type: 'in' | 'out' | 'adjust';
-    quantity: number;
-    reason?: string | null;
-    reference?: string | null;
-  }) => {
-    const part = state.parts.find((p) => p.id === input.part_id);
+  setQuantity: (id: number, quantity: number, reason?: string) => {
+    const part = state.parts.find((p) => p.id === id);
     if (!part) return null;
-
-    let newQty = part.quantity;
-    if (input.type === 'in') newQty += input.quantity;
-    else if (input.type === 'out') newQty -= input.quantity;
-    else newQty = input.quantity;
-
-    if (newQty < 0) throw new Error('NEGATIVE_STOCK');
+    if (quantity < 0) throw new Error('NEGATIVE_STOCK');
 
     const movement: MovementRow = {
       id: state.nextMovementId++,
-      part_id: input.part_id,
-      type: input.type,
-      quantity: input.type === 'adjust' ? newQty : input.quantity,
+      part_id: id,
+      type: 'adjust',
+      quantity,
+      previous_qty: part.quantity,
+      new_qty: quantity,
+      reason: reason?.trim() || null,
+      shift: null,
+      withdrawn_by: null,
+      requested_by: null,
+      notes: null,
+      created_at: now(),
+    };
+
+    part.quantity = quantity;
+    part.updated_at = now();
+    state.movements.push(movement);
+    save();
+    return { part, movement };
+  },
+
+  withdraw: (
+    id: number,
+    input: {
+      quantity: number;
+      shift: Shift;
+      withdrawn_by: string;
+      requested_by?: string;
+      notes?: string;
+    }
+  ) => {
+    const part = state.parts.find((p) => p.id === id);
+    if (!part) return null;
+
+    const qty = Number(input.quantity);
+    if (!qty || qty <= 0) throw new Error('INVALID_QUANTITY');
+    if (!input.withdrawn_by?.trim()) throw new Error('MISSING_WITHDRAWN_BY');
+    if (!['cedo', 'tarde', 'noite'].includes(input.shift)) throw new Error('INVALID_SHIFT');
+
+    const newQty = part.quantity - qty;
+    if (newQty < 0) throw new Error('INSUFFICIENT_STOCK');
+
+    const movement: MovementRow = {
+      id: state.nextMovementId++,
+      part_id: id,
+      type: 'withdrawal',
+      quantity: qty,
       previous_qty: part.quantity,
       new_qty: newQty,
-      reason: input.reason ?? null,
-      reference: input.reference ?? null,
+      reason: null,
+      shift: input.shift,
+      withdrawn_by: input.withdrawn_by.trim(),
+      requested_by: input.requested_by?.trim() || null,
+      notes: input.notes?.trim() || null,
       created_at: now(),
     };
 
@@ -210,42 +204,120 @@ export const store = {
     part.updated_at = now();
     state.movements.push(movement);
     save();
-    return { movement, part };
+    return { part, movement };
+  },
+
+  enrichMovement: (m: MovementRow) => {
+    const part = state.parts.find((p) => p.id === m.part_id);
+    return { ...m, part_code: part?.code, part_name: part?.name };
+  },
+
+  getMovements: (limit = 50) =>
+    [...state.movements]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit)
+      .map((m) => store.enrichMovement(m)),
+
+  getWithdrawal: (id: number) => {
+    const movement = state.movements.find((m) => m.id === id && m.type === 'withdrawal');
+    return movement ? store.enrichMovement(movement) : null;
+  },
+
+  getWithdrawals: (filters?: { shift?: Shift; limit?: number }) => {
+    let rows = state.movements.filter((m) => m.type === 'withdrawal');
+    if (filters?.shift) rows = rows.filter((m) => m.shift === filters.shift);
+    return rows
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, filters?.limit ?? 200)
+      .map((m) => store.enrichMovement(m));
+  },
+
+  updateWithdrawal: (
+    id: number,
+    input: {
+      quantity: number;
+      shift: Shift;
+      withdrawn_by: string;
+      requested_by?: string;
+      notes?: string;
+    }
+  ) => {
+    const idx = state.movements.findIndex((m) => m.id === id && m.type === 'withdrawal');
+    if (idx < 0) return null;
+
+    const movement = state.movements[idx];
+    const part = state.parts.find((p) => p.id === movement.part_id);
+    if (!part) return null;
+
+    const qty = Number(input.quantity);
+    if (!qty || qty <= 0) throw new Error('INVALID_QUANTITY');
+    if (!input.withdrawn_by?.trim()) throw new Error('MISSING_WITHDRAWN_BY');
+    if (!['cedo', 'tarde', 'noite'].includes(input.shift)) throw new Error('INVALID_SHIFT');
+
+    const newPartQty = part.quantity + movement.quantity - qty;
+    if (newPartQty < 0) throw new Error('INSUFFICIENT_STOCK');
+
+    part.quantity = newPartQty;
+    part.updated_at = now();
+    state.movements[idx] = {
+      ...movement,
+      quantity: qty,
+      new_qty: newPartQty,
+      shift: input.shift,
+      withdrawn_by: input.withdrawn_by.trim(),
+      requested_by: input.requested_by?.trim() || null,
+      notes: input.notes?.trim() || null,
+    };
+    save();
+    return { part, movement: store.enrichMovement(state.movements[idx]) };
+  },
+
+  deleteWithdrawal: (id: number) => {
+    const idx = state.movements.findIndex((m) => m.id === id && m.type === 'withdrawal');
+    if (idx < 0) return null;
+
+    const movement = state.movements[idx];
+    const part = state.parts.find((p) => p.id === movement.part_id);
+    if (!part) return null;
+
+    part.quantity += movement.quantity;
+    part.updated_at = now();
+    state.movements.splice(idx, 1);
+    save();
+    return { part, deleted: store.enrichMovement(movement) };
+  },
+
+  getReport: () => {
+    const parts = store.getParts().map((p) => ({ ...p, status: partStatus(p) }));
+    const low = parts.filter((p) => p.status === 'baixo');
+    const zero = parts.filter((p) => p.status === 'zerado');
+    return {
+      generated_at: now(),
+      total_parts: parts.length,
+      low_stock: low.length,
+      out_of_stock: zero.length,
+      parts,
+      lowStockParts: low,
+      outOfStockParts: zero,
+      recentMovements: store.getMovements(20),
+      recentWithdrawals: store.getWithdrawals({ limit: 50 }),
+    };
   },
 
   getDashboard: () => {
-    const lowStockParts = state.parts
-      .filter((p) => p.min_quantity > 0 && p.quantity <= p.min_quantity)
-      .sort((a, b) => a.quantity - b.quantity)
-      .slice(0, 8);
-    const recentMovements = store.getMovements().slice(0, 10);
-
+    const parts = state.parts;
     return {
-      total_parts: state.parts.length,
-      total_machines: state.machines.length,
-      low_stock: state.parts.filter((p) => p.min_quantity > 0 && p.quantity <= p.min_quantity).length,
-      out_of_stock: state.parts.filter((p) => p.quantity === 0).length,
-      stock_value: state.parts.reduce((sum, p) => sum + p.quantity * (p.unit_cost ?? 0), 0),
-      lowStockParts,
-      recentMovements,
-    };
-  },
-
-  enrichPart: (part: PartRow) => {
-    const machine = part.machine_id ? state.machines.find((m) => m.id === part.machine_id) : null;
-    return {
-      ...part,
-      machine_code: machine?.code ?? null,
-      machine_name: machine?.name ?? null,
-    };
-  },
-
-  enrichMovement: (movement: MovementRow) => {
-    const part = state.parts.find((p) => p.id === movement.part_id);
-    return {
-      ...movement,
-      part_code: part?.code,
-      part_name: part?.name,
+      total_parts: parts.length,
+      low_stock: parts.filter((p) => partStatus(p) === 'baixo').length,
+      out_of_stock: parts.filter((p) => partStatus(p) === 'zerado').length,
+      lowStockParts: store
+        .getParts({ status: 'baixo' })
+        .concat(store.getParts({ status: 'zerado' }))
+        .sort((a, b) => a.quantity - b.quantity)
+        .slice(0, 10)
+        .map((p) => ({ ...p, status: partStatus(p) })),
+      recentMovements: store.getMovements(10),
+      recentWithdrawals: store.getWithdrawals({ limit: 10 }),
     };
   },
 };

@@ -1,9 +1,11 @@
 import cors from 'cors';
 import express from 'express';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { importCatalog, readCatalogFile } from './catalog.js';
+import { getMonthlyReport, previousMonthKey } from './monthly-report.js';
 import { store } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,237 +16,177 @@ const app = express();
 app.use(cors({ origin: [`http://${HOST}:5174`, `http://localhost:5174`] }));
 app.use(express.json());
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, local: true });
-});
+const catalog = readCatalogFile();
+if ((catalog.parts?.length ?? 0) > 0) {
+  importCatalog({ preserveQuantity: true });
+}
 
 app.get('/api/dashboard', (_req, res) => {
-  const data = store.getDashboard();
-  res.json({
-    ...data,
-    lowStockParts: data.lowStockParts.map(store.enrichPart),
-    recentMovements: data.recentMovements.map(store.enrichMovement),
-  });
-});
-
-app.get('/api/machines', (_req, res) => {
-  res.json(store.getMachines());
-});
-
-app.post('/api/machines', (req, res) => {
-  const { code, name, location, notes } = req.body;
-  if (!code?.trim() || !name?.trim()) {
-    res.status(400).json({ error: 'Código e nome são obrigatórios.' });
-    return;
-  }
-  try {
-    const row = store.createMachine({
-      code: code.trim(),
-      name: name.trim(),
-      location: location?.trim() || null,
-      notes: notes?.trim() || null,
-    });
-    res.status(201).json(row);
-  } catch (err) {
-    if (err instanceof Error && err.message === 'DUPLICATE_MACHINE') {
-      res.status(409).json({ error: 'Código de máquina já existe.' });
-      return;
-    }
-    res.status(500).json({ error: 'Erro ao criar máquina.' });
-  }
-});
-
-app.put('/api/machines/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const { code, name, location, notes } = req.body;
-  if (!code?.trim() || !name?.trim()) {
-    res.status(400).json({ error: 'Código e nome são obrigatórios.' });
-    return;
-  }
-  try {
-    const row = store.updateMachine(id, {
-      code: code.trim(),
-      name: name.trim(),
-      location: location?.trim() || null,
-      notes: notes?.trim() || null,
-    });
-    if (!row) {
-      res.status(404).json({ error: 'Máquina não encontrada.' });
-      return;
-    }
-    res.json(row);
-  } catch (err) {
-    if (err instanceof Error && err.message === 'DUPLICATE_MACHINE') {
-      res.status(409).json({ error: 'Código de máquina já existe.' });
-      return;
-    }
-    res.status(500).json({ error: 'Erro ao atualizar máquina.' });
-  }
-});
-
-app.delete('/api/machines/:id', (req, res) => {
-  const ok = store.deleteMachine(Number(req.params.id));
-  if (!ok) {
-    res.status(404).json({ error: 'Máquina não encontrada.' });
-    return;
-  }
-  res.status(204).end();
+  res.json(store.getDashboard());
 });
 
 app.get('/api/parts', (req, res) => {
-  const rows = store
-    .getParts({
+  const status = req.query.status as 'baixo' | 'zerado' | 'ok' | undefined;
+  res.json(
+    store.getParts({
       q: String(req.query.q ?? ''),
-      machineId: req.query.machineId ? Number(req.query.machineId) : undefined,
-      lowOnly: req.query.lowOnly === '1',
+      status: status && ['baixo', 'zerado', 'ok'].includes(status) ? status : undefined,
     })
-    .map(store.enrichPart);
-  res.json(rows);
+  );
 });
 
-app.get('/api/parts/:id', (req, res) => {
-  const row = store.getPart(Number(req.params.id));
-  if (!row) {
-    res.status(404).json({ error: 'Peça não encontrada.' });
-    return;
-  }
-  res.json(store.enrichPart(row));
-});
-
-app.post('/api/parts', (req, res) => {
-  const body = req.body;
-  if (!body.code?.trim() || !body.name?.trim()) {
-    res.status(400).json({ error: 'Código e nome são obrigatórios.' });
-    return;
-  }
+app.post('/api/parts/:id/withdraw', (req, res) => {
+  const { quantity, shift, withdrawn_by, requested_by, notes } = req.body;
   try {
-    const row = store.createPart({
-      code: body.code.trim(),
-      name: body.name.trim(),
-      description: body.description?.trim() || null,
-      quantity: Number(body.quantity ?? 0),
-      min_quantity: Number(body.min_quantity ?? 0),
-      unit: body.unit?.trim() || 'un',
-      location: body.location?.trim() || null,
-      machine_id: body.machine_id ?? null,
-      supplier: body.supplier?.trim() || null,
-      unit_cost: body.unit_cost != null ? Number(body.unit_cost) : null,
-      notes: body.notes?.trim() || null,
-    });
-    res.status(201).json(store.enrichPart(row));
-  } catch (err) {
-    if (err instanceof Error && err.message === 'DUPLICATE_PART') {
-      res.status(409).json({ error: 'Código de peça já existe.' });
-      return;
-    }
-    res.status(500).json({ error: 'Erro ao criar peça.' });
-  }
-});
-
-app.put('/api/parts/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const body = req.body;
-  if (!body.code?.trim() || !body.name?.trim()) {
-    res.status(400).json({ error: 'Código e nome são obrigatórios.' });
-    return;
-  }
-  try {
-    const row = store.updatePart(id, {
-      code: body.code.trim(),
-      name: body.name.trim(),
-      description: body.description?.trim() || null,
-      min_quantity: Number(body.min_quantity ?? 0),
-      unit: body.unit?.trim() || 'un',
-      location: body.location?.trim() || null,
-      machine_id: body.machine_id ?? null,
-      supplier: body.supplier?.trim() || null,
-      unit_cost: body.unit_cost != null ? Number(body.unit_cost) : null,
-      notes: body.notes?.trim() || null,
-    });
-    if (!row) {
-      res.status(404).json({ error: 'Peça não encontrada.' });
-      return;
-    }
-    res.json(store.enrichPart(row));
-  } catch (err) {
-    if (err instanceof Error && err.message === 'DUPLICATE_PART') {
-      res.status(409).json({ error: 'Código de peça já existe.' });
-      return;
-    }
-    res.status(500).json({ error: 'Erro ao atualizar peça.' });
-  }
-});
-
-app.delete('/api/parts/:id', (req, res) => {
-  const ok = store.deletePart(Number(req.params.id));
-  if (!ok) {
-    res.status(404).json({ error: 'Peça não encontrada.' });
-    return;
-  }
-  res.status(204).end();
-});
-
-app.get('/api/movements', (req, res) => {
-  const partId = req.query.partId ? Number(req.query.partId) : undefined;
-  const rows = store.getMovements(partId).map(store.enrichMovement);
-  res.json(rows);
-});
-
-app.post('/api/movements', (req, res) => {
-  const { part_id, type, quantity, reason, reference } = req.body;
-  if (!part_id || !type || quantity == null || Number.isNaN(Number(quantity))) {
-    res.status(400).json({ error: 'Dados da movimentação inválidos.' });
-    return;
-  }
-  const qty = Number(quantity);
-  if (qty <= 0 && type !== 'adjust') {
-    res.status(400).json({ error: 'Quantidade deve ser maior que zero.' });
-    return;
-  }
-  try {
-    const result = store.createMovement({
-      part_id,
-      type,
-      quantity: qty,
-      reason: reason?.trim() || null,
-      reference: reference?.trim() || null,
+    const result = store.withdraw(Number(req.params.id), {
+      quantity: Number(quantity),
+      shift,
+      withdrawn_by,
+      requested_by,
+      notes,
     });
     if (!result) {
       res.status(404).json({ error: 'Peça não encontrada.' });
       return;
     }
     res.status(201).json({
-      movement: store.enrichMovement(result.movement),
-      part: store.enrichPart(result.part),
+      part: result.part,
+      withdrawal: store.enrichMovement(result.movement),
     });
   } catch (err) {
-    if (err instanceof Error && err.message === 'NEGATIVE_STOCK') {
-      res.status(400).json({ error: 'Estoque não pode ficar negativo.' });
-      return;
+    if (err instanceof Error) {
+      if (err.message === 'INSUFFICIENT_STOCK') {
+        res.status(400).json({ error: 'Quantidade maior que o estoque disponível.' });
+        return;
+      }
+      if (err.message === 'INVALID_QUANTITY') {
+        res.status(400).json({ error: 'Informe a quantidade retirada.' });
+        return;
+      }
+      if (err.message === 'MISSING_WITHDRAWN_BY') {
+        res.status(400).json({ error: 'Informe quem retirou.' });
+        return;
+      }
+      if (err.message === 'INVALID_SHIFT') {
+        res.status(400).json({ error: 'Turno inválido.' });
+        return;
+      }
     }
-    res.status(500).json({ error: 'Erro ao registrar movimentação.' });
+    res.status(500).json({ error: 'Erro ao registrar retirada.' });
   }
 });
 
+app.put('/api/parts/:id/quantity', (req, res) => {
+  const quantity = Number(req.body.quantity);
+  if (Number.isNaN(quantity)) {
+    res.status(400).json({ error: 'Quantidade inválida.' });
+    return;
+  }
+  try {
+    const result = store.setQuantity(Number(req.params.id), quantity, req.body.reason);
+    if (!result) {
+      res.status(404).json({ error: 'Peça não encontrada.' });
+      return;
+    }
+    res.json(result.part);
+  } catch (err) {
+    if (err instanceof Error && err.message === 'NEGATIVE_STOCK') {
+      res.status(400).json({ error: 'Quantidade não pode ser negativa.' });
+      return;
+    }
+    res.status(500).json({ error: 'Erro ao atualizar quantidade.' });
+  }
+});
+
+app.get('/api/movements', (_req, res) => {
+  res.json(store.getMovements(100));
+});
+
+app.get('/api/withdrawals', (req, res) => {
+  const shift = req.query.shift as 'cedo' | 'tarde' | 'noite' | undefined;
+  res.json(
+    store.getWithdrawals({
+      shift: shift && ['cedo', 'tarde', 'noite'].includes(shift) ? shift : undefined,
+    })
+  );
+});
+
+app.put('/api/withdrawals/:id', (req, res) => {
+  const { quantity, shift, withdrawn_by, requested_by, notes } = req.body;
+  try {
+    const result = store.updateWithdrawal(Number(req.params.id), {
+      quantity: Number(quantity),
+      shift,
+      withdrawn_by,
+      requested_by,
+      notes,
+    });
+    if (!result) {
+      res.status(404).json({ error: 'Retirada não encontrada.' });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message === 'INSUFFICIENT_STOCK') {
+        res.status(400).json({ error: 'Quantidade maior que o estoque disponível.' });
+        return;
+      }
+      if (err.message === 'INVALID_QUANTITY') {
+        res.status(400).json({ error: 'Informe a quantidade retirada.' });
+        return;
+      }
+      if (err.message === 'MISSING_WITHDRAWN_BY') {
+        res.status(400).json({ error: 'Informe quem retirou.' });
+        return;
+      }
+      if (err.message === 'INVALID_SHIFT') {
+        res.status(400).json({ error: 'Turno inválido.' });
+        return;
+      }
+    }
+    res.status(500).json({ error: 'Erro ao atualizar retirada.' });
+  }
+});
+
+app.delete('/api/withdrawals/:id', (req, res) => {
+  const result = store.deleteWithdrawal(Number(req.params.id));
+  if (!result) {
+    res.status(404).json({ error: 'Retirada não encontrada.' });
+    return;
+  }
+  res.json(result);
+});
+
+app.get('/api/report', (_req, res) => {
+  res.json(store.getReport());
+});
+
+app.get('/api/reports/monthly', (req, res) => {
+  const month = String(req.query.month ?? previousMonthKey());
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    res.status(400).json({ error: 'Mês inválido. Use o formato AAAA-MM.' });
+    return;
+  }
+  res.json(getMonthlyReport(month));
+});
+
 const distPath = path.join(__dirname, '..', 'dist');
-if (process.env.NODE_ENV === 'production') {
+const distIndex = path.join(distPath, 'index.html');
+const servePanel = fs.existsSync(distIndex);
+
+if (servePanel) {
   app.use(express.static(distPath));
   app.get(/^(?!\/api).*/, (_req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+    res.sendFile(distIndex);
   });
 }
 
-const catalog = readCatalogFile();
-const hasCatalog = (catalog.parts?.length ?? 0) > 0 || (catalog.machines?.length ?? 0) > 0;
-if (hasCatalog && store.getParts().length === 0) {
-  const result = importCatalog({ preserveQuantity: true });
-  console.log(
-    `Catálogo carregado: ${result.partsAdded} peças, ${result.machinesAdded} máquinas`
-  );
-}
-
 app.listen(PORT, HOST, () => {
-  console.log(`API local: http://${HOST}:${PORT}`);
-  console.log(`Dados: ${path.join(__dirname, '..', 'data', 'estoque.json')}`);
-  console.log(`Catálogo: ${path.join(__dirname, '..', 'data', 'catalogo.json')}`);
+  const url = `http://${HOST}:${PORT}`;
+  if (servePanel) {
+    console.log(`Painel: ${url}`);
+  } else {
+    console.log(`API: ${url} | Rode "npm run dev" ou "npm run build" + reinicie`);
+  }
 });

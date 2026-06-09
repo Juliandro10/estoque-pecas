@@ -9,7 +9,7 @@ type ModalProps = {
 export function Modal({ title, children, onClose }: ModalProps) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal card" onClick={(e) => e.stopPropagation()}>
+      <div className="card modal" onClick={(e) => e.stopPropagation()}>
         <h2>{title}</h2>
         {children}
       </div>
