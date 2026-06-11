@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "programs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "month", "order": "ASCENDING" },
+        { "fieldPath": "start_date", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

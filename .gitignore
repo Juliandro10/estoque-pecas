@@ -1,4 +1,8 @@
 node_modules
 dist
 data/estoque.json
+.env
+.firebase
 *.tsbuildinfo
+*-firebase-adminsdk-*.json
+service-account.json

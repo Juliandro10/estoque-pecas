@@ -1,0 +1,18 @@
+@echo off
+chcp 65001 >nul
+echo.
+echo  Conexao CORRETA — Syntech / Firebird
+echo  ====================================
+echo.
+echo  FlameRobin:
+echo    Server:       RENATA  (192.168.1.69 : 3050)
+echo    Database path: C:\Textil\Empresas\FABRICA.MDB
+echo    User:         SYSDBA
+echo    Password:     masterkey
+echo.
+echo  (Nao use TEXTIL nem Juliandro — isso era errado)
+echo.
+echo  O Syntech usa BDE, nao ODBC. Config em:
+echo    C:\Program Files (x86)\Common Files\Borland Shared\BDE\IDAPI32.CFG
+echo.
+pause

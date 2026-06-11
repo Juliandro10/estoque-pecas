@@ -1,34 +1,31 @@
+import { ensureCatalogSeeded, firestoreDb } from './firestore-db';
 import type { Dashboard, MonthlyReport, Movement, Part, PartStatus, Shift, StockReport } from '../types';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    ...init,
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `Erro ${res.status}`);
+let seeded = false;
+
+async function ready() {
+  if (!seeded) {
+    await ensureCatalogSeeded();
+    seeded = true;
   }
-  return res.json() as Promise<T>;
 }
 
 export const api = {
-  dashboard: () => request<Dashboard>('/dashboard'),
+  dashboard: async () => {
+    await ready();
+    return firestoreDb.getDashboard();
+  },
   parts: {
-    list: (params?: { q?: string; status?: PartStatus }) => {
-      const search = new URLSearchParams();
-      if (params?.q) search.set('q', params.q);
-      if (params?.status) search.set('status', params.status);
-      const qs = search.toString();
-      return request<Part[]>(`/parts${qs ? `?${qs}` : ''}`);
+    list: async (params?: { q?: string; status?: PartStatus }) => {
+      await ready();
+      return firestoreDb.getParts(params);
     },
-    setQuantity: (id: number, quantity: number, reason?: string) =>
-      request<Part>(`/parts/${id}/quantity`, {
-        method: 'PUT',
-        body: JSON.stringify({ quantity, reason }),
-      }),
-    withdraw: (
-      id: number,
+    setQuantity: async (id: string, quantity: number) => {
+      await ready();
+      return firestoreDb.setQuantity(id, quantity);
+    },
+    withdraw: async (
+      id: string,
       data: {
         quantity: number;
         shift: Shift;
@@ -36,18 +33,18 @@ export const api = {
         requested_by?: string;
         notes?: string;
       }
-    ) =>
-      request<{ part: Part; withdrawal: Movement }>(`/parts/${id}/withdraw`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+    ) => {
+      await ready();
+      return firestoreDb.withdraw(id, data);
+    },
   },
-  movements: () => request<Movement[]>('/movements'),
   withdrawals: {
-    list: (shift?: Shift) =>
-      request<Movement[]>(`/withdrawals${shift ? `?shift=${shift}` : ''}`),
-    update: (
-      id: number,
+    list: async (shift?: Shift) => {
+      await ready();
+      return firestoreDb.getWithdrawals(shift);
+    },
+    update: async (
+      id: string,
       data: {
         quantity: number;
         shift: Shift;
@@ -55,14 +52,23 @@ export const api = {
         requested_by?: string;
         notes?: string;
       }
-    ) =>
-      request<{ part: Part; movement: Movement }>(`/withdrawals/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      }),
-    remove: (id: number) =>
-      request<{ part: Part; deleted: Movement }>(`/withdrawals/${id}`, { method: 'DELETE' }),
+    ) => {
+      await ready();
+      return firestoreDb.updateWithdrawal(id, data);
+    },
+    remove: async (id: string) => {
+      await ready();
+      return firestoreDb.deleteWithdrawal(id);
+    },
   },
-  report: () => request<StockReport>('/report'),
-  monthlyReport: (month: string) => request<MonthlyReport>(`/reports/monthly?month=${month}`),
+  report: async () => {
+    await ready();
+    return firestoreDb.getReport();
+  },
+  monthlyReport: async (month: string) => {
+    await ready();
+    return firestoreDb.getMonthlyReport(month);
+  },
 };
+
+export type { Dashboard, MonthlyReport, Movement, Part, StockReport };

@@ -1,0 +1,18 @@
+Firebird TEXTIL — ferramentas locais (Syntech)
+==============================================
+
+1) Corrigir FlameRobin (erro fbclient.dll)
+   - Duplo clique: Corrigir-FlameRobin.bat
+   - Informe a pasta onde está flamerobin.exe
+   - Copia fbclient.dll + gds32.dll (64 bits) para lá
+
+2) Explorar banco sem FlameRobin
+   - Duplo clique: Explorar-TEXTIL.bat
+   - Usuario padrao: Juliandro
+   - Digite a mesma senha usada no FlameRobin
+
+Pastas:
+  bin32/  — cliente Firebird 2.5 (32 bits) + isql
+  bin64/  — fbclient 64 bits para FlameRobin moderno
+
+Conexao: 192.168.1.69/3050:TEXTIL

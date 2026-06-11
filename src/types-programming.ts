@@ -1,0 +1,234 @@
+export const PROGRAM_VALUE = 150;
+
+export type WorkType = 'extra' | 'normal';
+
+export type JobKind = 'novo' | 'ajuste' | 'graduacao' | 'outro';
+
+export const JOB_KIND_LABELS: Record<JobKind, string> = {
+  novo: 'Desenvolvimento novo',
+  ajuste: 'Ajuste',
+  graduacao: 'Graduação de tamanho',
+  outro: 'Outro',
+};
+
+export const JOB_KIND_OPTIONS: { value: JobKind; label: string }[] = (
+  Object.entries(JOB_KIND_LABELS) as [JobKind, string][]
+).map(([value, label]) => ({ value, label }));
+
+export function formatJobKindLabel(kind: JobKind | null, note?: string | null) {
+  if (!kind) return '—';
+  if (kind === 'outro') {
+    const text = note?.trim();
+    return text ? `Outro: ${text}` : 'Outro';
+  }
+  return JOB_KIND_LABELS[kind];
+}
+
+export type SintralTimePart = {
+  label: string;
+  file_name: string;
+  ok: boolean;
+  time_mmss?: string;
+  captured_at?: string;
+  error?: string;
+};
+
+export type SintralTimesResult = {
+  parts: SintralTimePart[];
+  filled: number;
+  total: number;
+};
+
+export type ProgramMachineInfo = {
+  cms: string;
+  gauge: string;
+  label: string;
+  syntech_maquina: number | null;
+};
+
+export type ProgramLookup = {
+  reference: string;
+  name: string;
+  date: string;
+  folder_path: string;
+  searched_full: boolean;
+  search_days: number | null;
+  parts?: ProgramPartLookup[];
+  times?: SintralTimesResult;
+  machine?: ProgramMachineInfo | null;
+};
+
+export type ProgramPartLookup = {
+  key: string;
+  label: string;
+  file_name: string;
+};
+
+export type M1TimeLookup = {
+  time_mmss: string;
+  seconds: number;
+  source: 'cfgx' | 'xml' | 'mdv';
+  part_base: string;
+  files: {
+    cfgx?: string;
+    xml?: string;
+    simx?: string;
+    setx?: string;
+    sin?: string;
+  };
+};
+
+export type M1TimeBatchPart = {
+  label: string;
+  file_name: string;
+  ok: boolean;
+  time_mmss?: string;
+  source?: 'cfgx' | 'xml' | 'mdv';
+  error?: string;
+};
+
+export type M1TimeBatchResult = {
+  reference: string;
+  folder_path: string;
+  parts: M1TimeBatchPart[];
+  filled: number;
+  total: number;
+};
+
+export type ProgramPartsResponse = {
+  reference: string;
+  name: string;
+  folder_path: string;
+  parts: ProgramPartLookup[];
+};
+
+export type ProgramEntry = {
+  id: string;
+  reference: string;
+  name: string;
+  job_kind: JobKind | null;
+  job_kind_note: string | null;
+  start_date: string;
+  end_date: string;
+  value: number;
+  month: string;
+  work_type: WorkType;
+  created_at: string;
+};
+
+export type ProgramWeekGroup = {
+  label: string;
+  start: string;
+  end: string;
+  entries: ProgramEntry[];
+  subtotal: number;
+};
+
+export type ProgramMonthlyReport = {
+  month: string;
+  period_label: string;
+  generated_at: string;
+  work_type: WorkType;
+  weeks: ProgramWeekGroup[];
+  total_programs: number;
+  total_value: number;
+};
+
+export type CadastroPart = {
+  key: string;
+  label: string;
+  file_name: string;
+  time_mmss: string;
+  weight_kg: string;
+};
+
+export type CadastroYarnGuide = {
+  guide: number;
+  letter: string;
+  description: string;
+  side: 'left' | 'right';
+  pct?: number;
+  consumption: string;
+};
+
+export type CadastroYarnPart = {
+  key: string;
+  label: string;
+  file_name: string;
+  guides: CadastroYarnGuide[];
+};
+
+export type ConsolidatedYarnRow = {
+  guide: number;
+  letter: string;
+  description: string;
+  pct: number;
+  consumption: string;
+  parts: string[];
+  tipo_fio_codigo?: number | null;
+  tipo_fio_nome?: string | null;
+  cor?: string | null;
+  codigo_ok?: boolean;
+  cor_ok?: boolean;
+};
+
+export type SyntechYarnType = {
+  codigo: number;
+  tipo: string;
+  cores: string[];
+};
+
+export type SyntechYarnCatalogFile = {
+  updated_at: string;
+  source: string;
+  types: SyntechYarnType[];
+};
+
+export type SinYarnPartResult = {
+  label: string;
+  file_name: string;
+  part_base: string;
+  ok: boolean;
+  sin_file?: string;
+  simx_file?: string;
+  ygc?: string;
+  ydf?: number;
+  guides: Omit<CadastroYarnGuide, 'consumption'>[];
+  simx_ok?: boolean;
+  error?: string;
+  simx_error?: string;
+};
+
+export type SinYarnsResult = {
+  parts: SinYarnPartResult[];
+  filled: number;
+  total: number;
+  machine?: ProgramMachineInfo | null;
+};
+
+export type SyntechPushResult = {
+  ok: boolean;
+  reference: string;
+  product_name?: string;
+  tempo_rows: number;
+  mat_prima_rows: number;
+  maquina?: number;
+  maquina_cms?: string;
+  maquina_gauge?: string;
+  programa?: string;
+  guia_fio_rows: number;
+  partes_prod_rows: number;
+  bicos_maquina_rows: number;
+  warnings: string[];
+};
+
+export type ModelCadastro = {
+  reference: string;
+  name: string;
+  parts: CadastroPart[];
+  yarn_parts: CadastroYarnPart[];
+  /** @deprecated legado — use yarn_parts */
+  yarn_notes: string;
+  observations: string;
+  updated_at: string;
+};

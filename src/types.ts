@@ -8,7 +8,7 @@ export const SHIFT_LABELS: Record<Shift, string> = {
 };
 
 export type Part = {
-  id: number;
+  id: string;
   code: string;
   name: string;
   quantity: number;
@@ -19,9 +19,9 @@ export type Part = {
 };
 
 export type Movement = {
-  id: number;
-  part_id: number;
-  type: 'adjust' | 'withdrawal';
+  id: string;
+  part_id: string;
+  type: 'withdrawal';
   quantity: number;
   previous_qty: number;
   new_qty: number;
@@ -57,7 +57,7 @@ export type Dashboard = {
 };
 
 export type MonthlyPartTotal = {
-  part_id: number;
+  part_id: string;
   part_code: string;
   part_name: string;
   unit: string;

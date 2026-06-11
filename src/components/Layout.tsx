@@ -1,6 +1,12 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+
+import { useAuth } from '../hooks/useAuth';
 
 export function Layout() {
+  const { signOut, user } = useAuth();
+  const location = useLocation();
+  const desenvControleActive = location.pathname.startsWith('/desenv-controle');
+
   return (
     <div className="layout">
       <aside className="sidebar card">
@@ -24,8 +30,24 @@ export function Layout() {
           <NavLink to="/relatorios-mensais" className={({ isActive }) => (isActive ? 'active' : '')}>
             Mensais
           </NavLink>
+          <NavLink
+            to="/desenv-controle/extra"
+            className={() => (desenvControleActive ? 'active' : '')}
+          >
+            Desenv-Controle
+          </NavLink>
+          <NavLink to="/desenv-cadastro" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Desenv-Cadastro
+          </NavLink>
         </nav>
-        <span className="local-badge">Somente local</span>
+        <div className="sidebar-footer">
+          <span className="user-email" title={user?.email ?? ''}>
+            {user?.email}
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void signOut()}>
+            Sair
+          </button>
+        </div>
       </aside>
       <main className="main">
         <Outlet />
@@ -40,7 +62,8 @@ export function Layout() {
         .nav a { text-decoration: none; color: var(--muted); padding: 10px 12px; border-radius: 10px; font-weight: 700; }
         .nav a:hover { background: var(--inset); color: var(--text); }
         .nav a.active { background: var(--accent-soft); color: var(--accent); }
-        .local-badge { font-size: 11px; color: var(--mint); background: rgba(45,212,191,.12); padding: 6px 10px; border-radius: 999px; font-weight: 700; }
+        .sidebar-footer { margin-top: 24px; display: flex; flex-direction: column; gap: 8px; }
+        .user-email { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .main { padding: 28px 32px 48px; max-width: 1100px; }
         @media (max-width: 760px) {
           .layout { grid-template-columns: 1fr; }

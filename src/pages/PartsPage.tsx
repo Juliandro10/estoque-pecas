@@ -68,7 +68,7 @@ export function PartsPage() {
     e.preventDefault();
     if (!adjusting) return;
     try {
-      await api.parts.setQuantity(adjusting.id, Number(adjustQty), 'Ajuste de estoque');
+      await api.parts.setQuantity(adjusting.id, Number(adjustQty));
       setAdjusting(null);
       await load();
     } catch (err) {
