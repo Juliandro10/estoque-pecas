@@ -6,6 +6,7 @@ import {
   consolidateYarnParts,
   duplicatePart,
   formatConsumption,
+  formatConsumptionInput,
   formatPct,
   isProgramFixedWasteYarnGuide,
   mergeYarnPartsFromSin,
@@ -784,6 +785,12 @@ export function DesenvCadastroPage() {
                         placeholder="0,070"
                         value={part.weight_kg}
                         onChange={(e) => updatePart(index, { weight_kg: e.target.value })}
+                        onBlur={(e) => {
+                          const normalized = formatConsumptionInput(e.target.value);
+                          if (normalized !== e.target.value.trim()) {
+                            updatePart(index, { weight_kg: normalized });
+                          }
+                        }}
                       />
                     </td>
                     <td className="row-actions">

@@ -176,6 +176,13 @@ export function formatConsumption(value: number) {
   return rounded.toFixed(3).replace('.', ',');
 }
 
+/** Normaliza texto digitado ao sair do campo (ex.: 0,07 → 0,070). */
+export function formatConsumptionInput(raw: string) {
+  const text = raw.trim();
+  if (!text) return '';
+  return formatConsumption(parseConsumptionInput(text));
+}
+
 export function formatPct(value: number, options?: { ceil?: boolean }) {
   if (!value || value <= 0) return '—';
   const rounded = options?.ceil ? ceilPct(value) : Math.round(value * 100) / 100;
@@ -196,11 +203,29 @@ export function totalCalculatedYarnConsumption(consolidated: ConsolidatedYarnRow
     .reduce((sum, row) => sum + parseConsumptionInput(row.consumption), 0);
 }
 
+/** Chave de consolidação — ignora variações como "ELASTICO PENTE" vs "ELASTICO DE PENTE". */
+export function normalizeYarnDescriptionKey(description: string) {
+  let text = description.trim().toUpperCase();
+  if (!text) return '';
+
+  text = text.replace(/\b(DE|DO|DA|DOS|DAS)\b/g, ' ');
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
+
 /** Mesmo bico + mesma descrição = um fio (letra pode variar entre partes). */
 function consolidatedYarnKey(guide: Pick<CadastroYarnGuide, 'guide' | 'letter' | 'description'>) {
-  const desc = guide.description.trim().toLowerCase();
+  const desc = normalizeYarnDescriptionKey(guide.description);
   if (desc) return `${guide.guide}:${desc}`;
   return `${guide.guide}:${guide.letter.toUpperCase()}`;
+}
+
+function pickRicherYarnDescription(current: string, incoming: string) {
+  const a = current.trim();
+  const b = incoming.trim();
+  if (!a) return b;
+  if (!b) return a;
+  return b.length > a.length ? b : a;
 }
 
 function partCountByLabel(parts: CadastroPart[]) {
@@ -241,6 +266,7 @@ export function consolidateYarnParts(
         existing.letters.add(guide.letter.toUpperCase());
         existing.letter = [...existing.letters].sort((a, b) => a.localeCompare(b, 'pt-BR')).join('/');
         existing.consumption = formatConsumption(existing.sum);
+        existing.description = pickRicherYarnDescription(existing.description, guide.description);
         if (!existing.parts.includes(partLabel)) existing.parts.push(partLabel);
         continue;
       }

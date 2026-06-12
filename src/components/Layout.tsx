@@ -39,6 +39,9 @@ export function Layout() {
           <NavLink to="/desenv-cadastro" className={({ isActive }) => (isActive ? 'active' : '')}>
             Desenv-Cadastro
           </NavLink>
+          <NavLink to="/desenv-m1" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Desenv-M1
+          </NavLink>
         </nav>
         <div className="sidebar-footer">
           <span className="user-email" title={user?.email ?? ''}>

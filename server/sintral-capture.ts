@@ -2,6 +2,8 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 
+import { isIgnoredProgramSubfolder } from './program-folders';
+
 
 
 export const DADOS_PROGRAMA_DIR = 'dados do programa';
@@ -93,6 +95,7 @@ export function findModelFolderForPart(partBase: string, programsRoot: string) {
       if (!entry.isDirectory()) continue;
 
       if (entry.name === DADOS_PROGRAMA_DIR) continue;
+      if (isIgnoredProgramSubfolder(entry.name)) continue;
 
       const full = path.join(dir, entry.name);
 

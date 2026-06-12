@@ -1,4 +1,11 @@
 import type {
+  M1BitmapCatalog,
+  M1DensityResult,
+  M1FabricLibrary,
+  M1KnittSymResult,
+  M1KnowledgeFile,
+  M1Measurement,
+  M1MeshResult,
   M1TimeBatchResult,
   M1TimeLookup,
   ProgramLookup,
@@ -16,6 +23,9 @@ async function localRequest<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const msg = (body as { error?: string } | null)?.error;
     if (msg) throw new Error(msg);
+    if (res.status === 413) {
+      throw new Error('Arquivo grande demais. Reinicie o Iniciar.bat ou reduza a imagem.');
+    }
     if (res.status === 404) {
       throw new Error(
         'Serviço não encontrado. Feche e abra de novo o Iniciar.bat para atualizar o scanner local.'
@@ -87,6 +97,74 @@ export const localProgramsApi = {
   syntechFios: () => localRequest<SyntechYarnCatalogFile>('/api/programs/syntech-fios'),
   syncSyntechFios: () =>
     localRequest<SyntechYarnCatalogFile>('/api/programs/syntech-fios/sync', { method: 'POST' }),
+  m1Density: (reference: string, fullSearch = false, partFile?: string) =>
+    localRequest<M1DensityResult>(
+      `/api/programs/m1-density?ref=${encodeURIComponent(reference.trim())}${fullSearch ? '&full=1' : ''}${partFile ? `&part=${encodeURIComponent(partFile)}` : ''}`
+    ),
+  m1Mesh: (reference: string, fullSearch = false, partFile?: string) =>
+    localRequest<M1MeshResult>(
+      `/api/programs/m1-mesh?ref=${encodeURIComponent(reference.trim())}${fullSearch ? '&full=1' : ''}${partFile ? `&part=${encodeURIComponent(partFile)}` : ''}`
+    ),
+  m1Symbols: () => localRequest<M1KnittSymResult>('/api/programs/m1-symbols'),
+  m1FabricLib: () => localRequest<M1FabricLibrary>('/api/programs/m1-fabric-lib'),
+  m1Bitmaps: () => localRequest<M1BitmapCatalog>('/api/programs/m1-bitmaps'),
+  m1Knowledge: () => localRequest<M1KnowledgeFile>('/api/programs/m1-knowledge'),
+  m1VisualUpload: async (payload: {
+    stitch_id: string;
+    slot: 'stitch' | 'icon' | 'malhas';
+    file: File;
+  }) => {
+    const qs = new URLSearchParams({
+      stitch_id: payload.stitch_id,
+      slot: payload.slot,
+      file_name: payload.file.name,
+      mime_type: payload.file.type || 'application/octet-stream',
+    });
+    const res = await fetch(`/api/programs/m1-visual/upload?${qs.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: payload.file,
+    });
+    const body = (await res.json().catch(() => null)) as { error?: string; stitchType?: M1KnowledgeFile['stitchTypes'][number] } | null;
+    if (!res.ok) {
+      if (body?.error) throw new Error(body.error);
+      if (res.status === 413) {
+        throw new Error('Arquivo grande demais. Reinicie o Iniciar.bat ou reduza a imagem.');
+      }
+      throw new Error(`Erro ${res.status}`);
+    }
+    return body as { ok: boolean; stitchType: M1KnowledgeFile['stitchTypes'][number] };
+  },
+  m1StitchTypeUpsert: (payload: { id: string; code: string; name: string }) =>
+    localRequest<{ ok: boolean; stitchType: M1KnowledgeFile['stitchTypes'][number] }>(
+      '/api/programs/m1-stitch-types',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
+    ),
+  saveM1Measurement: (payload: Record<string, unknown>) =>
+    localRequest<{ ok: boolean; measurement: M1Measurement }>('/api/programs/m1-measurements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  m1Similar: (params: {
+    syntech_cod?: number;
+    yarn_key?: string;
+    cms?: string;
+    gauge?: string;
+    stitch?: string;
+  }) => {
+    const q = new URLSearchParams();
+    if (params.syntech_cod != null) q.set('syntech_cod', String(params.syntech_cod));
+    if (params.yarn_key) q.set('yarn_key', params.yarn_key);
+    if (params.cms) q.set('cms', params.cms);
+    if (params.gauge) q.set('gauge', params.gauge);
+    if (params.stitch) q.set('stitch', params.stitch);
+    return localRequest<{ items: M1Measurement[] }>(`/api/programs/m1-similar?${q.toString()}`);
+  },
   health: () =>
     localRequest<{
       ok: boolean;
@@ -116,6 +194,18 @@ export function scannerSupportsSyntechPush(health: { version?: number; features?
 
 export function scannerSupportsSyntechFios(health: { version?: number; features?: string[] }) {
   return (health.version ?? 0) >= 22 || health.features?.includes('syntech-fios') === true;
+}
+
+export function scannerSupportsM1Density(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 26 || health.features?.includes('m1-density') === true;
+}
+
+export function scannerSupportsM1Visual(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 26 || health.features?.includes('m1-visual') === true;
+}
+
+export function scannerSupportsM1Native(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 29 || health.features?.includes('m1-fabric-lib') === true;
 }
 
 export function isLocalScannerAvailable() {

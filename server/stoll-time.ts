@@ -8,6 +8,7 @@ import {
 } from './cfgx-io';
 import { readControleSintralForPart, SCREEN_FILE } from './sintral-screen';
 import { sintralPartDir } from './sintral-capture';
+import { isIgnoredProgramSubfolder } from './program-folders';
 
 export type M1TimeResult = {
   time_mmss: string;
@@ -73,7 +74,7 @@ function searchDirs(modelFolder: string | undefined, tmpDir: string) {
     if (fs.existsSync(dadosRoot)) {
       try {
         for (const entry of fs.readdirSync(dadosRoot, { withFileTypes: true })) {
-          if (entry.isDirectory() && entry.name !== 'historico') {
+          if (entry.isDirectory() && entry.name !== 'historico' && !isIgnoredProgramSubfolder(entry.name)) {
             dirs.push(path.join(dadosRoot, entry.name));
           }
         }
@@ -684,6 +685,15 @@ export function readM1TimeForPart(
   }
 
   throw new Error(buildMissingSimulationError(partBase, resolved));
+}
+
+export function resolveStollPartFiles(
+  tmpDir: string,
+  modelFolder: string | undefined,
+  partBase: string
+) {
+  const dirs = allSearchDirs(modelFolder, tmpDir);
+  return resolvePartFiles(dirs, tmpDir, partBase);
 }
 
 export function readM1TimesForModel(

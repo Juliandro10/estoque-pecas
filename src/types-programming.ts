@@ -232,3 +232,208 @@ export type ModelCadastro = {
   observations: string;
   updated_at: string;
 };
+
+export type M1NpRow = {
+  np: number;
+  value: number;
+  label?: string;
+  comment?: string;
+};
+
+export type M1DensityPart = {
+  label: string;
+  file_name: string;
+  part_base: string;
+  ok: boolean;
+  error?: string;
+  machine?: ProgramMachineInfo;
+  sizes?: {
+    wales: number | null;
+    courses: number | null;
+    wales_source?: string;
+    courses_source?: string;
+    machine_bed?: number | null;
+    jac_lines?: number;
+    sintral_cursos?: number | null;
+    knitting_left?: number | null;
+    knitting_right?: number | null;
+    fixed_courses?: number | null;
+    courses_breakdown?: string | null;
+    sim_rows?: number | null;
+  };
+  regulation?: {
+    primary_source: 'setx' | 'sin' | null;
+    sin_nps: M1NpRow[];
+    setx_nps: M1NpRow[];
+    setx_msec?: { key: string; value: number; comment: string }[];
+    sin_npj?: { front?: string; rear?: string };
+    ydf?: number;
+    ygc?: string;
+    mseci?: number;
+  };
+  yarns?: {
+    guide: number;
+    letter: string;
+    description: string;
+    pct?: number;
+  }[];
+  files?: {
+    sin?: string;
+    setx?: string;
+    jac?: string;
+    simx?: string;
+  };
+};
+
+export type M1DensityResult = {
+  reference: string;
+  folder_path: string;
+  parts: M1DensityPart[];
+  filled: number;
+  total: number;
+  machine?: ProgramMachineInfo | null;
+  part?: M1DensityPart;
+};
+
+export type M1StitchType = {
+  id: string;
+  code: string;
+  name: string;
+  visual?: {
+    stitch?: string;
+    icon?: string;
+    malhas?: string;
+  };
+};
+
+export type M1MeasurementYarn = {
+  bico: number;
+  sinDescription: string;
+  sinDescriptionKey: string;
+  syntechCod?: number | null;
+  syntechDesc?: string | null;
+  pct?: number | null;
+  letter: string;
+};
+
+export type M1Measurement = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  reference: string;
+  programFolder: string;
+  partBase: string;
+  partLabel: string;
+  machine: ProgramMachineInfo;
+  swatch: { widthCm: number; heightCm: number; fabricState: 'raw' };
+  programCounts: { wales: number; courses: number; source: string };
+  density: { walesPer10cm: number; coursesPer10cm: number };
+  regulation: {
+    primarySource: 'setx' | 'sin';
+    sinNps: M1NpRow[];
+    setxNps: M1NpRow[];
+    ydf?: number;
+    ygc?: string;
+    mseci?: number;
+  };
+  stitchTypeId?: string;
+  stitchTypeCode?: string;
+  yarns: M1MeasurementYarn[];
+  files: { sin?: string; setx?: string };
+  notes?: string;
+};
+
+export type M1KnowledgeFile = {
+  version: number;
+  stitchTypes: M1StitchType[];
+  measurements: M1Measurement[];
+};
+
+export type M1KnittSymEntry = {
+  index: number;
+  char: string;
+  mode: number;
+  color: string;
+};
+
+export type M1KnittSymResult = {
+  path: string | null;
+  ok: boolean;
+  count: number;
+  chars: string[];
+  entries: M1KnittSymEntry[];
+};
+
+export type M1BitmapEntry = {
+  id: string;
+  file_name: string;
+  label: string;
+  url: string;
+};
+
+export type M1BitmapCatalog = {
+  dir: string | null;
+  ok: boolean;
+  items: M1BitmapEntry[];
+};
+
+export type M1MeshRow = {
+  line: number;
+  course: number;
+  width: number;
+  system: string;
+  direction: string;
+  mesh: string;
+};
+
+export type M1FabricStitchDef = {
+  char: string;
+  index: number;
+  matrix: number[][];
+  highlight: string;
+  body: string;
+  shadow: string;
+};
+
+export type M1FabricLibrary = {
+  ok: boolean;
+  sym_path: string | null;
+  txt_path: string | null;
+  count: number;
+  stitches: M1FabricStitchDef[];
+};
+
+export type M1MeshYarn = {
+  letter: string;
+  color: string;
+  description?: string;
+};
+
+export type M1MeshPart = {
+  label: string;
+  file_name: string;
+  part_base: string;
+  ok: boolean;
+  error?: string;
+  source?: 'wkt-file' | 'simx' | null;
+  width?: number | null;
+  row_count?: number;
+  preview_rows?: number;
+  display_width?: number;
+  rows?: M1MeshRow[];
+  yarns?: M1MeshYarn[];
+  files?: {
+    wkt?: string;
+    simx?: string;
+    sin?: string;
+  };
+};
+
+export type M1MeshResult = {
+  reference: string;
+  folder_path: string;
+  part?: M1MeshPart;
+  parts?: M1MeshPart[];
+  filled?: number;
+  total?: number;
+};

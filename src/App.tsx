@@ -11,6 +11,9 @@ import { WithdrawalsPage } from './pages/WithdrawalsPage';
 import { DesenvControleLayout } from './pages/dev/DesenvControleLayout';
 import { DevControleWorkPage } from './pages/dev/DevControleWorkPage';
 import { DesenvCadastroPage } from './pages/dev/DesenvCadastroPage';
+import { DesenvM1Layout } from './pages/dev/DesenvM1Layout';
+import { DesenvM1MalhasPage } from './pages/dev/DesenvM1MalhasPage';
+import { DesenvM1Page } from './pages/dev/DesenvM1Page';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -33,6 +36,10 @@ export default function App() {
             <Route path="dia-normal" element={<DevControleWorkPage workType="normal" />} />
           </Route>
           <Route path="desenv-cadastro" element={<DesenvCadastroPage />} />
+          <Route path="desenv-m1" element={<DesenvM1Layout />}>
+            <Route index element={<DesenvM1Page />} />
+            <Route path="malhas" element={<DesenvM1MalhasPage />} />
+          </Route>
           <Route path="programacao" element={<Navigate to="/desenv-controle/extra" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

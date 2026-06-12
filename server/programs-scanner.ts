@@ -30,6 +30,25 @@ import {
   readSyntechYarnCatalog,
   syncSyntechYarnCatalogFromDb,
 } from './syntech-yarn-catalog';
+import {
+  addM1Measurement,
+  computeDensity,
+  findSimilarMeasurements,
+  readM1Knowledge,
+} from './m1-knowledge';
+import { readM1DensityForModel, readM1DensityForPart } from './m1-density-read';
+import {
+  resolveM1VisualFile,
+  saveM1VisualBuffer,
+  saveM1VisualUpload,
+  stitchTypesWithVisualUrls,
+  upsertM1StitchType,
+} from './m1-visual';
+import { knittSymForApi } from './knitt-sym';
+import { m1FabricLibForApi } from './m1-fabric-lib';
+import { listM1BitmapCatalog, resolveM1BitmapFile, suggestBitmapForStitchCode } from './m1-bitmap-catalog';
+import { readM1MeshForModel, readM1MeshForPart } from './m1-mesh-read';
+import { isIgnoredProgramSubfolder } from './program-folders';
 
 const PORT = 3848;
 const PROGRAMS_ROOT = process.env.PROGRAMS_ROOT ?? 'C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS';
@@ -65,6 +84,7 @@ function latestMtimeInDir(dirPath: string): number {
       if (entry.isFile()) {
         latest = Math.max(latest, fs.statSync(full).mtimeMs);
       } else if (entry.isDirectory()) {
+        if (isIgnoredProgramSubfolder(entry.name)) continue;
         latest = Math.max(latest, latestMtimeInDir(full));
       }
     } catch {
@@ -105,6 +125,8 @@ function findProgram(reference: string, fullSearch: boolean): MatchRow | null {
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      if (isIgnoredProgramSubfolder(entry.name)) continue;
+
       const full = path.join(dir, entry.name);
 
       if (folderMatchesRef(entry.name, ref)) {
@@ -183,6 +205,7 @@ function listPartsInFolder(folderPath: string, folderName: string, ref: string):
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        if (isIgnoredProgramSubfolder(entry.name)) continue;
         scan(full);
         continue;
       }
@@ -220,7 +243,49 @@ function machinePayload(modelFolder: string, partRows: { file_name: string }[]) 
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+
+app.post(
+  '/api/programs/m1-visual/upload',
+  express.raw({
+    type: ['application/octet-stream', 'image/png', 'image/jpeg', 'image/bmp', 'image/webp', 'image/gif', 'image/svg+xml'],
+    limit: '25mb',
+  }),
+  (req, res) => {
+    try {
+      const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from([]);
+      const query = req.query as Record<string, string | undefined>;
+      const body = (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body) ? req.body : {}) as Record<
+        string,
+        unknown
+      >;
+
+      let stitchType;
+      if (buffer.length > 0) {
+        stitchType = saveM1VisualBuffer({
+          stitchId: String(query.stitch_id ?? query.stitchId ?? ''),
+          slot: String(query.slot ?? ''),
+          fileName: String(query.file_name ?? query.fileName ?? 'upload.png'),
+          mimeType: String(query.mime_type ?? query.mimeType ?? req.headers['content-type'] ?? ''),
+          buffer,
+        });
+      } else {
+        stitchType = saveM1VisualUpload({
+          stitchId: String(body.stitch_id ?? body.stitchId ?? ''),
+          slot: String(body.slot ?? ''),
+          fileName: String(body.file_name ?? body.fileName ?? ''),
+          dataBase64: String(body.data_base64 ?? body.dataBase64 ?? ''),
+          mimeType: String(body.mime_type ?? body.mimeType ?? ''),
+        });
+      }
+
+      res.json({ ok: true, stitchType });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : 'Erro ao gravar imagem.' });
+    }
+  }
+);
+
+app.use(express.json({ limit: '4mb' }));
 
 app.get('/api/programs/lookup', (req, res) => {
   try {
@@ -464,6 +529,282 @@ app.get('/api/programs/sintral-dados', async (req, res) => {
   }
 });
 
+app.get('/api/programs/m1-density', (req, res) => {
+  try {
+    const ref = String(req.query.ref ?? '').trim();
+    const partFile = String(req.query.part ?? req.query.file ?? '').trim();
+    const full = req.query.full === '1' || req.query.full === 'true';
+    if (!ref) {
+      res.status(400).json({ error: 'Informe a referência.' });
+      return;
+    }
+
+    const match = findProgramFolder(ref, full);
+    if (!match) {
+      res.status(404).json({
+        error: full
+          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
+      });
+      return;
+    }
+
+    const folderName = path.basename(match.folder_path);
+    const partRows = listPartsInFolder(match.folder_path, folderName, ref);
+
+    if (partFile) {
+      const partRow =
+        partRows.find((p) => p.file_name.toLowerCase() === partFile.toLowerCase()) ??
+        partRows.find((p) => p.label.toLowerCase() === partFile.toLowerCase());
+      if (!partRow) {
+        res.status(404).json({ error: `Parte "${partFile}" não encontrada.` });
+        return;
+      }
+      res.json({
+        reference: ref,
+        folder_path: match.folder_path,
+        part: readM1DensityForPart(STOLL_TMP, match.folder_path, partRow),
+        machine: machinePayload(match.folder_path, partRows),
+      });
+      return;
+    }
+
+    const parts = readM1DensityForModel(STOLL_TMP, match.folder_path, partRows);
+    res.json({
+      reference: ref,
+      folder_path: match.folder_path,
+      parts,
+      filled: parts.filter((row) => row.ok).length,
+      total: parts.length,
+      machine: machinePayload(match.folder_path, partRows),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao ler densidade M1.' });
+  }
+});
+
+app.get('/api/programs/m1-knowledge', (_req, res) => {
+  try {
+    const lib = readM1Knowledge();
+    res.json({ ...lib, stitchTypes: stitchTypesWithVisualUrls() });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao ler base M1.' });
+  }
+});
+
+app.get('/api/programs/m1-visual/file', (req, res) => {
+  try {
+    const stitchId = String(req.query.stitch ?? '').trim();
+    const slot = String(req.query.slot ?? '').trim();
+    const file = resolveM1VisualFile(stitchId, slot as 'stitch' | 'icon' | 'malhas');
+    if (!file) {
+      res.status(404).json({ error: 'Imagem não encontrada.' });
+      return;
+    }
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.type(file.mime);
+    res.send(fs.readFileSync(file.full));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Erro ao ler imagem.' });
+  }
+});
+
+app.get('/api/programs/m1-symbols', (_req, res) => {
+  try {
+    res.json(knittSymForApi());
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao ler knitt.sym.' });
+  }
+});
+
+app.get('/api/programs/m1-fabric-lib', (_req, res) => {
+  try {
+    res.json(m1FabricLibForApi());
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao ler biblioteca tecido M1.' });
+  }
+});
+
+app.get('/api/programs/m1-bitmaps', (_req, res) => {
+  try {
+    res.json(listM1BitmapCatalog());
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao listar bitmaps M1.' });
+  }
+});
+
+app.get('/api/programs/m1-bitmap/file', (req, res) => {
+  try {
+    const name = String(req.query.name ?? '').trim();
+    const file = resolveM1BitmapFile(name);
+    if (!file) {
+      res.status(404).json({ error: 'Bitmap não encontrado.' });
+      return;
+    }
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.type('image/bmp');
+    res.send(fs.readFileSync(file.full));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Erro ao ler bitmap.' });
+  }
+});
+
+app.get('/api/programs/m1-bitmap/suggest', (req, res) => {
+  try {
+    const code = String(req.query.code ?? '').trim();
+    const catalog = listM1BitmapCatalog();
+    res.json({ item: code ? suggestBitmapForStitchCode(code, catalog) : null });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Erro ao sugerir bitmap.' });
+  }
+});
+
+app.get('/api/programs/m1-mesh', (req, res) => {
+  try {
+    const ref = String(req.query.ref ?? '').trim();
+    const partFile = String(req.query.part ?? req.query.file ?? '').trim();
+    const full = req.query.full === '1' || req.query.full === 'true';
+    if (!ref) {
+      res.status(400).json({ error: 'Informe a referência.' });
+      return;
+    }
+
+    const match = findProgramFolder(ref, full);
+    if (!match) {
+      res.status(404).json({
+        error: full
+          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
+      });
+      return;
+    }
+
+    const folderName = path.basename(match.folder_path);
+    const partRows = listPartsInFolder(match.folder_path, folderName, ref);
+
+    if (partFile) {
+      const partRow =
+        partRows.find((p) => p.file_name.toLowerCase() === partFile.toLowerCase()) ??
+        partRows.find((p) => p.label.toLowerCase() === partFile.toLowerCase());
+      if (!partRow) {
+        res.status(404).json({ error: `Parte "${partFile}" não encontrada.` });
+        return;
+      }
+      res.json({
+        reference: ref,
+        folder_path: match.folder_path,
+        part: readM1MeshForPart(STOLL_TMP, match.folder_path, partRow),
+      });
+      return;
+    }
+
+    const parts = readM1MeshForModel(STOLL_TMP, match.folder_path, partRows);
+    res.json({
+      reference: ref,
+      folder_path: match.folder_path,
+      parts,
+      filled: parts.filter((row) => row.ok).length,
+      total: parts.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao ler malha M1.' });
+  }
+});
+
+app.post('/api/programs/m1-stitch-types', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const stitchType = upsertM1StitchType({
+      id: String(body.id ?? ''),
+      code: String(body.code ?? ''),
+      name: String(body.name ?? ''),
+    });
+    res.json({ ok: true, stitchType });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Erro ao gravar tipo de ponto.' });
+  }
+});
+
+app.post('/api/programs/m1-measurements', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const reference = String(body.reference ?? '').trim();
+    const partLabel = String(body.part_label ?? body.partLabel ?? '').trim();
+    const widthCm = Number(String(body.width_cm ?? body.widthCm ?? '').replace(',', '.'));
+    const heightCm = Number(String(body.height_cm ?? body.heightCm ?? '').replace(',', '.'));
+    const wales = Number(body.wales);
+    const courses = Number(body.courses);
+
+    if (!reference || !partLabel) {
+      res.status(400).json({ error: 'Informe referência e parte.' });
+      return;
+    }
+    if (!(wales > 0) || !(courses > 0)) {
+      res.status(400).json({ error: 'Malhas e passadas devem ser maiores que zero.' });
+      return;
+    }
+
+    const density = computeDensity(wales, courses, widthCm, heightCm);
+    const machineRaw = body.machine ?? {};
+    const machine = {
+      cms: String(machineRaw.cms ?? '').trim(),
+      gauge: String(machineRaw.gauge ?? '').trim(),
+      label: String(machineRaw.label ?? '').trim(),
+      syntechMaquina:
+        machineRaw.syntechMaquina ??
+        machineRaw.syntech_maquina ??
+        null,
+    };
+
+    const row = addM1Measurement({
+      reference,
+      programFolder: String(body.program_folder ?? body.programFolder ?? '').trim(),
+      partBase: String(body.part_base ?? body.partBase ?? '').trim(),
+      partLabel,
+      machine,
+      swatch: { widthCm, heightCm, fabricState: 'raw' },
+      programCounts: {
+        wales,
+        courses,
+        source: String(body.program_counts_source ?? 'sin'),
+      },
+      density,
+      regulation: body.regulation ?? {
+        primarySource: 'sin',
+        sinNps: [],
+        setxNps: [],
+      },
+      stitchTypeId: body.stitch_type_id ?? body.stitchTypeId,
+      stitchTypeCode: body.stitch_type_code ?? body.stitchTypeCode,
+      yarns: Array.isArray(body.yarns) ? body.yarns : [],
+      files: body.files ?? {},
+      notes: String(body.notes ?? '').trim(),
+    });
+
+    res.json({ ok: true, measurement: row });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Erro ao gravar medição.' });
+  }
+});
+
+app.get('/api/programs/m1-similar', (req, res) => {
+  try {
+    const syntechCod = req.query.syntech_cod ? Number(req.query.syntech_cod) : undefined;
+    const rows = findSimilarMeasurements({
+      syntechCod: Number.isFinite(syntechCod) ? syntechCod : undefined,
+      sinDescriptionKey: String(req.query.yarn_key ?? '').trim() || undefined,
+      cms: String(req.query.cms ?? '').trim() || undefined,
+      gauge: String(req.query.gauge ?? '').trim() || undefined,
+      stitchTypeCode: String(req.query.stitch ?? '').trim() || undefined,
+      excludeId: String(req.query.exclude_id ?? '').trim() || undefined,
+      limit: req.query.limit ? Number(req.query.limit) : 12,
+    });
+    res.json({ items: rows });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao buscar similares.' });
+  }
+});
+
 app.get('/api/programs/syntech-fios', (_req, res) => {
   try {
     const catalog = readSyntechYarnCatalog();
@@ -529,7 +870,7 @@ app.get('/api/programs/syntech-test', async (_req, res) => {
 app.get('/api/programs/health', (_req, res) => {
   res.json({
     ok: true,
-    version: 22,
+    version: 29,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: PROGRAMS_ROOT,
@@ -547,6 +888,15 @@ app.get('/api/programs/health', (_req, res) => {
       'sintral-yarns',
       'syntech-push',
       'syntech-fios',
+      'm1-density',
+      'm1-knowledge',
+      'm1-measurements',
+      'm1-similar',
+      'm1-visual',
+      'm1-symbols',
+      'm1-bitmaps',
+      'm1-mesh',
+      'm1-fabric-lib',
     ],
   });
 });

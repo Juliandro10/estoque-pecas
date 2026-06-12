@@ -1,0 +1,524 @@
+{
+  "version": 2,
+  "stitchTypes": [
+    {
+      "id": "mm-frente",
+      "code": "M.M",
+      "name": "Meia malha frente"
+    },
+    {
+      "id": "canelado-2x2",
+      "code": "2x2",
+      "name": "Canelado 2x2"
+    },
+    {
+      "id": "jersey",
+      "code": "jersey",
+      "name": "Jersey (direito simples)"
+    },
+    {
+      "id": "canelado-cheia-1x1-1x1",
+      "code": "1x1/1x1/1x1",
+      "name": "Canelado-Cheia/1x1/1x1",
+      "visual": {
+        "stitch": "canelado-cheia-1x1-1x1-stitch.jpg",
+        "icon": "canelado-cheia-1x1-1x1-icon.jpg",
+        "malhas": "canelado-cheia-1x1-1x1-malhas.jpg"
+      }
+    }
+  ],
+  "measurements": [
+    {
+      "reference": "5500",
+      "programFolder": "C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS\\PROGRAMAS-POR-CLIENTE\\GARAGE\\5500-REGATA-DANI",
+      "partBase": "5500-REGATA-DANI-CORPO",
+      "partLabel": "CORPO",
+      "machine": {
+        "cms": "CMS530",
+        "gauge": "E7.2",
+        "label": "CMS 530 E7.2",
+        "syntechMaquina": 1
+      },
+      "swatch": {
+        "widthCm": 48,
+        "heightCm": 46,
+        "fabricState": "raw"
+      },
+      "programCounts": {
+        "wales": 528,
+        "courses": 288,
+        "source": "simx-expanded"
+      },
+      "density": {
+        "walesPer10cm": 110,
+        "coursesPer10cm": 62.608695652173914
+      },
+      "regulation": {
+        "primarySource": "sin",
+        "sinNps": [
+          {
+            "np": 1,
+            "value": 10,
+            "label": "Setup Row"
+          },
+          {
+            "np": 2,
+            "value": 11.6,
+            "label": "Tubular Cycle front"
+          },
+          {
+            "np": 3,
+            "value": 11.6,
+            "label": "Tubular Cycle rear"
+          },
+          {
+            "np": 4,
+            "value": 10.5,
+            "label": "CANELADO"
+          },
+          {
+            "np": 5,
+            "value": 10.5,
+            "label": "CANELADO"
+          },
+          {
+            "np": 11,
+            "value": 10,
+            "label": "Setup Row front"
+          },
+          {
+            "np": 17,
+            "value": 13,
+            "label": "Safety rows"
+          },
+          {
+            "np": 20,
+            "value": 11,
+            "label": "Start 1"
+          },
+          {
+            "np": 21,
+            "value": 11.5,
+            "label": "Start 2"
+          },
+          {
+            "np": 22,
+            "value": 12,
+            "label": "Start 3"
+          },
+          {
+            "np": 23,
+            "value": 12.5,
+            "label": "Start 4"
+          },
+          {
+            "np": 24,
+            "value": 13,
+            "label": "Start 5"
+          },
+          {
+            "np": 25,
+            "value": 16,
+            "label": "Comb Thread"
+          }
+        ],
+        "setxNps": [],
+        "ydf": 2,
+        "ygc": "YGC:/1F=A 2F=B 3F=C 6F=D;",
+        "mseci": 0.7
+      },
+      "stitchTypeId": "canelado-2x2",
+      "stitchTypeCode": "2x2",
+      "yarns": [
+        {
+          "bico": 6,
+          "sinDescription": "MESCLA SHINE 1 CABO SWAROVISK",
+          "sinDescriptionKey": "MESCLA SHINE 1 CABO SWAROVISK",
+          "syntechCod": 32,
+          "syntechDesc": "MESCLA SHINE",
+          "pct": null,
+          "letter": "D"
+        },
+        {
+          "bico": 3,
+          "sinDescription": "MESCLA SHINE 1 CABO SWAROVISK",
+          "sinDescriptionKey": "MESCLA SHINE 1 CABO SWAROVISK",
+          "syntechCod": 32,
+          "syntechDesc": "MESCLA SHINE",
+          "pct": null,
+          "letter": "C"
+        },
+        {
+          "bico": 2,
+          "sinDescription": "ELASTICO DE PENTE",
+          "sinDescriptionKey": "ELASTICO PENTE",
+          "syntechCod": 13,
+          "syntechDesc": "LASTEX",
+          "pct": null,
+          "letter": "B"
+        },
+        {
+          "bico": 1,
+          "sinDescription": "SEPARACAO",
+          "sinDescriptionKey": "SEPARACAO",
+          "syntechCod": 70,
+          "syntechDesc": "RESTO DE FIO",
+          "pct": null,
+          "letter": "A"
+        }
+      ],
+      "files": {
+        "sin": "5500-REGATA-DANI-CORPO.sin",
+        "jac": "5500-REGATA-DANI-CORPO.jac",
+        "simx": "5500-REGATA-DANI-CORPO.simx"
+      },
+      "notes": "",
+      "id": "15170b79-b909-4118-8ee9-a15d69e45ec5",
+      "createdAt": "2026-06-12T12:05:52.991Z",
+      "updatedAt": "2026-06-12T12:05:52.991Z"
+    },
+    {
+      "reference": "5500",
+      "programFolder": "C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS\\PROGRAMAS-POR-CLIENTE\\GARAGE\\5500-REGATA-DANI",
+      "partBase": "5500-REGATA-DANI-CORPO",
+      "partLabel": "CORPO",
+      "machine": {
+        "cms": "CMS530",
+        "gauge": "E7.2",
+        "label": "CMS 530 E7.2",
+        "syntechMaquina": 1
+      },
+      "swatch": {
+        "widthCm": 48,
+        "heightCm": 46,
+        "fabricState": "raw"
+      },
+      "programCounts": {
+        "wales": 528,
+        "courses": 288,
+        "source": "simx-expanded"
+      },
+      "density": {
+        "walesPer10cm": 110,
+        "coursesPer10cm": 62.608695652173914
+      },
+      "regulation": {
+        "primarySource": "sin",
+        "sinNps": [
+          {
+            "np": 1,
+            "value": 10,
+            "label": "Setup Row"
+          },
+          {
+            "np": 2,
+            "value": 11.6,
+            "label": "Tubular Cycle front"
+          },
+          {
+            "np": 3,
+            "value": 11.6,
+            "label": "Tubular Cycle rear"
+          },
+          {
+            "np": 4,
+            "value": 10.5,
+            "label": "CANELADO"
+          },
+          {
+            "np": 5,
+            "value": 10.5,
+            "label": "CANELADO"
+          },
+          {
+            "np": 11,
+            "value": 10,
+            "label": "Setup Row front"
+          },
+          {
+            "np": 17,
+            "value": 13,
+            "label": "Safety rows"
+          },
+          {
+            "np": 20,
+            "value": 11,
+            "label": "Start 1"
+          },
+          {
+            "np": 21,
+            "value": 11.5,
+            "label": "Start 2"
+          },
+          {
+            "np": 22,
+            "value": 12,
+            "label": "Start 3"
+          },
+          {
+            "np": 23,
+            "value": 12.5,
+            "label": "Start 4"
+          },
+          {
+            "np": 24,
+            "value": 13,
+            "label": "Start 5"
+          },
+          {
+            "np": 25,
+            "value": 16,
+            "label": "Comb Thread"
+          }
+        ],
+        "setxNps": [],
+        "ydf": 2,
+        "ygc": "YGC:/1F=A 2F=B 3F=C 6F=D;",
+        "mseci": 0.7
+      },
+      "stitchTypeId": "canelado-2x2",
+      "stitchTypeCode": "2x2",
+      "yarns": [
+        {
+          "bico": 6,
+          "sinDescription": "MESCLA SHINE 1 CABO SWAROVISK",
+          "sinDescriptionKey": "MESCLA SHINE 1 CABO SWAROVISK",
+          "syntechCod": 32,
+          "syntechDesc": "MESCLA SHINE",
+          "pct": null,
+          "letter": "D"
+        },
+        {
+          "bico": 3,
+          "sinDescription": "MESCLA SHINE 1 CABO SWAROVISK",
+          "sinDescriptionKey": "MESCLA SHINE 1 CABO SWAROVISK",
+          "syntechCod": 32,
+          "syntechDesc": "MESCLA SHINE",
+          "pct": null,
+          "letter": "C"
+        },
+        {
+          "bico": 2,
+          "sinDescription": "ELASTICO DE PENTE",
+          "sinDescriptionKey": "ELASTICO PENTE",
+          "syntechCod": 13,
+          "syntechDesc": "LASTEX",
+          "pct": null,
+          "letter": "B"
+        },
+        {
+          "bico": 1,
+          "sinDescription": "SEPARACAO",
+          "sinDescriptionKey": "SEPARACAO",
+          "syntechCod": 70,
+          "syntechDesc": "RESTO DE FIO",
+          "pct": null,
+          "letter": "A"
+        }
+      ],
+      "files": {
+        "sin": "5500-REGATA-DANI-CORPO.sin",
+        "jac": "5500-REGATA-DANI-CORPO.jac",
+        "simx": "5500-REGATA-DANI-CORPO.simx"
+      },
+      "notes": "",
+      "id": "0f6b713e-6b80-438a-9404-76e5de3c2d36",
+      "createdAt": "2026-06-12T12:40:37.688Z",
+      "updatedAt": "2026-06-12T12:40:37.688Z"
+    },
+    {
+      "reference": "5455",
+      "programFolder": "C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS\\PROGRAMAS-POR-CLIENTE\\LEZ A LEZ\\5455-TOP-CROCHE-LEIA",
+      "partBase": "5455-TOP-CROCHE-LEIA-CT-P-4",
+      "partLabel": "CT-P-4",
+      "machine": {
+        "cms": "CMS502",
+        "gauge": "E3.5.2",
+        "label": "CMS 502 E3,5.2",
+        "syntechMaquina": 10
+      },
+      "swatch": {
+        "widthCm": 32,
+        "heightCm": 10,
+        "fabricState": "raw"
+      },
+      "programCounts": {
+        "wales": 120,
+        "courses": 196,
+        "source": "simx-prod-lines"
+      },
+      "density": {
+        "walesPer10cm": 37.5,
+        "coursesPer10cm": 196
+      },
+      "regulation": {
+        "primarySource": "sin",
+        "sinNps": [
+          {
+            "np": 1,
+            "value": 10.5,
+            "label": "PRIMEIRA DA BARRA FRENTE"
+          },
+          {
+            "np": 2,
+            "value": 13,
+            "label": "Tubular Cycle front"
+          },
+          {
+            "np": 3,
+            "value": 13,
+            "label": "Tubular Cycle rear"
+          },
+          {
+            "np": 4,
+            "value": 13.5,
+            "label": "ULTIMA DA BARRA"
+          },
+          {
+            "np": 5,
+            "value": 14,
+            "label": "MALHA FRENTE"
+          },
+          {
+            "np": 6,
+            "value": 14,
+            "label": "MALHA ATRAS"
+          },
+          {
+            "np": 7,
+            "value": 12.6,
+            "label": "CHEIA PARA DESCARREGAR"
+          },
+          {
+            "np": 8,
+            "value": 13,
+            "label": "lastex"
+          },
+          {
+            "np": 9,
+            "value": 12.5,
+            "label": "tubular final"
+          },
+          {
+            "np": 10,
+            "value": 13,
+            "label": "TUBULAR"
+          },
+          {
+            "np": 11,
+            "value": 10.5,
+            "label": "PRIMEIRA DA BARRA ATRAS"
+          },
+          {
+            "np": 12,
+            "value": 9,
+            "label": "Malha cheia / Frente"
+          },
+          {
+            "np": 13,
+            "value": 11,
+            "label": "Transition-2"
+          },
+          {
+            "np": 14,
+            "value": 14,
+            "label": "REMALHADO FRENTE"
+          },
+          {
+            "np": 15,
+            "value": 14,
+            "label": "REMALHADO ATRAS"
+          },
+          {
+            "np": 17,
+            "value": 14,
+            "label": "PASSADA DE PROTECAO"
+          },
+          {
+            "np": 20,
+            "value": 12,
+            "label": "SEPARACAO"
+          },
+          {
+            "np": 21,
+            "value": 12,
+            "label": "SEPARACAO"
+          },
+          {
+            "np": 22,
+            "value": 12,
+            "label": "SEPARACAO"
+          },
+          {
+            "np": 23,
+            "value": 11.5,
+            "label": "SEPARACAO"
+          },
+          {
+            "np": 24,
+            "value": 14,
+            "label": "FIO DA SEPARACAO"
+          },
+          {
+            "np": 25,
+            "value": 16,
+            "label": "FIO DO PENTE"
+          }
+        ],
+        "setxNps": [],
+        "ydf": 6,
+        "ygc": "YGC:/1F=A 2F=B 3F=C 5F=D;",
+        "mseci": 0.7
+      },
+      "stitchTypeId": "mm-frente",
+      "stitchTypeCode": "M.M",
+      "yarns": [
+        {
+          "bico": 5,
+          "sinDescription": "013 LASTEX 1 CABO",
+          "sinDescriptionKey": "013 LASTEX 1 CABO",
+          "syntechCod": 13,
+          "syntechDesc": "LASTEX",
+          "pct": null,
+          "letter": "D"
+        },
+        {
+          "bico": 3,
+          "sinDescription": "069 VISCOSTRTETCH 4 CABOS",
+          "sinDescriptionKey": "069 VISCOSTRTETCH 4 CABOS",
+          "syntechCod": 69,
+          "syntechDesc": "VISCOSTRTETCH",
+          "pct": null,
+          "letter": "C"
+        },
+        {
+          "bico": 2,
+          "sinDescription": "ELASTICO DO PENTE",
+          "sinDescriptionKey": "ELASTICO PENTE",
+          "syntechCod": 13,
+          "syntechDesc": "LASTEX",
+          "pct": null,
+          "letter": "B"
+        },
+        {
+          "bico": 1,
+          "sinDescription": "SEPARACAO",
+          "sinDescriptionKey": "SEPARACAO",
+          "syntechCod": 70,
+          "syntechDesc": "RESTO DE FIO",
+          "pct": null,
+          "letter": "A"
+        }
+      ],
+      "files": {
+        "sin": "5455-TOP-CROCHE-LEIA-CT-P-4.sin",
+        "jac": "5455-TOP-CROCHE-LEIA-CT-P-4.jac",
+        "simx": "5455-TOP-CROCHE-LEIA-CT-P-4.simx"
+      },
+      "notes": "",
+      "id": "d2f54536-13f3-4fb8-a92d-33622c0d55e1",
+      "createdAt": "2026-06-12T14:12:59.689Z",
+      "updatedAt": "2026-06-12T14:12:59.689Z"
+    }
+  ]
+}
