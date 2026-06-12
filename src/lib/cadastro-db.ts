@@ -144,9 +144,9 @@ export function parseConsumptionInput(raw: string) {
   return Number.isFinite(value) ? value : 0;
 }
 
-const CONSUMPTION_SCALE = 100;
+const CONSUMPTION_SCALE = 1000;
 
-/** Separação e elástico — fixos por peça acabada, além do peso manual das partes. */
+/** Separação (1) e elástico pente (2) — fixos por peça acabada, fora do %. Demais guias usam % do .simx. */
 const PROGRAM_FIXED_WASTE_KG: Partial<Record<number, number>> = {
   1: 0.02,
   2: 0.01,
@@ -160,9 +160,14 @@ export function programFixedWasteYarnTotalKg() {
   return (PROGRAM_FIXED_WASTE_KG[1] ?? 0) + (PROGRAM_FIXED_WASTE_KG[2] ?? 0);
 }
 
-export function ceilConsumption(value: number) {
+export function roundConsumption(value: number) {
   if (!value || value <= 0) return 0;
-  return Math.ceil(value * CONSUMPTION_SCALE - 1e-12) / CONSUMPTION_SCALE;
+  return Math.round(value * CONSUMPTION_SCALE) / CONSUMPTION_SCALE;
+}
+
+/** @deprecated use roundConsumption */
+export function ceilConsumption(value: number) {
+  return roundConsumption(value);
 }
 
 export function ceilPct(value: number) {
@@ -170,8 +175,12 @@ export function ceilPct(value: number) {
   return Math.ceil(value * 100 - 1e-12) / 100;
 }
 
+function formatFixedConsumption(value: number) {
+  return value.toFixed(3).replace('.', ',');
+}
+
 export function formatConsumption(value: number) {
-  const rounded = ceilConsumption(value);
+  const rounded = roundConsumption(value);
   if (!rounded) return '';
   return rounded.toFixed(3).replace('.', ',');
 }
@@ -318,7 +327,7 @@ export function applyAutoYarnConsumption(
         if (fixedTotal !== undefined) {
           if (!fixedAssigned.has(guide.guide)) {
             fixedAssigned.add(guide.guide);
-            return { ...guide, consumption: formatConsumption(fixedTotal) };
+            return { ...guide, consumption: formatFixedConsumption(fixedTotal) };
           }
           return { ...guide, consumption: '' };
         }

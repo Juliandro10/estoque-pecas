@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import type { SinYarnGuide } from './sin-yarn';
 import { parseYarnGuidesFromSin } from './sin-yarn';
 import { readSinTextsForModel } from './sin-read';
@@ -6,6 +9,7 @@ import {
   RESTO_FIO_NOME,
   resolveCaboForBico,
 } from './syntech-bico-rules';
+import { parseYarnDescription } from './yarn-description-parse';
 
 const GUIA_SLOT_COUNT = 8;
 
@@ -18,18 +22,22 @@ export type GuiaFioRow = {
   cor_do_fio: string | null;
 };
 
-function parseGuideDescription(description: string) {
-  const text = description.trim();
-  const match = text.match(/^(.+?)\s+(\d+)\s+CABO\s+(.+)$/i);
-  if (match) {
-    return {
-      tipo: match[1].trim(),
-      cabo: match[2],
-      cor: match[3].trim(),
-    };
-  }
+let cachedYarnTypes: string[] | null = null;
 
-  return { tipo: text, cabo: null as string | null, cor: null as string | null };
+function yarnTypesFromCatalog() {
+  if (cachedYarnTypes) return cachedYarnTypes;
+  const file = path.join(process.cwd(), 'data', 'syntech-fios.json');
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { types: { tipo: string }[] };
+    cachedYarnTypes = data.types.map((item) => item.tipo);
+  } catch {
+    cachedYarnTypes = [];
+  }
+  return cachedYarnTypes;
+}
+
+function parseGuideDescription(description: string) {
+  return parseYarnDescription(description, yarnTypesFromCatalog());
 }
 
 function guideToGuiaFields(guide: SinYarnGuide): Omit<GuiaFioRow, 'numero'> {

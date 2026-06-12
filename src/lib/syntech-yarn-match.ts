@@ -1,4 +1,5 @@
 import type { ConsolidatedYarnRow, SyntechYarnCatalogFile } from '../types-programming';
+import { parseYarnDescription as parseYarnDescriptionCore } from '../../server/yarn-description-parse';
 
 const FIXED_BICO_TIPO_FIO: Record<number, number> = {
   1: 70,
@@ -6,17 +7,8 @@ const FIXED_BICO_TIPO_FIO: Record<number, number> = {
   8: 70,
 };
 
-export function parseYarnDescription(description: string) {
-  const text = description.trim();
-  const match = text.match(/^(.+?)\s+(\d+)\s+CABO\s+(.+)$/i);
-  if (match) {
-    return {
-      tipo: match[1].trim(),
-      cabo: match[2],
-      cor: match[3].trim(),
-    };
-  }
-  return { tipo: text, cabo: null as string | null, cor: null as string | null };
+export function parseYarnDescription(description: string, yarnTypes: string[] = []) {
+  return parseYarnDescriptionCore(description, yarnTypes);
 }
 
 function normalize(value: string) {
@@ -66,7 +58,8 @@ export function resolveYarnRow(
   catalog: SyntechYarnCatalogFile | null
 ): ResolvedYarnRow {
   const fixedCodigo = FIXED_BICO_TIPO_FIO[row.guide];
-  const parsed = parseYarnDescription(row.description);
+  const yarnTypes = catalog?.types.map((item) => item.tipo) ?? [];
+  const parsed = parseYarnDescription(row.description, yarnTypes);
 
   if (fixedCodigo !== undefined) {
     const fixedType = catalog?.types.find((item) => item.codigo === fixedCodigo) ?? null;

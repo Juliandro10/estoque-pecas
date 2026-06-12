@@ -13,7 +13,7 @@ const SINGLE_CABO_BICOS = new Set([1, 2]);
 
 export function parseCaboFromDescription(description: string) {
   const text = description.trim();
-  const numeric = text.match(/(\d+)\s+CABOS?\b/i);
+  const numeric = text.match(/(\d+)\s+CABOS?\w*/i);
   if (numeric) return numeric[1];
   if (/\bDOIS\s+CABOS?\b/i.test(text)) return '2';
   if (/\bTRES\s+CABOS?\b/i.test(text)) return '3';

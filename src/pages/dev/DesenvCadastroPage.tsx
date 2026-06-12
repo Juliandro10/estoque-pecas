@@ -673,7 +673,7 @@ export function DesenvCadastroPage() {
                                   {totalPartWeight > 0 ? formatConsumption(totalPartWeight) : '—'} kg
                                 </span>
                                 {' · '}
-                                sep. 0,020 + elást. 0,010 fixos
+                                sep. 0,020 + elást. pente 0,010 fixos (bicos 1–2)
                               </td>
                             </tr>
                           </tfoot>
