@@ -5,22 +5,24 @@ import {
   cadastroDb,
   consolidateYarnParts,
   duplicatePart,
+  ensurePartsForYarnParts,
   formatConsumption,
   formatConsumptionInput,
   formatPct,
-  isProgramFixedWasteYarnGuide,
   mergeYarnPartsFromSin,
   parseTimeInput,
   programPartsOnly,
+  programFixedWasteYarnTotalKg,
   totalCalculatedYarnConsumption,
   totalPartsWeight,
   totalYarnConsumption,
 } from '../../lib/cadastro-db';
 import { exportCadastroPdf } from '../../lib/cadastro-report-export';
 import {
-  resolveConsolidatedYarns,
-  yarnRowsReadyForSyntech,
-} from '../../lib/syntech-yarn-match';
+  expandConsolidatedForProcessos,
+  processYarnRowsReadyForSyntech,
+} from '../../lib/yarn-blend';
+import { resolveConsolidatedYarns } from '../../lib/syntech-yarn-match';
 import {
   isLocalScannerAvailable,
   localProgramsApi,
@@ -88,19 +90,31 @@ export function DesenvCadastroPage() {
   const [scannerOutdated, setScannerOutdated] = useState(false);
   const localMode = isLocalScannerAvailable();
 
+  const partsForYarn = useMemo(
+    () => ensurePartsForYarnParts(parts, yarnParts),
+    [parts, yarnParts]
+  );
+
   const yarnPartsComputed = useMemo(
-    () => applyAutoYarnConsumption(yarnParts, parts),
-    [yarnParts, parts]
+    () => applyAutoYarnConsumption(yarnParts, partsForYarn),
+    [yarnParts, partsForYarn]
   );
 
   const consolidatedYarns = useMemo(
-    () => consolidateYarnParts(yarnPartsComputed, parts),
-    [yarnPartsComputed, parts]
+    () => consolidateYarnParts(yarnPartsComputed, partsForYarn),
+    [yarnPartsComputed, partsForYarn]
   );
 
-  const consolidatedYarnsResolved = useMemo(
+  const consolidatedYarnsForPush = useMemo(
     () => resolveConsolidatedYarns(consolidatedYarns, yarnCatalog),
     [consolidatedYarns, yarnCatalog]
+  );
+
+  const totalPartWeight = useMemo(() => totalPartsWeight(partsForYarn), [partsForYarn]);
+
+  const consolidatedYarnsResolved = useMemo(
+    () => expandConsolidatedForProcessos(consolidatedYarns, yarnCatalog, totalPartWeight),
+    [consolidatedYarns, yarnCatalog, totalPartWeight]
   );
 
   const unresolvedYarnCodes = useMemo(
@@ -113,7 +127,6 @@ export function DesenvCadastroPage() {
     [consolidatedYarnsResolved]
   );
 
-  const totalPartWeight = useMemo(() => totalPartsWeight(parts), [parts]);
   const totalConsumption = useMemo(
     () => totalYarnConsumption(consolidatedYarns),
     [consolidatedYarns]
@@ -122,6 +135,7 @@ export function DesenvCadastroPage() {
     () => totalCalculatedYarnConsumption(consolidatedYarns),
     [consolidatedYarns]
   );
+  const fixedWasteKg = programFixedWasteYarnTotalKg();
 
   useEffect(() => {
     if (!localMode) {
@@ -423,7 +437,7 @@ export function DesenvCadastroPage() {
       setError('Scanner desatualizado — reinicie o Iniciar.bat para habilitar catálogo de fios.');
       return;
     }
-    if (consolidatedYarnsResolved.length > 0 && !yarnRowsReadyForSyntech(consolidatedYarnsResolved)) {
+    if (consolidatedYarnsResolved.length > 0 && !processYarnRowsReadyForSyntech(consolidatedYarnsResolved)) {
       setError(
         `Fio(s) sem código Syntech: ${unresolvedYarnCodes.map((row) => `bico ${row.guide}`).join(', ')}. Atualize o catálogo ou confira as descrições.`
       );
@@ -462,7 +476,7 @@ export function DesenvCadastroPage() {
           time_mmss: part.time_mmss,
           weight_kg: part.weight_kg,
         })),
-        consolidated_yarns: consolidatedYarnsResolved.map((row) => ({
+        consolidated_yarns: consolidatedYarnsForPush.map((row) => ({
           guide: row.guide,
           letter: row.letter,
           description: row.description,
@@ -600,7 +614,7 @@ export function DesenvCadastroPage() {
                   {consolidatedYarns.length > 0 ? (
                     <div className="yarn-consolidated">
                       <p className="yarn-consolidated-title">
-                        Programa — fios consolidados
+                        Programa — Processos Fábrica (matéria-prima)
                         {yarnCatalog?.updated_at ? (
                           <span className="yarn-catalog-meta">
                             {' '}
@@ -611,7 +625,7 @@ export function DesenvCadastroPage() {
                       {unresolvedYarnCodes.length > 0 ? (
                         <p className="yarn-catalog-warn">
                           Sem código Syntech:{' '}
-                          {unresolvedYarnCodes.map((row) => `bico ${row.guide}`).join(', ')}
+                          {unresolvedYarnCodes.map((row) => `slot ${row.syntech_slot ?? row.guide}`).join(', ')}
                         </p>
                       ) : null}
                       <div className="table-wrap yarn-table-wrap">
@@ -620,31 +634,34 @@ export function DesenvCadastroPage() {
                             <tr>
                               <th className="yarn-col-pct">%</th>
                               <th className="yarn-col-consumo">Consumo</th>
-                              <th className="yarn-col-bico">Bico</th>
+                              <th className="yarn-col-slot">Slot</th>
+                              <th className="yarn-col-bico">Guia</th>
                               <th className="yarn-col-cod">Cod.</th>
-                              <th className="yarn-col-fio">Fio</th>
-                              <th className="yarn-col-desc">Descrição</th>
+                              <th className="yarn-col-fio">Letra</th>
+                              <th className="yarn-col-desc">Fio</th>
                               <th className="yarn-col-parts">Partes</th>
                             </tr>
                           </thead>
                           <tbody>
                             {consolidatedYarnsResolved.map((row) => (
                               <tr
-                                key={`${row.guide}-${row.letter}-${row.description}`}
+                                key={`${row.syntech_slot}-${row.guide}-${row.component_index}-${row.description}`}
                                 className={!row.codigo_ok ? 'yarn-row-error' : !row.cor_ok ? 'yarn-row-warn' : undefined}
                               >
-                                <td className="yarn-col-pct mono">
-                                  {isProgramFixedWasteYarnGuide(row.guide)
-                                    ? '—'
-                                    : formatPct(row.pct)}
-                                </td>
+                                <td className="yarn-col-pct mono">{formatPct(row.pct)}</td>
                                 <td className="yarn-col-consumo mono">{row.consumption || '—'}</td>
-                                <td className="yarn-col-bico mono">{row.guide}</td>
+                                <td className="yarn-col-slot mono">{row.syntech_slot}</td>
+                                <td className="yarn-col-bico mono">BICO {row.guide}</td>
                                 <td className="yarn-col-cod mono">
                                   {row.tipo_fio_codigo ?? '—'}
                                 </td>
                                 <td className="yarn-col-fio mono">{row.letter}</td>
-                                <td className="yarn-col-desc">{row.description || '—'}</td>
+                                <td className="yarn-col-desc">
+                                  {row.description || '—'}
+                                  {row.blend_source ? (
+                                    <span className="yarn-blend-note"> · mistura</span>
+                                  ) : null}
+                                </td>
                                 <td className="yarn-col-parts">
                                   <div className="yarn-part-tags">
                                     {row.parts.map((part) => (
@@ -668,12 +685,19 @@ export function DesenvCadastroPage() {
                                 {totalConsumption > 0 ? formatConsumption(totalConsumption) : '—'}
                               </td>
                               <td colSpan={5} className="yarn-total-note">
-                                Peso partes:{' '}
+                                Pano{' '}
                                 <span className="mono">
                                   {totalPartWeight > 0 ? formatConsumption(totalPartWeight) : '—'} kg
                                 </span>
-                                {' · '}
-                                sep. 0,020 + elást. pente 0,010 fixos (bicos 1–2)
+                                {' + fixos '}
+                                <span className="mono">{formatConsumption(fixedWasteKg)} kg</span>
+                                {' = total fio '}
+                                <span className="mono">
+                                  {totalPartWeight > 0
+                                    ? formatConsumption(totalPartWeight + fixedWasteKg)
+                                    : '—'}{' '}
+                                  kg
+                                </span>
                               </td>
                             </tr>
                           </tfoot>
@@ -882,7 +906,9 @@ export function DesenvCadastroPage() {
           width: 100%;
           table-layout: fixed;
         }
-        .yarn-table-consolidated { min-width: 640px; }
+        .yarn-blend-note { color: var(--muted); font-size: 12px; }
+        .yarn-col-slot { width: 48px; }
+        .yarn-table-consolidated { min-width: 720px; }
         .yarn-table th {
           text-transform: none;
           letter-spacing: 0;

@@ -7,7 +7,6 @@ import {
   consolidateYarnParts,
   formatConsumption,
   formatPct,
-  isProgramFixedWasteYarnGuide,
   parseConsumptionInput,
 } from './cadastro-db';
 
@@ -74,7 +73,7 @@ export function exportCadastroPdf(cadastro: ModelCadastro) {
       startY: y + 2,
       head: [['%', 'Consumo total', 'Bico', 'Fio', 'Descrição', 'Partes']],
       body: consolidated.map((row) => [
-        isProgramFixedWasteYarnGuide(row.guide) ? '—' : formatPct(row.pct),
+        formatPct(row.pct),
         row.consumption || '—',
         String(row.guide),
         row.letter,

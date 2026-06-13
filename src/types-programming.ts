@@ -170,6 +170,13 @@ export type ConsolidatedYarnRow = {
   cor?: string | null;
   codigo_ok?: boolean;
   cor_ok?: boolean;
+  /** Slot PRODUTOS (Processos Fábrica) — preenchido quando guia tem mistura. */
+  syntech_slot?: number;
+  /** Índice do componente no guia (0 = principal). */
+  component_index?: number;
+  /** Descrição completa do guia quando linha é componente expandido. */
+  blend_source?: string;
+  weight_share?: number;
 };
 
 export type SyntechYarnType = {

@@ -1,6 +1,7 @@
-import { parseWeightKg, queryTx, type SyntechTx } from './syntech-db';
+import { parseWeightKg, queryTx, clipSyntechText, type SyntechTx } from './syntech-db';
 import type { GuiaFioRow } from './syntech-guia-fio';
-import { resolveCaboNumberForBico } from './syntech-bico-rules';
+import { expandProcessYarnComponents, type ProcessYarnInput } from './yarn-blend';
+import { yarnTypesFromCatalog } from './syntech-yarn-types';
 
 const BICO_SLOTS = 10;
 const PARTE_NAME_MAX = 15;
@@ -11,12 +12,7 @@ type PushPart = {
   weight_kg: string;
 };
 
-type PushYarn = {
-  guide: number;
-  description: string;
-  consumption: string;
-  pct?: number;
-};
+type PushYarn = ProcessYarnInput;
 
 export type PartesProdRow = {
   parte: string;
@@ -24,12 +20,17 @@ export type PartesProdRow = {
 };
 
 export type BicoMaquinaRow = {
+  /** Slot PRODUTOS (Bico3, Bico4… ou 9/10 overflow). */
   bico: number;
+  /** Guia-fio físico da máquina (PARTE = BICO N). */
+  guide: number;
   parte: string;
   tipo_fio: number | null;
   perc: number;
   cabo: number | null;
   peso: number;
+  description: string;
+  component_index: number;
 };
 
 function roundPerc(value: number) {
@@ -37,7 +38,7 @@ function roundPerc(value: number) {
 }
 
 function normalizeParteName(label: string) {
-  return label.trim().toUpperCase().slice(0, PARTE_NAME_MAX);
+  return clipSyntechText(label, PARTE_NAME_MAX).toUpperCase();
 }
 
 export function buildPartesProdRows(parts: PushPart[]): PartesProdRow[] {
@@ -55,47 +56,27 @@ export function buildPartesProdRows(parts: PushPart[]): PartesProdRow[] {
 
 export function buildBicoMaquinaRows(
   consolidated: PushYarn[],
-  guiaRows: GuiaFioRow[]
+  guiaRows: GuiaFioRow[],
+  partWeightKg?: number
 ): Omit<BicoMaquinaRow, 'tipo_fio'>[] {
-  const totalPeso = consolidated.reduce((sum, row) => sum + parseWeightKg(row.consumption), 0);
-  const byGuide = new Map<number, PushYarn>();
+  const expanded = expandProcessYarnComponents(
+    consolidated,
+    guiaRows,
+    yarnTypesFromCatalog(),
+    undefined,
+    partWeightKg
+  );
 
-  for (const row of consolidated) {
-    if (!byGuide.has(row.guide)) byGuide.set(row.guide, row);
-  }
-
-  const rows: Omit<BicoMaquinaRow, 'tipo_fio'>[] = [];
-
-  for (let bico = 1; bico <= BICO_SLOTS; bico++) {
-    const yarn = byGuide.get(bico);
-    const peso = yarn ? parseWeightKg(yarn.consumption) : 0;
-    if (!yarn || peso <= 0) continue;
-
-    const guia = guiaRows.find((row) => row.numero === bico);
-    const caboRaw = guia?.cabod ?? guia?.cabo;
-    const cabo = resolveCaboNumberForBico(
-      bico,
-      yarn.description,
-      caboRaw
-    );
-
-    const perc =
-      yarn.pct && yarn.pct > 0
-        ? roundPerc(yarn.pct)
-        : totalPeso > 0
-          ? roundPerc((peso / totalPeso) * 100)
-          : 0;
-
-    rows.push({
-      bico,
-      parte: `BICO ${bico}`,
-      perc,
-      cabo,
-      peso,
-    });
-  }
-
-  return rows;
+  return expanded.map((row) => ({
+    bico: row.slot,
+    guide: row.guide,
+    parte: `BICO ${row.guide}`,
+    perc: row.pct,
+    cabo: row.cabo,
+    peso: row.consumptionKg,
+    description: row.description,
+    component_index: row.componentIndex,
+  }));
 }
 
 export async function pushPartesProd(

@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import type { SinYarnGuide } from './sin-yarn';
 import { parseYarnGuidesFromSin } from './sin-yarn';
 import { readSinTextsForModel } from './sin-read';
@@ -9,7 +6,12 @@ import {
   RESTO_FIO_NOME,
   resolveCaboForBico,
 } from './syntech-bico-rules';
-import { parseYarnDescription } from './yarn-description-parse';
+import { clipSyntechText } from './syntech-db';
+import { yarnTypesFromCatalog } from './syntech-yarn-types';
+import {
+  parseYarnDescription,
+  parseYarnDescriptionComponents,
+} from './yarn-description-parse';
 
 const GUIA_SLOT_COUNT = 8;
 
@@ -22,28 +24,38 @@ export type GuiaFioRow = {
   cor_do_fio: string | null;
 };
 
-let cachedYarnTypes: string[] | null = null;
-
-function yarnTypesFromCatalog() {
-  if (cachedYarnTypes) return cachedYarnTypes;
-  const file = path.join(process.cwd(), 'data', 'syntech-fios.json');
-  try {
-    const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { types: { tipo: string }[] };
-    cachedYarnTypes = data.types.map((item) => item.tipo);
-  } catch {
-    cachedYarnTypes = [];
-  }
-  return cachedYarnTypes;
-}
-
 function parseGuideDescription(description: string) {
   return parseYarnDescription(description, yarnTypesFromCatalog());
 }
 
+function clipGuiaText(value: string | null) {
+  if (!value) return null;
+  const text = clipSyntechText(value, 40);
+  return text || null;
+}
+
 function guideToGuiaFields(guide: SinYarnGuide): Omit<GuiaFioRow, 'numero'> {
+  const components = parseYarnDescriptionComponents(guide.description, yarnTypesFromCatalog());
+
+  if (components.length >= 2) {
+    const [first, second] = components;
+    const firstTipo = clipGuiaText(first.tipo) ?? '';
+    const secondTipo = clipGuiaText(second.tipo) ?? '';
+    const firstCor = clipGuiaText(first.cor);
+    const secondCor = clipGuiaText(second.cor);
+
+    return {
+      esquerda: secondTipo,
+      cabo: second.cabo,
+      direita: firstTipo,
+      cabod: first.cabo,
+      cor_do_fio: firstCor ?? secondCor,
+    };
+  }
+
   const { tipo, cabo, cor } = parseGuideDescription(guide.description);
-  const tipoText = tipo.slice(0, 40);
-  const corText = cor ? cor.slice(0, 40) : null;
+  const tipoText = clipGuiaText(tipo) ?? '';
+  const corText = clipGuiaText(cor);
 
   if (guide.side === 'left') {
     return {

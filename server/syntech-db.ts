@@ -86,6 +86,15 @@ export function parseWeightKg(raw: string) {
   return Number.isFinite(value) ? value : 0;
 }
 
+/** Campos VARCHAR do Syntech contam bytes — tira acento e limita tamanho. */
+export function clipSyntechText(value: string, maxLen: number) {
+  const ascii = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+  return ascii.slice(0, maxLen);
+}
+
 /** MM:SS ou HH:MM:SS → texto Syntech `MM :SS` (espaço antes dos dois pontos). */
 export function formatSyntechTempo(raw: string) {
   const text = raw.trim();
@@ -104,7 +113,10 @@ export function formatSyntechTempo(raw: string) {
     seconds = Number(colon[2]);
   }
 
-  return `${String(minutes).padStart(2, '0')} :${String(seconds).padStart(2, '0')}`;
+  return clipSyntechText(
+    `${String(minutes).padStart(2, '0')} :${String(seconds).padStart(2, '0')}`,
+    6
+  );
 }
 
 /** Tempo Syntech ou MM:SS → segundos totais (campo TEMPOM). */

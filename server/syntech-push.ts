@@ -1,8 +1,12 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import {
   attachSyntechDb,
   detachDb,
   formatSyntechTempo,
   parseWeightKg,
+  clipSyntechText,
   queryDb,
   queryTx,
   runInTransaction,
@@ -24,9 +28,20 @@ import {
   type BicoMaquinaRow,
 } from './syntech-processos';
 import { FIXED_BICO_TIPO_FIO } from './syntech-bico-rules';
+import { expandProcessYarnComponents, setYarnWeightFactors, type ProcessYarnComponent } from './yarn-blend';
+import { yarnTypesFromCatalog } from './syntech-yarn-types';
 
 const SLOT_COUNT = 8;
 const DEFAULT_TAMANHO = '*';
+
+function loadWeightFactorsFromDisk() {
+  try {
+    const file = path.join(process.cwd(), 'data', 'yarn-weight-factors.json');
+    setYarnWeightFactors(JSON.parse(fs.readFileSync(file, 'utf8')));
+  } catch {
+    // defaults em yarn-blend.ts
+  }
+}
 
 export type SyntechPushPart = {
   label: string;
@@ -69,7 +84,7 @@ export type SyntechPushResult = {
 };
 
 function normalizePartLabel(label: string) {
-  return label.trim().toUpperCase().slice(0, 10);
+  return clipSyntechText(label, 10).toUpperCase();
 }
 
 async function productExists(tx: SyntechTx, reference: string) {
@@ -140,6 +155,7 @@ async function findTipoFioCodigo(
 
   const rules: [string, string][] = [
     ['POWER BRIGHT', 'POWER BRIGHT'],
+    ['CAPRICE', 'CAPRICE'],
     ['ELAST', 'ELAST'],
     ['LASTEX', 'LASTEX'],
     ['LINHA', 'LINHA'],
@@ -195,11 +211,12 @@ async function getTipoFioByCodigo(tx: SyntechTx, codigo: number) {
 
 async function findTipoFioForBico(
   tx: SyntechTx,
-  bico: number,
+  physicalGuide: number,
   description: string,
-  guia?: GuiaFioRow
+  guia?: GuiaFioRow,
+  useFixedRules = true
 ) {
-  const fixedCodigo = FIXED_BICO_TIPO_FIO[bico];
+  const fixedCodigo = useFixedRules ? FIXED_BICO_TIPO_FIO[physicalGuide] : undefined;
   if (fixedCodigo !== undefined) {
     return getTipoFioByCodigo(tx, fixedCodigo);
   }
@@ -213,6 +230,25 @@ async function findTipoFioForBico(
   }
 
   return null;
+}
+
+async function resolveTipoFioForComponent(
+  tx: SyntechTx,
+  component: ProcessYarnComponent,
+  guia?: GuiaFioRow
+) {
+  if (component.tipo_fio_codigo != null && component.tipo_fio_codigo > 0) {
+    const fromCodigo = await getTipoFioByCodigo(tx, component.tipo_fio_codigo);
+    if (fromCodigo) return fromCodigo;
+  }
+
+  return findTipoFioForBico(
+    tx,
+    component.guide,
+    component.description,
+    guia,
+    component.isPrimary
+  );
 }
 
 async function resolveTipoFioForYarn(
@@ -232,7 +268,8 @@ async function pushMatPrima(
   reference: string,
   consolidated: SyntechPushYarn[],
   guiaRows: GuiaFioRow[],
-  warnings: string[]
+  warnings: string[],
+  partWeightKg: number
 ) {
   if (consolidated.length === 0) return 0;
 
@@ -243,14 +280,24 @@ async function pushMatPrima(
 
   const merged = new Map<number, { quant: number; preco: number; nome: string }>();
 
-  for (const row of consolidated) {
-    const quant = parseWeightKg(row.consumption);
+  const expanded = expandProcessYarnComponents(
+    consolidated,
+    guiaRows,
+    yarnTypesFromCatalog(),
+    undefined,
+    partWeightKg
+  );
+
+  for (const row of expanded) {
+    const quant = row.consumptionKg;
     if (quant <= 0) continue;
 
     const guia = guiaRows.find((item) => item.numero === row.guide);
-    const match = await resolveTipoFioForYarn(tx, row, guia);
+    const match = await resolveTipoFioForComponent(tx, row, guia);
     if (!match) {
-      warnings.push(`Fio bico ${row.guide} (${row.description}) — sem código em TIPO_FIO`);
+      warnings.push(
+        `Fio bico ${row.guide} slot ${row.slot} (${row.description}) — sem código em TIPO_FIO`
+      );
       continue;
     }
 
@@ -280,19 +327,29 @@ async function resolveBicosMaquina(
   tx: SyntechTx,
   consolidated: SyntechPushYarn[],
   guiaRows: GuiaFioRow[],
-  warnings: string[]
+  warnings: string[],
+  partWeightKg: number
 ): Promise<BicoMaquinaRow[]> {
-  const baseRows = buildBicoMaquinaRows(consolidated, guiaRows);
+  const baseRows = buildBicoMaquinaRows(consolidated, guiaRows, partWeightKg);
+  const expanded = expandProcessYarnComponents(
+    consolidated,
+    guiaRows,
+    yarnTypesFromCatalog(),
+    undefined,
+    partWeightKg
+  );
   const resolved: BicoMaquinaRow[] = [];
 
   for (const row of baseRows) {
-    const yarn = consolidated.find((item) => item.guide === row.bico);
-    const guia = guiaRows.find((item) => item.numero === row.bico);
-    const match = yarn
-      ? await resolveTipoFioForYarn(tx, { ...yarn, guide: row.bico }, guia)
-      : null;
+    const component = expanded.find(
+      (item) => item.slot === row.bico && item.guide === row.guide && item.componentIndex === row.component_index
+    );
+    const guia = guiaRows.find((item) => item.numero === row.guide);
+    const match = component ? await resolveTipoFioForComponent(tx, component, guia) : null;
     if (!match) {
-      warnings.push(`Bico ${row.bico} (${yarn?.description ?? '?'}) — sem TIPO_FIO para matéria-prima máquina`);
+      warnings.push(
+        `Bico slot ${row.bico} / guia ${row.guide} (${row.description}) — sem TIPO_FIO para matéria-prima máquina`
+      );
       continue;
     }
     resolved.push({ ...row, tipo_fio: match.codigo });
@@ -381,8 +438,12 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
   const reference = input.reference.trim();
   if (!reference) throw new Error('Informe a referência.');
 
+  loadWeightFactorsFromDisk();
+
   const parts = input.parts.filter((p) => p.file_name && /\.mdv$/i.test(p.file_name));
   if (parts.length === 0) throw new Error('Nenhuma parte .mdv para enviar.');
+
+  const partWeightKg = parts.reduce((sum, part) => sum + parseWeightKg(part.weight_kg), 0);
 
   const db = await attachSyntechDb();
   const warnings: string[] = [];
@@ -421,7 +482,8 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
         reference,
         input.consolidated_yarns ?? [],
         guiaRows,
-        warnings
+        warnings,
+        partWeightKg
       );
 
       const partesProd = buildPartesProdRows(parts);
@@ -456,7 +518,8 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
         tx,
         input.consolidated_yarns ?? [],
         guiaRows,
-        warnings
+        warnings,
+        partWeightKg
       );
       bicos_maquina_rows = await pushBicosMaquina(tx, reference, bicoRows);
       if ((input.consolidated_yarns ?? []).length > 0 && bicos_maquina_rows === 0) {

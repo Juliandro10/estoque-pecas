@@ -146,7 +146,7 @@ export function parseConsumptionInput(raw: string) {
 
 const CONSUMPTION_SCALE = 1000;
 
-/** Separação (1) e elástico pente (2) — fixos por peça acabada, fora do %. Demais guias usam % do .simx. */
+/** Separação (1) e elástico pente (2) — fixos por peça acabada, além do peso do pano (descartados antes da pesagem). */
 const PROGRAM_FIXED_WASTE_KG: Partial<Record<number, number>> = {
   1: 0.02,
   2: 0.01,
@@ -212,6 +212,11 @@ export function totalCalculatedYarnConsumption(consolidated: ConsolidatedYarnRow
     .reduce((sum, row) => sum + parseConsumptionInput(row.consumption), 0);
 }
 
+/** Peso do pano + sep./elást. fixos (total matéria-prima do programa). */
+export function totalMatPrimaConsumption(consolidated: ConsolidatedYarnRow[]) {
+  return totalYarnConsumption(consolidated);
+}
+
 /** Chave de consolidação — ignora variações como "ELASTICO PENTE" vs "ELASTICO DE PENTE". */
 export function normalizeYarnDescriptionKey(description: string) {
   let text = description.trim().toUpperCase();
@@ -237,15 +242,6 @@ function pickRicherYarnDescription(current: string, incoming: string) {
   return b.length > a.length ? b : a;
 }
 
-function partCountByLabel(parts: CadastroPart[]) {
-  const counts = new Map<string, number>();
-  for (const part of programPartsOnly(parts)) {
-    const key = part.label.toUpperCase();
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return counts;
-}
-
 function formatPartContribution(label: string, count: number) {
   return count > 1 ? `${label}×${count}` : label;
 }
@@ -254,7 +250,6 @@ export function consolidateYarnParts(
   yarnParts: CadastroYarnPart[],
   parts: CadastroPart[] = []
 ): ConsolidatedYarnRow[] {
-  const partCounts = partCountByLabel(parts);
   const rows = new Map<string, ConsolidatedYarnRow & { sum: number; letters: Set<string> }>();
   const totalPartWeight = programPartsOnly(parts).reduce(
     (sum, part) => sum + parseConsumptionInput(part.weight_kg),
@@ -262,8 +257,12 @@ export function consolidateYarnParts(
   );
 
   for (const yarnPart of yarnParts) {
-    const multiplier = partCounts.get(yarnPart.label.toUpperCase()) ?? 1;
-    const partLabel = formatPartContribution(yarnPart.label, multiplier);
+    const matchingParts = programPartsOnly(parts).filter((part) => partMatchesYarnPart(part, yarnPart));
+    const multiplier = matchingParts.length || 1;
+    const partLabel =
+      matchingParts.length > 0
+        ? formatPartContribution(matchingParts[0].label, multiplier)
+        : formatPartContribution(yarnPart.label, 1);
 
     for (const guide of yarnPart.guides) {
       const key = consolidatedYarnKey(guide);
@@ -297,18 +296,84 @@ export function consolidateYarnParts(
     .sort((a, b) => a.guide - b.guide || a.letter.localeCompare(b.letter, 'pt-BR'))
     .map(({ sum, letters: _letters, ...row }) => ({
       ...row,
-      pct: isProgramFixedWasteYarnGuide(row.guide)
-        ? 0
-        : totalPartWeight > 0
-          ? (sum / totalPartWeight) * 100
-          : 0,
+      pct: totalPartWeight > 0 ? (sum / totalPartWeight) * 100 : 0,
     }));
 }
 
-function totalWeightForLabel(parts: CadastroPart[], label: string) {
+function partBaseFromFileName(fileName: string) {
+  return fileName.replace(/\.mdv$/i, '').trim().toUpperCase();
+}
+
+/** Syntech trunca PARTE em 15 chars (ex.: BLUSA-TRANCAS-M vs BLUSA-TRANCAS-MG). */
+function partLabelSuffixCompatible(partLabel: string, yarnLabel: string) {
+  const a = partLabel.trim().toUpperCase();
+  const b = yarnLabel.trim().toUpperCase();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.endsWith('-M') && b.endsWith('-MG') && a + 'G' === b) return true;
+  if (b.endsWith('-M') && a.endsWith('-MG') && b + 'G' === a) return true;
+  if (a.length >= 14 && (b.startsWith(a) || a.startsWith(b))) return true;
+  return false;
+}
+
+function partFileSuffixCompatible(partFile: string, yarnFile: string) {
+  if (!partFile || !yarnFile) return false;
+  if (partFile === yarnFile) return true;
+  if (partFile.endsWith('-M') && yarnFile.endsWith('-MG') && partFile + 'G' === yarnFile) return true;
+  if (yarnFile.endsWith('-M') && partFile.endsWith('-MG') && yarnFile + 'G' === partFile) return true;
+  return false;
+}
+
+export function partMatchesYarnPart(part: CadastroPart, yarnPart: CadastroYarnPart) {
+  const partFile = partBaseFromFileName(part.file_name);
+  const yarnFile = partBaseFromFileName(yarnPart.file_name);
+  if (partFile && yarnFile && partFileSuffixCompatible(partFile, yarnFile)) return true;
+
+  const partLabel = part.label.trim().toUpperCase();
+  const yarnLabel = yarnPart.label.trim().toUpperCase();
+  if (partLabel && yarnLabel && partLabelSuffixCompatible(partLabel, yarnLabel)) return true;
+
+  if (partFile && yarnLabel && (partFile === yarnLabel || partFile.endsWith(`-${yarnLabel}`))) {
+    return true;
+  }
+  if (yarnFile && partLabel && (yarnFile === partLabel || yarnFile.endsWith(`-${partLabel}`))) {
+    return true;
+  }
+
+  return false;
+}
+
+/** % simx dos guias 1–2 (descartados antes da pesagem) — base para escalar o tecido. */
+function wastePctOnYarnPart(guides: CadastroYarnGuide[]) {
+  return guides
+    .filter((guide) => isProgramFixedWasteYarnGuide(guide.guide))
+    .reduce((sum, guide) => sum + (guide.pct ?? 0), 0);
+}
+
+function totalWeightForYarnPart(parts: CadastroPart[], yarnPart: CadastroYarnPart) {
   return programPartsOnly(parts)
-    .filter((part) => part.label.toUpperCase() === label.toUpperCase())
+    .filter((part) => partMatchesYarnPart(part, yarnPart))
     .reduce((sum, part) => sum + parseConsumptionInput(part.weight_kg), 0);
+}
+
+/** Garante linha de peso para cada .sin/.simx lido (ex.: manga no cadastro incompleto). */
+export function ensurePartsForYarnParts(
+  parts: CadastroPart[],
+  yarnParts: CadastroYarnPart[]
+): CadastroPart[] {
+  const result = [...parts];
+  for (const yarnPart of yarnParts) {
+    const matched = programPartsOnly(result).some((part) => partMatchesYarnPart(part, yarnPart));
+    if (matched || !yarnPart.file_name) continue;
+    result.push({
+      key: yarnPart.key || yarnPart.label.toUpperCase(),
+      label: yarnPart.label,
+      file_name: yarnPart.file_name,
+      time_mmss: '',
+      weight_kg: '',
+    });
+  }
+  return result;
 }
 
 export function applyAutoYarnConsumption(
@@ -318,7 +383,8 @@ export function applyAutoYarnConsumption(
   const fixedAssigned = new Set<number>();
 
   return yarnParts.map((yarnPart) => {
-    const weight = totalWeightForLabel(parts, yarnPart.label);
+    const weight = totalWeightForYarnPart(parts, yarnPart);
+    const fabricPctBase = Math.max(0, 100 - wastePctOnYarnPart(yarnPart.guides));
 
     return {
       ...yarnPart,
@@ -333,7 +399,9 @@ export function applyAutoYarnConsumption(
         }
         const pct = guide.pct ?? 0;
         const consumption =
-          weight > 0 && pct > 0 ? formatConsumption(weight * (pct / 100)) : '';
+          weight > 0 && pct > 0 && fabricPctBase > 0
+            ? formatConsumption(weight * (pct / fabricPctBase))
+            : '';
         return { ...guide, consumption };
       }),
     };

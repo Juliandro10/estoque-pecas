@@ -1,5 +1,6 @@
 import type { ConsolidatedYarnRow, SyntechYarnCatalogFile } from '../types-programming';
-import { parseYarnDescription as parseYarnDescriptionCore } from '../../server/yarn-description-parse';
+import { parseYarnDescription as parseYarnDescriptionCore } from '../../shared/yarn-description-parse';
+import { parseYarnDescriptionComponents } from '../../shared/yarn-description-parse';
 
 const FIXED_BICO_TIPO_FIO: Record<number, number> = {
   1: 70,
@@ -61,7 +62,7 @@ export function resolveYarnRow(
   const yarnTypes = catalog?.types.map((item) => item.tipo) ?? [];
   const parsed = parseYarnDescription(row.description, yarnTypes);
 
-  if (fixedCodigo !== undefined) {
+  if (fixedCodigo !== undefined && (row.component_index ?? 0) === 0) {
     const fixedType = catalog?.types.find((item) => item.codigo === fixedCodigo) ?? null;
     return {
       ...row,
@@ -100,6 +101,26 @@ export function resolveConsolidatedYarns(
   catalog: SyntechYarnCatalogFile | null
 ) {
   return rows.map((row) => resolveYarnRow(row, catalog));
+}
+
+export function resolveBlendedComponents(
+  row: ConsolidatedYarnRow,
+  catalog: SyntechYarnCatalogFile | null
+) {
+  const yarnTypes = catalog?.types.map((item) => item.tipo) ?? [];
+  const components = parseYarnDescriptionComponents(row.description, yarnTypes);
+  if (components.length <= 1) return [resolveYarnRow(row, catalog)];
+
+  return components.map((component, index) =>
+    resolveYarnRow(
+      {
+        ...row,
+        description: `${component.tipo}${component.cor ? ` ${component.cor}` : ''}${component.cabo ? ` ${component.cabo} CABO` : ''}`.trim(),
+        component_index: index,
+      },
+      catalog
+    )
+  );
 }
 
 export function yarnRowsReadyForSyntech(rows: ResolvedYarnRow[]) {

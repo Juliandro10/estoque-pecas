@@ -1,0 +1,11 @@
+{
+  "updated_at": "2026-06-10",
+  "note": "Peso relativo por cabo (cabos × fator). Ajuste conforme medição na balança.",
+  "default_factor": 1,
+  "types": {
+    "CAPRICE": 2.5,
+    "LINHA": 1,
+    "ELASTANO": 1.2,
+    "LASTEX": 1
+  }
+}

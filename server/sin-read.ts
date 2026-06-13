@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { clipSyntechText } from './syntech-db';
 import { sintralPartDir } from './sintral-capture';
 
 export function partBaseFromFileName(fileName: string) {
@@ -55,11 +56,11 @@ const PROGRAMA_MAX = 20;
 /** Nome do programa no Syntech = pasta do modelo (ex.: 5534-REGATA-LISTRA). */
 export function resolvePrograma(modelFolder?: string, sinText?: string) {
   if (modelFolder) {
-    return path.basename(modelFolder).trim().slice(0, PROGRAMA_MAX);
+    return clipSyntechText(path.basename(modelFolder), PROGRAMA_MAX);
   }
 
   const token = sinText ? parseSinProgramToken(sinText) : null;
   if (!token) return null;
 
-  return token.slice(0, PROGRAMA_MAX);
+  return clipSyntechText(token, PROGRAMA_MAX);
 }
