@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { isDevelopmentMdvFile } from './mdv-graduation';
 import { isIgnoredProgramSubfolder } from './program-folders';
 
 export type ModelPartRow = {
@@ -60,7 +61,7 @@ export function listModelParts(folderPath: string, folderName: string, ref: stri
         scan(full);
         continue;
       }
-      if (!entry.isFile() || !/\.mdv$/i.test(entry.name)) continue;
+      if (!entry.isFile() || !isDevelopmentMdvFile(entry.name)) continue;
 
       const label = stripPartSuffix(entry.name.replace(/\.mdv$/i, ''), folderName, ref);
       const key = label.toUpperCase();

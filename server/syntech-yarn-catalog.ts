@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { findYarnTypeIndex } from '../shared/syntech-name-match';
+
 import { attachSyntechDb, detachDb, queryDb } from './syntech-db';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,24 +34,7 @@ function mergeColor(list: string[], cor: string) {
 }
 
 function findTypeIndex(types: SyntechYarnType[], tipoText: string) {
-  const tipo = normalizeName(tipoText);
-  if (!tipo) return -1;
-
-  const exact = types.findIndex((item) => normalizeName(item.tipo) === tipo);
-  if (exact >= 0) return exact;
-
-  let best = -1;
-  let bestLen = 0;
-  for (let index = 0; index < types.length; index++) {
-    const token = normalizeName(types[index].tipo);
-    if (!token) continue;
-    if (!tipo.includes(token) && !token.includes(tipo)) continue;
-    if (token.length > bestLen) {
-      best = index;
-      bestLen = token.length;
-    }
-  }
-  return best;
+  return findYarnTypeIndex(tipoText, types);
 }
 
 export function readSyntechYarnCatalog(filePath = syntechYarnCatalogPath): SyntechYarnCatalogFile {
@@ -92,6 +77,8 @@ export async function syncSyntechYarnCatalogFromDb(): Promise<SyntechYarnCatalog
          SELECT TIPO_FIO, COR FROM ENTR_CONES WHERE COR IS NOT NULL
          UNION
          SELECT TIPO_FIO, COR FROM QUANT_CONES WHERE COR IS NOT NULL
+         UNION
+         SELECT TIPO_FIO, COR FROM CAIXAS WHERE COR IS NOT NULL
        ) X
        JOIN CORES C ON C.NUMERO = X.COR
        WHERE X.TIPO_FIO IS NOT NULL
@@ -109,6 +96,12 @@ export async function syncSyntechYarnCatalogFromDb(): Promise<SyntechYarnCatalog
               CAST(G.COR_DO_FIO AS VARCHAR(80)) AS COR
        FROM GUIA_FIO G
        WHERE G.DIREITA IS NOT NULL AND TRIM(G.DIREITA) <> ''
+         AND G.COR_DO_FIO IS NOT NULL AND TRIM(G.COR_DO_FIO) <> ''
+       UNION
+       SELECT DISTINCT CAST(G.ESQUERDA AS VARCHAR(80)) AS TIPO,
+              CAST(G.COR_DO_FIO AS VARCHAR(80)) AS COR
+       FROM GUIA_FIO G
+       WHERE G.ESQUERDA IS NOT NULL AND TRIM(G.ESQUERDA) <> ''
          AND G.COR_DO_FIO IS NOT NULL AND TRIM(G.COR_DO_FIO) <> ''`
     );
 

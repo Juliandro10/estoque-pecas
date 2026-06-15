@@ -29,7 +29,7 @@ import {
 } from './syntech-processos';
 import { FIXED_BICO_TIPO_FIO } from './syntech-bico-rules';
 import { expandProcessYarnComponents, setYarnWeightFactors, type ProcessYarnComponent } from './yarn-blend';
-import { yarnTypesFromCatalog } from './syntech-yarn-types';
+import { yarnTypesFromCatalog, resolveTipoFioCodigoFromCatalog } from './syntech-yarn-types';
 import { recalculateConsolidatedYarns } from './yarn-consolidate';
 
 const SLOT_COUNT = 8;
@@ -147,8 +147,16 @@ async function findTipoFioCodigo(
   tx: SyntechTx,
   description: string
 ): Promise<{ codigo: number; nome: string; preco: number } | null> {
-  const desc = description.trim().toUpperCase();
+  const desc = description.trim();
   if (!desc) return null;
+
+  const fromCatalog = resolveTipoFioCodigoFromCatalog(desc);
+  if (fromCatalog != null) {
+    const row = await getTipoFioByCodigo(tx, fromCatalog);
+    if (row) return row;
+  }
+
+  const descUpper = desc.toUpperCase();
 
   const rules: [string, string][] = [
     ['POWER BRIGHT', 'POWER BRIGHT'],
@@ -160,13 +168,13 @@ async function findTipoFioCodigo(
   ];
 
   for (const [, token] of rules) {
-    if (!desc.includes(token)) continue;
+    if (!descUpper.includes(token)) continue;
     const rows = await queryTx<{ CODIGO: number; NOME: string; PRECO: number }>(
       tx,
       `SELECT FIRST 1 CODIGO, NOME, PRECO
        FROM TIPO_FIO
        WHERE UPPER(NOME) CONTAINING ?
-       ORDER BY CODIGO`,
+       ORDER BY CHAR_LENGTH(NOME) DESC, CODIGO`,
       [token]
     );
     if (rows[0]) {
@@ -174,18 +182,21 @@ async function findTipoFioCodigo(
     }
   }
 
-  const words = desc.split(/\s+/).filter((w) => w.length >= 4);
-  for (const word of words) {
-    const rows = await queryTx<{ CODIGO: number; NOME: string; PRECO: number }>(
-      tx,
-      `SELECT FIRST 1 CODIGO, NOME, PRECO
-       FROM TIPO_FIO
-       WHERE UPPER(NOME) CONTAINING ?
-       ORDER BY CODIGO`,
-      [word]
-    );
-    if (rows[0]) {
-      return { codigo: rows[0].CODIGO, nome: rows[0].NOME, preco: Number(rows[0].PRECO ?? 0) };
+  const words = descUpper.split(/\s+/).filter((word) => word.length >= 4);
+  for (let size = words.length; size >= 1; size--) {
+    for (let start = 0; start <= words.length - size; start++) {
+      const phrase = words.slice(start, start + size).join(' ');
+      const rows = await queryTx<{ CODIGO: number; NOME: string; PRECO: number }>(
+        tx,
+        `SELECT FIRST 1 CODIGO, NOME, PRECO
+         FROM TIPO_FIO
+         WHERE UPPER(NOME) CONTAINING ?
+         ORDER BY CHAR_LENGTH(NOME) DESC, CODIGO`,
+        [phrase]
+      );
+      if (rows[0]) {
+        return { codigo: rows[0].CODIGO, nome: rows[0].NOME, preco: Number(rows[0].PRECO ?? 0) };
+      }
     }
   }
 
@@ -218,13 +229,14 @@ async function findTipoFioForBico(
     return getTipoFioByCodigo(tx, fixedCodigo);
   }
 
+  const tipoHint = guia?.direita?.trim() || guia?.esquerda?.trim();
+  if (tipoHint) {
+    const fromGuia = await findTipoFioCodigo(tx, tipoHint);
+    if (fromGuia) return fromGuia;
+  }
+
   const fromDescription = await findTipoFioCodigo(tx, description);
   if (fromDescription) return fromDescription;
-
-  const tipoHint = guia?.direita ?? guia?.esquerda;
-  if (tipoHint) {
-    return findTipoFioCodigo(tx, tipoHint);
-  }
 
   return null;
 }
@@ -444,6 +456,7 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
   const partWeightKg = pushParts.reduce((sum, part) => sum + parseWeightKg(part.weight_kg), 0);
 
   let consolidated: SyntechPushYarn[] = input.consolidated_yarns ?? [];
+  const inputYarns = input.consolidated_yarns ?? [];
   if (input.model_folder) {
     const recalculated = recalculateConsolidatedYarns(
       input.model_folder,
@@ -455,13 +468,22 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
       }))
     );
     if (recalculated.length > 0) {
-      consolidated = recalculated.map((row) => ({
-        guide: row.guide,
-        letter: row.letter,
-        description: row.description,
-        consumption: row.consumption,
-        pct: row.pct,
-      }));
+      consolidated = recalculated.map((row) => {
+        const saved =
+          inputYarns.find(
+            (item) =>
+              item.guide === row.guide &&
+              (item.letter || '').toUpperCase() === (row.letter || '').toUpperCase()
+          ) ?? inputYarns.find((item) => item.guide === row.guide);
+        return {
+          guide: row.guide,
+          letter: row.letter,
+          description: saved?.description?.trim() ? saved.description : row.description,
+          consumption: row.consumption,
+          pct: row.pct,
+          tipo_fio_codigo: saved?.tipo_fio_codigo,
+        };
+      });
     }
   }
 

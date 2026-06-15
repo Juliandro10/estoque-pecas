@@ -1,3 +1,5 @@
+import { findBestYarnTypeMatch } from './syntech-name-match';
+
 export type ParsedYarnDescription = {
   tipo: string;
   cabo: string | null;
@@ -19,6 +21,14 @@ function stripSupplierCode(text: string) {
 function splitTipoCor(body: string, yarnTypes: string[]): { tipo: string; cor: string | null } {
   const normalized = body.trim();
   if (!normalized) return { tipo: '', cor: null };
+
+  const matchedType = findBestYarnTypeMatch(normalized, yarnTypes);
+  if (matchedType) {
+    const typeWords = matchedType.trim().split(/\s+/).length;
+    const bodyWords = normalized.split(/\s+/);
+    const cor = bodyWords.slice(typeWords).join(' ').trim();
+    return { tipo: matchedType, cor: cor || null };
+  }
 
   const upper = normalized.toUpperCase();
   for (const type of [...yarnTypes].sort((a, b) => b.length - a.length)) {
@@ -102,6 +112,18 @@ export function parseYarnDescriptionComponents(
 
 export function formatYarnComponentDescription(component: ParsedYarnDescription) {
   return componentLabel(component);
+}
+
+export function buildCorrectedYarnDescription(
+  parsed: ParsedYarnDescription,
+  tipoName?: string | null,
+  corName?: string | null
+): string {
+  return formatYarnComponentDescription({
+    tipo: (tipoName ?? parsed.tipo).trim(),
+    cabo: parsed.cabo,
+    cor: corName ?? parsed.cor,
+  });
 }
 
 export function parseYarnDescription(

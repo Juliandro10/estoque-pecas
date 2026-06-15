@@ -10,7 +10,9 @@ import {
   formatConsumptionInput,
   formatPct,
   mergeYarnPartsFromSin,
+  mergeSavedPartsWithFolder,
   parseTimeInput,
+  partKindToken,
   programPartsOnly,
   programFixedWasteYarnTotalKg,
   totalCalculatedYarnConsumption,
@@ -22,7 +24,7 @@ import {
   expandConsolidatedForProcessos,
   processYarnRowsReadyForSyntech,
 } from '../../lib/yarn-blend';
-import { resolveConsolidatedYarns } from '../../lib/syntech-yarn-match';
+import { correctYarnDescription, resolveConsolidatedYarns } from '../../lib/syntech-yarn-match';
 import {
   isLocalScannerAvailable,
   localProgramsApi,
@@ -43,11 +45,28 @@ import type {
 function applySintralTimes(currentParts: CadastroPart[], times: SintralTimesResult) {
   const byLabel = new Map(times.parts.map((p) => [p.label.toUpperCase(), p]));
   const byFile = new Map(times.parts.map((p) => [p.file_name.toLowerCase(), p]));
+  const byKind = new Map<string, typeof times.parts>();
+  for (const row of times.parts) {
+    const kind = partKindToken(row.file_name || row.label);
+    if (!kind) continue;
+    const list = byKind.get(kind) ?? [];
+    list.push(row);
+    byKind.set(kind, list);
+  }
+  const kindUsedIndex = new Map<string, number>();
 
   const updated = currentParts.map((part) => {
     const hit =
       byLabel.get(part.label.toUpperCase()) ??
-      (part.file_name ? byFile.get(part.file_name.toLowerCase()) : undefined);
+      (part.file_name ? byFile.get(part.file_name.toLowerCase()) : undefined) ??
+      (() => {
+        const kind = partKindToken(part.file_name || part.label);
+        if (!kind) return undefined;
+        const list = byKind.get(kind) ?? [];
+        const idx = kindUsedIndex.get(kind) ?? 0;
+        kindUsedIndex.set(kind, idx + 1);
+        return list[idx];
+      })();
     if (hit?.ok && hit.time_mmss) {
       return { ...part, time_mmss: hit.time_mmss };
     }
@@ -164,7 +183,8 @@ export function DesenvCadastroPage() {
       return;
     }
     localProgramsApi
-      .syntechFios()
+      .syncSyntechFios()
+      .catch(() => localProgramsApi.syntechFios())
       .then(setYarnCatalog)
       .catch(() => setYarnCatalog(null));
   }, [localMode, scannerOk, syntechFiosSupported]);
@@ -231,12 +251,21 @@ export function DesenvCadastroPage() {
     try {
       const saved = await cadastroDb.get(ref);
       if (saved) {
-        const savedParts = programPartsOnly(saved.parts);
+        let savedParts = programPartsOnly(saved.parts);
         setName(saved.name);
-        setParts(savedParts);
         setObservations(saved.observations);
 
         if (localMode && scannerOk) {
+          const found = await localProgramsApi.lookup(ref, fullSearch, true, false);
+          const folderParts =
+            found?.parts?.map((p) => ({
+              key: p.key,
+              label: p.label,
+              file_name: p.file_name,
+            })) ?? [];
+          const merged = mergeSavedPartsWithFolder(savedParts, folderParts);
+          savedParts = merged.parts;
+
           const [timesResult, yarnsResult] = await Promise.all([
             refreshSintralTimes(ref, savedParts),
             refreshYarnParts(ref, saved.yarn_parts ?? []),
@@ -245,11 +274,13 @@ export function DesenvCadastroPage() {
           setYarnParts(yarnsResult.yarnParts);
           setMachineLabel(yarnsResult.machineLabel ?? '');
           const bits = [
+            merged.updated ? 'Arquivos sincronizados com a pasta' : null,
             timesResult.message,
             yarnsResult.message,
           ].filter(Boolean);
           setInfo(bits.length ? bits.join(' · ') : `Cadastro ${ref} carregado do painel.`);
         } else {
+          setParts(savedParts);
           setYarnParts(saved.yarn_parts ?? []);
           setInfo(`Cadastro ${ref} carregado do painel.`);
         }
@@ -331,6 +362,19 @@ export function DesenvCadastroPage() {
       return [...prev.slice(0, index + 1), copy, ...prev.slice(index + 1)];
     });
     setInfo(`${parts[index]?.label} duplicada.`);
+  }
+
+  function canRemovePart(index: number) {
+    const file = parts[index]?.file_name?.trim().toLowerCase();
+    if (!file) return false;
+    return parts.filter((part) => part.file_name.trim().toLowerCase() === file).length > 1;
+  }
+
+  function removePart(index: number) {
+    if (!canRemovePart(index)) return;
+    const label = parts[index]?.label;
+    setParts((prev) => prev.filter((_, i) => i !== index));
+    setInfo(label ? `${label} — linha removida.` : 'Linha removida.');
   }
 
   function pasteTime(index: number) {
@@ -740,7 +784,9 @@ export function DesenvCadastroPage() {
                                       <td className="yarn-col-consumo mono">{guide.consumption || '—'}</td>
                                       <td className="yarn-col-bico mono">{guide.guide}</td>
                                       <td className="yarn-col-fio mono">{guide.letter}</td>
-                                      <td className="yarn-col-desc">{guide.description || '—'}</td>
+                                      <td className="yarn-col-desc">
+                                        {correctYarnDescription(guide.description || '', yarnCatalog) || '—'}
+                                      </td>
                                     </tr>
                                   )) ?? null}
                                 </tbody>
@@ -827,6 +873,19 @@ export function DesenvCadastroPage() {
                       </button>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => pasteTime(index)}>
                         Colar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={!canRemovePart(index)}
+                        title={
+                          canRemovePart(index)
+                            ? 'Remover linha duplicada'
+                            : 'Mantém ao menos uma linha por arquivo'
+                        }
+                        onClick={() => removePart(index)}
+                      >
+                        Apagar
                       </button>
                     </td>
                   </tr>

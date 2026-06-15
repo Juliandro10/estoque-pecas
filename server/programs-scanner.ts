@@ -17,6 +17,7 @@ import {
 } from './sintral-capture';
 import { readSinYarnsForModel } from './sin-yarn';
 import { resolveMachineForModel } from './sin-machine';
+import { listModelParts, type ModelPartRow } from './model-parts';
 import {
   getSintralScreenStatus,
   readControleSintralForPart,
@@ -164,63 +165,8 @@ function findProgram(reference: string, fullSearch: boolean): MatchRow | null {
   };
 }
 
-function stripPartSuffix(baseName: string, folderName: string, ref: string) {
-  const lower = baseName.toLowerCase();
-  const prefixes = [
-    `${folderName.toLowerCase()}-`,
-    `${ref.toLowerCase()}-`,
-  ];
-  for (const prefix of prefixes) {
-    if (lower.startsWith(prefix)) {
-      return baseName.slice(prefix.length);
-    }
-  }
-  const modelName = parseModelName(folderName, ref);
-  if (modelName !== ref && modelName !== folderName) {
-    const modelPrefix = `${ref}-${modelName}-`.toLowerCase();
-    if (lower.startsWith(modelPrefix)) {
-      return baseName.slice(modelPrefix.length);
-    }
-  }
-  return baseName;
-}
-
-type PartRow = {
-  key: string;
-  label: string;
-  file_name: string;
-};
-
-function listPartsInFolder(folderPath: string, folderName: string, ref: string): PartRow[] {
-  const map = new Map<string, PartRow>();
-
-  function scan(dir: string) {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (isIgnoredProgramSubfolder(entry.name)) continue;
-        scan(full);
-        continue;
-      }
-      if (!entry.isFile() || !/\.mdv$/i.test(entry.name)) continue;
-
-      const label = stripPartSuffix(entry.name.replace(/\.mdv$/i, ''), folderName, ref);
-      const key = label.toUpperCase();
-      if (!map.has(key)) {
-        map.set(key, { key, label, file_name: entry.name });
-      }
-    }
-  }
-
-  scan(folderPath);
-  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+function listPartsInFolder(folderPath: string, folderName: string, ref: string): ModelPartRow[] {
+  return listModelParts(folderPath, folderName, ref);
 }
 
 function findProgramFolder(reference: string, fullSearch: boolean) {

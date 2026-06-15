@@ -302,19 +302,80 @@ function partBaseFromFileName(fileName: string) {
   return fileName.replace(/\.mdv$/i, '').trim().toUpperCase();
 }
 
-/** Syntech trunca PARTE em 15 chars (ex.: BLUSA-TRANCAS-M vs BLUSA-TRANCAS-MG). */
-function partKindToken(value: string) {
+function normalizeKindToken(token: string) {
+  const t = token.toUpperCase();
+  if (t === 'C') return 'CT';
+  if (t === 'F') return 'FT';
+  if (t === 'M') return 'MG';
+  if (t === 'FRENTE') return 'FT';
+  if (t === 'COSTAS') return 'CT';
+  if (t === 'MANGA') return 'MG';
+  return t;
+}
+
+/** CT, FT, MG… — reconhece também ...-CT-P-4 e label CT-P-4. */
+export function partKindToken(value: string) {
   const base = partBaseFromFileName(value) || value.trim().toUpperCase();
-  const match = base.match(/-(CT|FT|MG|COSTAS|FRENTE|MANGA|C|F|M)$/i);
-  if (!match) return '';
-  const token = match[1].toUpperCase();
-  if (token === 'C') return 'CT';
-  if (token === 'F') return 'FT';
-  if (token === 'M') return 'MG';
-  if (token === 'FRENTE') return 'FT';
-  if (token === 'COSTAS') return 'CT';
-  if (token === 'MANGA') return 'MG';
-  return token;
+  const tail = base.match(/-(CT|FT|MG|COSTAS|FRENTE|MANGA|CORPO|GOLA|C|F|M)$/i);
+  if (tail) return normalizeKindToken(tail[1]);
+
+  const segments = base.split('-').filter(Boolean);
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const normalized = normalizeKindToken(segments[i]);
+    if (
+      ['CT', 'FT', 'MG', 'MN', 'CORPO', 'GOLA', 'MANGA', 'FRENTE', 'COSTAS'].includes(normalized)
+    ) {
+      return normalized;
+    }
+  }
+  return '';
+}
+
+type FolderPartRow = Pick<CadastroPart, 'key' | 'label' | 'file_name'>;
+
+/** Atualiza label/arquivo do cadastro salvo conforme a pasta (ex.: CT-P-4 → CT). */
+export function mergeSavedPartsWithFolder(saved: CadastroPart[], folder: FolderPartRow[]) {
+  if (folder.length === 0) return { parts: saved, updated: false };
+
+  const folderByFile = new Map(folder.map((part) => [part.file_name.toLowerCase(), part]));
+  const folderByKind = new Map<string, FolderPartRow[]>();
+  for (const part of folder) {
+    const kind = partKindToken(part.file_name) || partKindToken(part.label) || part.key.toUpperCase();
+    const list = folderByKind.get(kind) ?? [];
+    list.push(part);
+    folderByKind.set(kind, list);
+  }
+
+  const kindUsedIndex = new Map<string, number>();
+  let updated = false;
+
+  const parts = saved.map((part) => {
+    const fileKey = part.file_name?.trim().toLowerCase() ?? '';
+    const exact = fileKey ? folderByFile.get(fileKey) : undefined;
+    if (exact) {
+      if (exact.label !== part.label || exact.key !== part.key || exact.file_name !== part.file_name) {
+        updated = true;
+        return { ...part, key: exact.key, label: exact.label, file_name: exact.file_name };
+      }
+      return part;
+    }
+
+    const kind =
+      partKindToken(part.file_name) || partKindToken(part.label) || part.key.trim().toUpperCase();
+    const candidates = folderByKind.get(kind) ?? [];
+    const idx = kindUsedIndex.get(kind) ?? 0;
+    const hit = candidates[idx] ?? candidates[0];
+    if (hit) {
+      kindUsedIndex.set(kind, idx + 1);
+      if (hit.file_name.toLowerCase() !== fileKey) {
+        updated = true;
+        return { ...part, key: hit.key, label: hit.label, file_name: hit.file_name };
+      }
+    }
+    return part;
+  });
+
+  return { parts, updated };
 }
 
 function partLabelSuffixCompatible(partLabel: string, yarnLabel: string) {

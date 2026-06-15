@@ -1,6 +1,14 @@
 import type { ConsolidatedYarnRow, SyntechYarnCatalogFile } from '../types-programming';
-import { parseYarnDescription as parseYarnDescriptionCore } from '../../shared/yarn-description-parse';
-import { parseYarnDescriptionComponents } from '../../shared/yarn-description-parse';
+import {
+  buildCorrectedYarnDescription,
+  parseYarnDescription as parseYarnDescriptionCore,
+  parseYarnDescriptionComponents,
+} from '../../shared/yarn-description-parse';
+import {
+  findBestColorMatch,
+  normalizeSyntechName,
+  yarnTypeNamesMatch,
+} from '../../shared/syntech-name-match';
 
 const FIXED_BICO_TIPO_FIO: Record<number, number> = {
   1: 70,
@@ -17,33 +25,57 @@ function normalize(value: string) {
 }
 
 function findYarnType(catalog: SyntechYarnCatalogFile, tipoText: string) {
-  const tipo = normalize(tipoText);
+  const tipo = tipoText.trim();
   if (!tipo) return null;
 
-  const exact = catalog.types.find((item) => normalize(item.tipo) === tipo);
+  const exact = catalog.types.find((item) => normalize(item.tipo) === normalize(tipo));
   if (exact) return exact;
 
-  let best: (typeof catalog.types)[number] | null = null;
-  let bestLen = 0;
-  for (const item of catalog.types) {
-    const token = normalize(item.tipo);
-    if (!token) continue;
-    if (!tipo.includes(token) && !token.includes(tipo)) continue;
-    if (token.length > bestLen) {
-      best = item;
-      bestLen = token.length;
-    }
-  }
-  return best;
+  return catalog.types.find((item) => yarnTypeNamesMatch(tipo, item.tipo)) ?? null;
 }
 
 function colorMatches(cores: string[], cor: string | null) {
   if (!cor) return true;
-  const target = normalize(cor);
-  return cores.some((item) => {
-    const name = normalize(item);
-    return name === target || target.includes(name) || name.includes(target);
-  });
+  return findBestColorMatch(cor, cores) !== null;
+}
+
+function allCatalogColors(catalog: SyntechYarnCatalogFile): string[] {
+  const seen = new Set<string>();
+  const colors: string[] = [];
+  for (const type of catalog.types) {
+    for (const cor of type.cores) {
+      const key = normalizeSyntechName(cor);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      colors.push(cor);
+    }
+  }
+  return colors;
+}
+
+function resolveCatalogColor(
+  cores: string[],
+  cor: string | null,
+  catalog?: SyntechYarnCatalogFile | null
+) {
+  if (!cor) return cor;
+  return (
+    findBestColorMatch(cor, cores) ??
+    (catalog ? findBestColorMatch(cor, allCatalogColors(catalog)) : null) ??
+    cor
+  );
+}
+
+function correctedDescription(
+  original: string,
+  parsed: ReturnType<typeof parseYarnDescriptionCore>,
+  tipoName: string | null,
+  corName: string | null
+) {
+  const next = buildCorrectedYarnDescription(parsed, tipoName, corName).trim();
+  if (!next) return original;
+  if (normalizeSyntechName(next) === normalizeSyntechName(original)) return original;
+  return next;
 }
 
 export type ResolvedYarnRow = ConsolidatedYarnRow & {
@@ -64,11 +96,16 @@ export function resolveYarnRow(
 
   if (fixedCodigo !== undefined && (row.component_index ?? 0) === 0) {
     const fixedType = catalog?.types.find((item) => item.codigo === fixedCodigo) ?? null;
+    const cor = fixedType ? resolveCatalogColor(fixedType.cores, parsed.cor, catalog) : parsed.cor;
+    const description = fixedType
+      ? correctedDescription(row.description, parsed, fixedType.tipo, cor)
+      : row.description;
     return {
       ...row,
+      description,
       tipo_fio_codigo: fixedCodigo,
       tipo_fio_nome: fixedType?.tipo ?? null,
-      cor: parsed.cor,
+      cor,
       codigo_ok: true,
       cor_ok: fixedType ? colorMatches(fixedType.cores, parsed.cor) : true,
     };
@@ -86,14 +123,36 @@ export function resolveYarnRow(
   }
 
   const match = findYarnType(catalog, parsed.tipo);
+  const cor = match ? resolveCatalogColor(match.cores, parsed.cor, catalog) : parsed.cor;
+  const description = match
+    ? correctedDescription(row.description, parsed, match.tipo, cor)
+    : row.description;
   return {
     ...row,
+    description,
     tipo_fio_codigo: match?.codigo ?? null,
     tipo_fio_nome: match?.tipo ?? null,
-    cor: parsed.cor,
+    cor,
     codigo_ok: Boolean(match),
     cor_ok: match ? colorMatches(match.cores, parsed.cor) : false,
   };
+}
+
+export function correctYarnDescription(
+  description: string,
+  catalog: SyntechYarnCatalogFile | null
+) {
+  return resolveYarnRow(
+    {
+      guide: 0,
+      letter: '',
+      description,
+      pct: 0,
+      consumption: '',
+      parts: [],
+    },
+    catalog
+  ).description;
 }
 
 export function resolveConsolidatedYarns(
