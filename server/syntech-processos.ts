@@ -20,9 +20,7 @@ export type PartesProdRow = {
 };
 
 export type BicoMaquinaRow = {
-  /** Slot PRODUTOS (Bico3, Bico4… ou 9/10 overflow). */
   bico: number;
-  /** Guia-fio físico da máquina (PARTE = BICO N). */
   guide: number;
   parte: string;
   tipo_fio: number | null;
@@ -33,25 +31,196 @@ export type BicoMaquinaRow = {
   component_index: number;
 };
 
+export type BuildPartesProdOptions = {
+  reference?: string;
+  folderName?: string;
+};
+
 function roundPerc(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function normalizeParteName(label: string) {
-  return clipSyntechText(label, PARTE_NAME_MAX).toUpperCase();
+const PART_SUFFIX_HEADS = new Set([
+  'FT',
+  'CT',
+  'MG',
+  'MN',
+  'CORPO',
+  'FRENTE',
+  'COSTAS',
+  'MANGA',
+  'PUNHO',
+  'GOLA',
+]);
+
+/**
+ * Sufixo que identifica a peça na OP (CT, MG, FT-D, CORPO-E…).
+ * Ignora nomes do meio (CASULO, TRANCAS…) — só o token final de tipo de peça.
+ */
+export function partIdentitySuffixSegments(segments: string[]) {
+  if (segments.length === 0) return [];
+
+  const upper = segments.map((s) => s.toUpperCase());
+  const last = upper[upper.length - 1];
+  const prev = upper.length >= 2 ? upper[upper.length - 2] : '';
+
+  if ((last === 'D' || last === 'E') && PART_SUFFIX_HEADS.has(prev)) {
+    return segments.slice(-2);
+  }
+  if (PART_SUFFIX_HEADS.has(last)) {
+    return segments.slice(-1);
+  }
+  if (last.length === 1 && segments.length >= 2) {
+    return segments.slice(-2);
+  }
+  return segments.slice(-1);
 }
 
-export function buildPartesProdRows(parts: PushPart[]): PartesProdRow[] {
-  const counts = new Map<string, number>();
+/**
+ * Monta REF-PRODUTO-SUFIXO a partir do .mdv (ex.: 5472-CARDIGAN-CASULO-CT → 5472-CARDIGAN-CT).
+ */
+export function buildParteDisplayName(
+  fileName: string,
+  reference?: string,
+  partLabel?: string
+) {
+  const base = clipSyntechText(fileName.replace(/\.mdv$/i, ''), 200);
+  let segments = base.split('-').filter(Boolean);
+
+  const ref = reference?.trim() ?? '';
+  if (ref && segments[0]?.toUpperCase() === ref.toUpperCase()) {
+    segments = segments.slice(1);
+  }
+
+  if (segments.length === 0) {
+    return normalizeParteName(partLabel?.trim() || base);
+  }
+
+  const suffixSegs = partIdentitySuffixSegments(segments);
+  const suffix = suffixSegs.join('-');
+  const beforeSuffix = segments.slice(0, segments.length - suffixSegs.length);
+
+  let product = beforeSuffix[0]?.trim() ?? '';
+  if (!product && partLabel) {
+    product = partLabel.split('-').filter(Boolean)[0]?.trim() ?? partLabel.trim();
+  }
+
+  if (product && suffix) {
+    return normalizeParteName(`${product}-${suffix}`);
+  }
+  return normalizeParteName(base);
+}
+
+const TEMPO_PESO_DESCRICAO_MAX = 10;
+
+/** TEMPO_PESO_PROD.DESCRICAO — sufixo da peça (CT, FT, MG, FT-D…). */
+export function tempoPesoDescricao(part: { label: string; file_name: string }) {
+  if (part.file_name && /\.mdv$/i.test(part.file_name)) {
+    const base = clipSyntechText(part.file_name.replace(/\.mdv$/i, ''), 200);
+    let segments = base.split('-').filter(Boolean);
+    if (segments[0] && /^\d+$/.test(segments[0])) {
+      segments = segments.slice(1);
+    }
+    if (segments.length > 0) {
+      const suffix = partIdentitySuffixSegments(segments).join('-');
+      if (suffix) {
+        return clipSyntechText(suffix, TEMPO_PESO_DESCRICAO_MAX).toUpperCase();
+      }
+    }
+  }
+  return clipSyntechText(part.label.trim(), TEMPO_PESO_DESCRICAO_MAX).toUpperCase();
+}
+
+/**
+ * Syntech PARTE = 15 chars — REF-PRODUTO-SUFIXO; preserva ref e sufixo (CT, FT, MG…).
+ */
+export function normalizeParteName(raw: string) {
+  const ascii = clipSyntechText(raw.trim(), 200);
+  if (!ascii) return '';
+  if (ascii.length <= PARTE_NAME_MAX) return ascii.toUpperCase();
+
+  const segments = ascii.split('-').filter(Boolean);
+  if (segments.length === 0) {
+    return ascii.slice(-PARTE_NAME_MAX).toUpperCase();
+  }
+
+  const suffixSegs = partIdentitySuffixSegments(segments);
+  const suffix = suffixSegs.join('-');
+  const headSegs = segments.slice(0, segments.length - suffixSegs.length);
+
+  if (headSegs.length >= 2 && /^\d+$/.test(headSegs[0])) {
+    const ref = headSegs[0];
+    const product = headSegs.slice(1).join('-');
+    const room = PARTE_NAME_MAX - ref.length - suffix.length - 2;
+    if (room > 0) {
+      const shortProduct = product.length <= room ? product : product.slice(0, room);
+      const result = `${ref}-${shortProduct}-${suffix}`;
+      if (result.length <= PARTE_NAME_MAX) {
+        return result.toUpperCase();
+      }
+    }
+    const minimal = `${ref}-${suffix}`;
+    if (minimal.length <= PARTE_NAME_MAX) {
+      return minimal.toUpperCase();
+    }
+  }
+
+  if (headSegs.length >= 1) {
+    const product = headSegs.join('-');
+    const room = PARTE_NAME_MAX - suffix.length - 1;
+    if (room > 0) {
+      const shortProduct = product.length <= room ? product : product.slice(-room);
+      let prefix = shortProduct;
+      if (product.length > room) {
+        const dashIdx = prefix.indexOf('-');
+        if (dashIdx >= 0) {
+          prefix = prefix.slice(dashIdx + 1);
+        }
+      }
+      if (prefix) {
+        const result = `${prefix}-${suffix}`;
+        if (result.length <= PARTE_NAME_MAX) {
+          return result.toUpperCase();
+        }
+      }
+    }
+  }
+
+  if (suffix.length <= PARTE_NAME_MAX) {
+    return suffix.toUpperCase();
+  }
+  return suffix.slice(-PARTE_NAME_MAX).toUpperCase();
+}
+
+function parteNameFromPushPart(part: PushPart, options: BuildPartesProdOptions = {}) {
+  if (part.file_name && /\.mdv$/i.test(part.file_name)) {
+    return buildParteDisplayName(part.file_name, options.reference, part.label);
+  }
+  return normalizeParteName(part.label.trim());
+}
+
+export function buildPartesProdRows(
+  parts: PushPart[],
+  options: BuildPartesProdOptions = {}
+): PartesProdRow[] {
+  const counts = new Map<string, PartesProdRow>();
 
   for (const part of parts) {
     if (!part.file_name || !/\.mdv$/i.test(part.file_name)) continue;
-    const label = normalizeParteName(part.label);
-    if (!label) continue;
-    counts.set(label, (counts.get(label) ?? 0) + 1);
+    const key = part.file_name.trim().toLowerCase();
+    const parte = parteNameFromPushPart(part, options);
+    if (!parte) continue;
+
+    const existing = counts.get(key);
+    if (existing) {
+      existing.quant += 1;
+      continue;
+    }
+
+    counts.set(key, { parte, quant: 1 });
   }
 
-  return [...counts.entries()].map(([parte, quant]) => ({ parte, quant }));
+  return [...counts.values()].sort((a, b) => a.parte.localeCompare(b.parte, 'pt-BR'));
 }
 
 export function buildBicoMaquinaRows(
@@ -126,8 +295,24 @@ export async function pushBicosMaquina(
   return rows.filter((row) => row.tipo_fio !== null).length;
 }
 
-export async function pushPesoBrutoProduto(tx: SyntechTx, reference: string, parts: PushPart[]) {
-  const peso = roundPerc(parts.reduce((sum, part) => sum + parseWeightKg(part.weight_kg), 0));
+function roundKg(value: number) {
+  return Math.round(value * 1000) / 1000;
+}
+
+export async function pushPesoBrutoProduto(
+  tx: SyntechTx,
+  reference: string,
+  parts: PushPart[],
+  partWeightKg?: number
+) {
+  const peso =
+    partWeightKg && partWeightKg > 0
+      ? roundKg(partWeightKg)
+      : roundKg(
+          parts
+            .filter((part) => part.file_name && /\.mdv$/i.test(part.file_name))
+            .reduce((sum, part) => sum + parseWeightKg(part.weight_kg), 0)
+        );
   if (peso <= 0) return false;
 
   await queryTx(tx, 'UPDATE PRODUTOS SET PESO = ? WHERE CODIGO = ?', [peso, reference]);

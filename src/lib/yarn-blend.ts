@@ -28,7 +28,9 @@ export function expandConsolidatedForProcessos(
   partWeightKg?: number
 ): ResolvedProcessYarnRow[] {
   const yarnTypes = yarnTypesFromCatalog(catalog);
-  const byGuide = new Map(rows.map((row) => [row.guide, row]));
+  const byKey = new Map(
+    rows.map((row) => [`${row.guide}:${(row.letter || 'A').toUpperCase()}`, row])
+  );
 
   const expanded = expandProcessYarnComponents(
     rows.map((row) => ({
@@ -53,7 +55,9 @@ export function expandConsolidatedForProcessos(
   }
 
   return expanded.map((component) => {
-    const parent = byGuide.get(component.guide);
+    const parent =
+      byKey.get(`${component.guide}:${(component.letter ?? 'A').toUpperCase()}`) ??
+      rows.find((row) => row.guide === component.guide);
     const resolved = resolveYarnRow(
       {
         guide: component.guide,

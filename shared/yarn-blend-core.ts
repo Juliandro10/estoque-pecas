@@ -116,29 +116,48 @@ export function splitComponentWeightShares(
   return weights.map((value) => value / total);
 }
 
-export function allocateBicoSlots(guideComponentCounts: { guide: number; count: number }[]) {
+function consolidatedRowKey(row: Pick<ProcessYarnInput, 'guide' | 'letter'>) {
+  const letter = (row.letter ?? 'A').trim().toUpperCase() || 'A';
+  return `${row.guide}:${letter}`;
+}
+
+export function allocateBicoSlots(
+  entries: { guide: number; letter?: string; count: number }[]
+) {
   const activeGuides = new Set(
-    guideComponentCounts.filter((item) => item.count > 0).map((item) => item.guide)
+    entries.filter((item) => item.count > 0).map((item) => item.guide)
   );
   const usedSlots = new Set<number>();
   const slots = new Map<string, number>();
 
-  const sorted = [...guideComponentCounts]
+  const sorted = [...entries]
     .filter((item) => item.count > 0)
-    .sort((a, b) => a.guide - b.guide);
+    .sort(
+      (a, b) =>
+        a.guide - b.guide ||
+        (a.letter ?? 'A').localeCompare(b.letter ?? 'A', 'pt-BR')
+    );
 
-  for (const { guide, count } of sorted) {
-    if (guide >= 1 && guide <= MAX_BICO_SLOT) {
-      slots.set(`${guide}:0`, guide);
-      usedSlots.add(guide);
-    }
-
-    for (let index = 1; index < count; index++) {
-      const slot = findExtraSlot(guide, activeGuides, usedSlots);
-      if (slot === null) {
-        throw new Error(`Sem slot livre para componente ${index + 1} do bico ${guide}`);
+  for (const entry of sorted) {
+    const rowKey = consolidatedRowKey(entry);
+    for (let index = 0; index < entry.count; index++) {
+      let slot: number | null = null;
+      if (
+        index === 0 &&
+        entry.guide >= 1 &&
+        entry.guide <= MAX_BICO_SLOT &&
+        !usedSlots.has(entry.guide)
+      ) {
+        slot = entry.guide;
+      } else {
+        slot = findExtraSlot(entry.guide, activeGuides, usedSlots);
       }
-      slots.set(`${guide}:${index}`, slot);
+      if (slot === null) {
+        throw new Error(
+          `Sem slot livre para componente ${index + 1} do bico ${entry.guide}${entry.letter ? ` (${entry.letter})` : ''}`
+        );
+      }
+      slots.set(`${rowKey}:${index}`, slot);
       usedSlots.add(slot);
     }
   }
@@ -183,24 +202,28 @@ export function expandProcessYarnComponents(
   const guiaCabos = options.guiaCabos ?? new Map<number, GuiaCaboHint>();
   const resolveCabo = options.resolveCabo ?? defaultResolveCabo;
 
-  const byGuide = new Map<number, ProcessYarnInput>();
-  for (const row of consolidated) {
-    if (!byGuide.has(row.guide)) byGuide.set(row.guide, row);
-  }
+  const activeRows = consolidated.filter((row) => parseConsumptionKg(row.consumption) > 0);
 
-  const guideComponentCounts = [...byGuide.entries()].map(([guide, row]) => {
+  const rowEntries = activeRows.map((row) => {
     const components = parseYarnDescriptionComponents(row.description, yarnTypes);
-    return { guide, count: Math.max(components.length, 1) };
+    return {
+      key: consolidatedRowKey(row),
+      row,
+      count: Math.max(components.length, 1),
+    };
   });
 
-  const slotMap = allocateBicoSlots(guideComponentCounts);
-  const totalPeso = consolidated.reduce((sum, row) => sum + parseConsumptionKg(row.consumption), 0);
+  const slotMap = allocateBicoSlots(
+    rowEntries.map(({ row, count }) => ({
+      guide: row.guide,
+      letter: row.letter,
+      count,
+    }))
+  );
+  const totalPeso = activeRows.reduce((sum, row) => sum + parseConsumptionKg(row.consumption), 0);
   const expanded: ProcessYarnComponent[] = [];
 
-  for (const { guide } of guideComponentCounts.sort((a, b) => a.guide - b.guide)) {
-    const row = byGuide.get(guide);
-    if (!row) continue;
-
+  for (const { key, row } of rowEntries) {
     const parsed = parseYarnDescriptionComponents(row.description, yarnTypes);
     const components =
       parsed.length > 0
@@ -208,15 +231,15 @@ export function expandProcessYarnComponents(
         : [{ tipo: row.description, cabo: null, cor: null, raw: row.description }];
     const shares = splitComponentWeightShares(components, factors);
     const guideKg = parseConsumptionKg(row.consumption);
-    const guia = guiaCabos.get(guide);
+    const guia = guiaCabos.get(row.guide);
 
     for (let index = 0; index < components.length; index++) {
       const component = components[index];
-      const slot = slotMap.get(`${guide}:${index}`);
+      const slot = slotMap.get(`${key}:${index}`);
       if (slot === undefined) continue;
 
       const caboRaw = component.cabo ?? guia?.cabod ?? guia?.cabo ?? null;
-      const cabo = resolveCabo(guide, component.raw, caboRaw);
+      const cabo = resolveCabo(row.guide, component.raw, caboRaw);
       const consumptionKg = roundKg(guideKg * shares[index]);
       const pct =
         options.partWeightKg && options.partWeightKg > 0
@@ -228,7 +251,7 @@ export function expandProcessYarnComponents(
               : 0;
 
       expanded.push({
-        guide,
+        guide: row.guide,
         slot,
         letter: row.letter,
         description: formatYarnComponentDescription(component),

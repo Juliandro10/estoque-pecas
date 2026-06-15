@@ -6,7 +6,6 @@ import {
   detachDb,
   formatSyntechTempo,
   parseWeightKg,
-  clipSyntechText,
   queryDb,
   queryTx,
   runInTransaction,
@@ -25,11 +24,13 @@ import {
   pushBicosMaquina,
   pushPartesProd,
   pushPesoBrutoProduto,
+  tempoPesoDescricao,
   type BicoMaquinaRow,
 } from './syntech-processos';
 import { FIXED_BICO_TIPO_FIO } from './syntech-bico-rules';
 import { expandProcessYarnComponents, setYarnWeightFactors, type ProcessYarnComponent } from './yarn-blend';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
+import { recalculateConsolidatedYarns } from './yarn-consolidate';
 
 const SLOT_COUNT = 8;
 const DEFAULT_TAMANHO = '*';
@@ -83,10 +84,6 @@ export type SyntechPushResult = {
   warnings: string[];
 };
 
-function normalizePartLabel(label: string) {
-  return clipSyntechText(label, 10).toUpperCase();
-}
-
 async function productExists(tx: SyntechTx, reference: string) {
   const rows = await queryTx<{ CODIGO: string; NOME: string }>(
     tx,
@@ -109,7 +106,7 @@ async function upsertTempoPesoRow(
   );
 
   if (part?.time_mmss && part.weight_kg && parseWeightKg(part.weight_kg) > 0) {
-    const descricao = normalizePartLabel(part.label);
+    const descricao = tempoPesoDescricao(part);
     const tempo = formatSyntechTempo(part.time_mmss);
     const peso = parseWeightKg(part.weight_kg);
     const tempom = tempoToTempom(tempo);
@@ -440,13 +437,39 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
 
   loadWeightFactorsFromDisk();
 
-  const parts = input.parts.filter((p) => p.file_name && /\.mdv$/i.test(p.file_name));
-  if (parts.length === 0) throw new Error('Nenhuma parte .mdv para enviar.');
+  const pushParts = input.parts;
+  const mdvParts = pushParts.filter((p) => p.file_name && /\.mdv$/i.test(p.file_name));
+  if (mdvParts.length === 0) throw new Error('Nenhuma parte .mdv para enviar.');
 
-  const partWeightKg = parts.reduce((sum, part) => sum + parseWeightKg(part.weight_kg), 0);
+  const partWeightKg = pushParts.reduce((sum, part) => sum + parseWeightKg(part.weight_kg), 0);
+
+  let consolidated: SyntechPushYarn[] = input.consolidated_yarns ?? [];
+  if (input.model_folder) {
+    const recalculated = recalculateConsolidatedYarns(
+      input.model_folder,
+      reference,
+      pushParts.map((part) => ({
+        label: part.label,
+        file_name: part.file_name,
+        weight_kg: part.weight_kg,
+      }))
+    );
+    if (recalculated.length > 0) {
+      consolidated = recalculated.map((row) => ({
+        guide: row.guide,
+        letter: row.letter,
+        description: row.description,
+        consumption: row.consumption,
+        pct: row.pct,
+      }));
+    }
+  }
 
   const db = await attachSyntechDb();
   const warnings: string[] = [];
+  if (consolidated.length === 0 && (input.consolidated_yarns ?? []).length === 0) {
+    warnings.push('Nenhum consumo de fio calculado — confira .sin/.simx e pesos das partes');
+  }
 
   try {
     const result = await runInTransaction(db, async (tx) => {
@@ -457,7 +480,7 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
 
       let tempoRows = 0;
       for (let numero = 1; numero <= SLOT_COUNT; numero++) {
-        const updated = await upsertTempoPesoRow(tx, reference, numero, parts[numero - 1]);
+        const updated = await upsertTempoPesoRow(tx, reference, numero, pushParts[numero - 1]);
         if (updated) tempoRows += 1;
       }
 
@@ -471,34 +494,33 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
       let guiaRows: GuiaFioRow[] = [];
 
       if (input.model_folder) {
-        guiaRows = buildGuiaFioRows(
-          input.model_folder,
-          parts.map((part) => part.file_name)
-        );
+        const guiaFiles = [...new Set(mdvParts.map((part) => part.file_name))];
+        guiaRows = buildGuiaFioRows(input.model_folder, guiaFiles);
       }
 
       const matPrimaRows = await pushMatPrima(
         tx,
         reference,
-        input.consolidated_yarns ?? [],
+        consolidated,
         guiaRows,
         warnings,
         partWeightKg
       );
 
-      const partesProd = buildPartesProdRows(parts);
+      const partesProd = buildPartesProdRows(mdvParts, {
+        reference,
+        folderName: input.model_folder ? path.basename(input.model_folder) : undefined,
+      });
       partes_prod_rows = await pushPartesProd(tx, reference, partesProd);
       if (partes_prod_rows === 0) {
         warnings.push('Nenhuma parte para PARTES_PROD');
       }
 
-      await pushPesoBrutoProduto(tx, reference, parts);
+      await pushPesoBrutoProduto(tx, reference, pushParts, partWeightKg);
 
       if (input.model_folder) {
-        const sinRows = readSinTextsForModel(
-          input.model_folder,
-          parts.map((part) => part.file_name)
-        );
+        const sinFiles = [...new Set(mdvParts.map((part) => part.file_name))];
+        const sinRows = readSinTextsForModel(input.model_folder, sinFiles);
         const firstSinText = sinRows[0]?.text;
 
         programa = resolvePrograma(input.model_folder, firstSinText) ?? undefined;
@@ -516,20 +538,20 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
 
       const bicoRows = await resolveBicosMaquina(
         tx,
-        input.consolidated_yarns ?? [],
+        consolidated,
         guiaRows,
         warnings,
         partWeightKg
       );
       bicos_maquina_rows = await pushBicosMaquina(tx, reference, bicoRows);
-      if ((input.consolidated_yarns ?? []).length > 0 && bicos_maquina_rows === 0) {
+      if (consolidated.length > 0 && bicos_maquina_rows === 0) {
         warnings.push('Nenhum bico gravado em matéria-prima para máquina');
       }
 
       if (maquina === undefined && input.model_folder) {
         const resolved = resolveMaquinaForModel(
           input.model_folder,
-          parts.map((part) => part.file_name)
+          [...new Set(mdvParts.map((part) => part.file_name))]
         );
         if (resolved) {
           maquina = resolved.syntech_maquina;

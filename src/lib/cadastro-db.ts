@@ -227,10 +227,8 @@ export function normalizeYarnDescriptionKey(description: string) {
   return text;
 }
 
-/** Mesmo bico + mesma descrição = um fio (letra pode variar entre partes). */
+/** Mesmo bico + mesma letra = um fio (descrição pode variar entre partes). */
 function consolidatedYarnKey(guide: Pick<CadastroYarnGuide, 'guide' | 'letter' | 'description'>) {
-  const desc = normalizeYarnDescriptionKey(guide.description);
-  if (desc) return `${guide.guide}:${desc}`;
   return `${guide.guide}:${guide.letter.toUpperCase()}`;
 }
 
@@ -305,6 +303,20 @@ function partBaseFromFileName(fileName: string) {
 }
 
 /** Syntech trunca PARTE em 15 chars (ex.: BLUSA-TRANCAS-M vs BLUSA-TRANCAS-MG). */
+function partKindToken(value: string) {
+  const base = partBaseFromFileName(value) || value.trim().toUpperCase();
+  const match = base.match(/-(CT|FT|MG|COSTAS|FRENTE|MANGA|C|F|M)$/i);
+  if (!match) return '';
+  const token = match[1].toUpperCase();
+  if (token === 'C') return 'CT';
+  if (token === 'F') return 'FT';
+  if (token === 'M') return 'MG';
+  if (token === 'FRENTE') return 'FT';
+  if (token === 'COSTAS') return 'CT';
+  if (token === 'MANGA') return 'MG';
+  return token;
+}
+
 function partLabelSuffixCompatible(partLabel: string, yarnLabel: string) {
   const a = partLabel.trim().toUpperCase();
   const b = yarnLabel.trim().toUpperCase();
@@ -312,6 +324,7 @@ function partLabelSuffixCompatible(partLabel: string, yarnLabel: string) {
   if (a === b) return true;
   if (a.endsWith('-M') && b.endsWith('-MG') && a + 'G' === b) return true;
   if (b.endsWith('-M') && a.endsWith('-MG') && b + 'G' === a) return true;
+  if (partKindToken(a) && partKindToken(a) === partKindToken(b)) return true;
   if (a.length >= 14 && (b.startsWith(a) || a.startsWith(b))) return true;
   return false;
 }
@@ -321,6 +334,7 @@ function partFileSuffixCompatible(partFile: string, yarnFile: string) {
   if (partFile === yarnFile) return true;
   if (partFile.endsWith('-M') && yarnFile.endsWith('-MG') && partFile + 'G' === yarnFile) return true;
   if (yarnFile.endsWith('-M') && partFile.endsWith('-MG') && yarnFile + 'G' === partFile) return true;
+  if (partKindToken(partFile) && partKindToken(partFile) === partKindToken(yarnFile)) return true;
   return false;
 }
 
@@ -332,6 +346,10 @@ export function partMatchesYarnPart(part: CadastroPart, yarnPart: CadastroYarnPa
   const partLabel = part.label.trim().toUpperCase();
   const yarnLabel = yarnPart.label.trim().toUpperCase();
   if (partLabel && yarnLabel && partLabelSuffixCompatible(partLabel, yarnLabel)) return true;
+
+  const yarnKind = partKindToken(yarnFile || yarnLabel);
+  const partKind = partKindToken(partFile || partLabel);
+  if (yarnKind && partKind && yarnKind === partKind) return true;
 
   if (partFile && yarnLabel && (partFile === yarnLabel || partFile.endsWith(`-${yarnLabel}`))) {
     return true;
