@@ -88,12 +88,13 @@ export function DashboardPage() {
         <table>
           <thead>
             <tr>
-              <th colSpan={5}>Últimas retiradas</th>
+              <th colSpan={6}>Últimas retiradas</th>
             </tr>
             <tr>
               <th>Data</th>
               <th>Peça</th>
               <th>Qtd</th>
+              <th>Máq.</th>
               <th>Turno</th>
               <th>Retirou</th>
             </tr>
@@ -101,7 +102,7 @@ export function DashboardPage() {
           <tbody>
             {data.recentWithdrawals.length === 0 ? (
               <tr>
-                <td colSpan={5} className="empty">
+                <td colSpan={6} className="empty">
                   Nenhuma retirada ainda.
                 </td>
               </tr>
@@ -113,6 +114,7 @@ export function DashboardPage() {
                     {m.part_code} — {m.part_name}
                   </td>
                   <td>{m.quantity}</td>
+                  <td>{m.machine ?? '—'}</td>
                   <td>{m.shift ? SHIFT_LABELS[m.shift] : '—'}</td>
                   <td>{m.withdrawn_by ?? '—'}</td>
                 </tr>

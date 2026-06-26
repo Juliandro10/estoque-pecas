@@ -2,6 +2,16 @@ import { doc, getDoc, serverTimestamp, setDoc, Timestamp } from 'firebase/firest
 
 import { db } from '../firebase';
 import type { CadastroPart, CadastroYarnGuide, CadastroYarnPart, ConsolidatedYarnRow, ModelCadastro, SinYarnPartResult } from '../types-programming';
+import {
+  consolidatedYarnIdentityKey,
+  normalizeYarnDescriptionKey,
+} from '../../shared/yarn-consumption';
+import {
+  fabricGuideWeightShare,
+  fabricWeightShareSum,
+} from '../../shared/yarn-blend-core';
+
+export { consolidatedYarnIdentityKey, normalizeYarnDescriptionKey, yarnFioIdentityKey };
 
 const cadastroCol = 'model_cadastro';
 
@@ -217,19 +227,13 @@ export function totalMatPrimaConsumption(consolidated: ConsolidatedYarnRow[]) {
   return totalYarnConsumption(consolidated);
 }
 
-/** Chave de consolidação — ignora variações como "ELASTICO PENTE" vs "ELASTICO DE PENTE". */
-export function normalizeYarnDescriptionKey(description: string) {
-  let text = description.trim().toUpperCase();
-  if (!text) return '';
-
-  text = text.replace(/\b(DE|DO|DA|DOS|DAS)\b/g, ' ');
-  text = text.replace(/\s+/g, ' ').trim();
-  return text;
+/** Mesmo bico + mesmo fio (descrição) = uma linha — letra M1 pode variar entre partes. */
+function consolidatedYarnKey(guide: Pick<CadastroYarnGuide, 'guide' | 'description'>) {
+  return consolidatedYarnIdentityKey(guide.guide, guide.description);
 }
 
-/** Mesmo bico + mesma letra = um fio (descrição pode variar entre partes). */
-function consolidatedYarnKey(guide: Pick<CadastroYarnGuide, 'guide' | 'letter' | 'description'>) {
-  return `${guide.guide}:${guide.letter.toUpperCase()}`;
+function primaryYarnLetter(letters: Set<string>) {
+  return [...letters].sort((a, b) => a.localeCompare(b, 'pt-BR'))[0] ?? '';
 }
 
 function pickRicherYarnDescription(current: string, incoming: string) {
@@ -270,7 +274,7 @@ export function consolidateYarnParts(
       if (existing) {
         existing.sum += add;
         existing.letters.add(guide.letter.toUpperCase());
-        existing.letter = [...existing.letters].sort((a, b) => a.localeCompare(b, 'pt-BR')).join('/');
+        existing.letter = primaryYarnLetter(existing.letters);
         existing.consumption = formatConsumption(existing.sum);
         existing.description = pickRicherYarnDescription(existing.description, guide.description);
         if (!existing.parts.includes(partLabel)) existing.parts.push(partLabel);
@@ -422,17 +426,23 @@ export function partMatchesYarnPart(part: CadastroPart, yarnPart: CadastroYarnPa
   return false;
 }
 
-/** % simx dos guias 1–2 (descartados antes da pesagem) — base para escalar o tecido. */
-function wastePctOnYarnPart(guides: CadastroYarnGuide[]) {
-  return guides
-    .filter((guide) => isProgramFixedWasteYarnGuide(guide.guide))
-    .reduce((sum, guide) => sum + (guide.pct ?? 0), 0);
+/** Soma dos pesos relativos dos fios do tecido (% simx × cabos × fator; exclui fixos 1–2). */
+function fabricYarnWeightShareSum(guides: CadastroYarnGuide[]) {
+  return fabricWeightShareSum(guides, isProgramFixedWasteYarnGuide);
 }
 
-function totalWeightForYarnPart(parts: CadastroPart[], yarnPart: CadastroYarnPart) {
-  return programPartsOnly(parts)
+function totalWeightForYarnPart(
+  parts: CadastroPart[],
+  yarnPart: CadastroYarnPart,
+  allYarnParts: CadastroYarnPart[]
+) {
+  const fabricParts = programPartsOnly(parts);
+  return fabricParts
     .filter((part) => partMatchesYarnPart(part, yarnPart))
-    .reduce((sum, part) => sum + parseConsumptionInput(part.weight_kg), 0);
+    .reduce((sum, part) => {
+      const claimCount = allYarnParts.filter((yp) => partMatchesYarnPart(part, yp)).length;
+      return sum + parseConsumptionInput(part.weight_kg) / Math.max(1, claimCount);
+    }, 0);
 }
 
 /** Garante linha de peso para cada .sin/.simx lido (ex.: manga no cadastro incompleto). */
@@ -462,8 +472,8 @@ export function applyAutoYarnConsumption(
   const fixedAssigned = new Set<number>();
 
   return yarnParts.map((yarnPart) => {
-    const weight = totalWeightForYarnPart(parts, yarnPart);
-    const fabricPctBase = Math.max(0, 100 - wastePctOnYarnPart(yarnPart.guides));
+    const weight = totalWeightForYarnPart(parts, yarnPart, yarnParts);
+    const fabricWeightSum = fabricYarnWeightShareSum(yarnPart.guides);
 
     return {
       ...yarnPart,
@@ -476,10 +486,10 @@ export function applyAutoYarnConsumption(
           }
           return { ...guide, consumption: '' };
         }
-        const pct = guide.pct ?? 0;
+        const share = fabricGuideWeightShare(guide);
         const consumption =
-          weight > 0 && pct > 0 && fabricPctBase > 0
-            ? formatConsumption(weight * (pct / fabricPctBase))
+          weight > 0 && share > 0 && fabricWeightSum > 0
+            ? formatConsumption(weight * (share / fabricWeightSum))
             : '';
         return { ...guide, consumption };
       }),
@@ -501,4 +511,41 @@ export function mergeYarnPartsFromSin(
       consumption: '',
     })),
   }));
+}
+
+/** Atualiza descrição do fio em todas as guias com mesmo bico + letra (edição no painel). */
+export function setYarnDescriptionForGuideLetter(
+  yarnParts: CadastroYarnPart[],
+  guide: number,
+  letter: string,
+  description: string
+): CadastroYarnPart[] {
+  const letterUp = letter.toUpperCase();
+  return yarnParts.map((part) => ({
+    ...part,
+    guides: part.guides.map((g) =>
+      g.guide === guide && g.letter.toUpperCase() === letterUp ? { ...g, description } : g
+    ),
+  }));
+}
+
+/** Atualiza uma guia específica (por parte / lado). */
+export function setYarnGuideDescription(
+  yarnParts: CadastroYarnPart[],
+  partKey: string,
+  guide: number,
+  letter: string,
+  side: 'left' | 'right',
+  description: string
+): CadastroYarnPart[] {
+  return yarnParts.map((part) =>
+    part.key !== partKey
+      ? part
+      : {
+          ...part,
+          guides: part.guides.map((g) =>
+            g.guide === guide && g.letter === letter && g.side === side ? { ...g, description } : g
+          ),
+        }
+  );
 }

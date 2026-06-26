@@ -3,7 +3,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { api } from '../lib/api';
 import type { Movement, Shift } from '../types';
-import { SHIFT_LABELS } from '../types';
+import { MACHINE_NUMBERS, SHIFT_LABELS } from '../types';
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString('pt-BR');
@@ -12,6 +12,7 @@ function formatDate(value: string) {
 export function WithdrawalsPage() {
   const [rows, setRows] = useState<Movement[]>([]);
   const [shift, setShift] = useState<'' | Shift>('');
+  const [machineFilter, setMachineFilter] = useState<'' | 'none' | `${number}`>('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Movement | null>(null);
@@ -19,6 +20,7 @@ export function WithdrawalsPage() {
   const [editShift, setEditShift] = useState<Shift>('cedo');
   const [withdrawnBy, setWithdrawnBy] = useState('');
   const [requestedBy, setRequestedBy] = useState('');
+  const [machine, setMachine] = useState('');
   const [notes, setNotes] = useState('');
 
   const load = useCallback(async () => {
@@ -43,6 +45,7 @@ export function WithdrawalsPage() {
     setEditShift(row.shift ?? 'cedo');
     setWithdrawnBy(row.withdrawn_by ?? '');
     setRequestedBy(row.requested_by ?? '');
+    setMachine(row.machine != null ? String(row.machine) : '');
     setNotes(row.notes ?? '');
   }
 
@@ -54,6 +57,7 @@ export function WithdrawalsPage() {
         quantity: Number(qty),
         shift: editShift,
         withdrawn_by: withdrawnBy,
+        machine: Number(machine),
         requested_by: requestedBy || undefined,
         notes: notes || undefined,
       });
@@ -63,6 +67,14 @@ export function WithdrawalsPage() {
       setError(err instanceof Error ? err.message : 'Erro ao salvar.');
     }
   }
+
+  const visibleRows = rows.filter((row) => {
+    if (machineFilter === 'none') return row.machine == null;
+    if (machineFilter) return row.machine === Number(machineFilter);
+    return true;
+  });
+
+  const missingMachineCount = rows.filter((row) => row.machine == null).length;
 
   async function remove(row: Movement) {
     const label = `${row.part_code} — ${row.quantity} un (${formatDate(row.created_at)})`;
@@ -93,13 +105,26 @@ export function WithdrawalsPage() {
           <option value="tarde">{SHIFT_LABELS.tarde}</option>
           <option value="noite">{SHIFT_LABELS.noite}</option>
         </select>
+        <select value={machineFilter} onChange={(e) => setMachineFilter(e.target.value as typeof machineFilter)}>
+          <option value="">Todas as máquinas</option>
+          <option value="none">Sem máquina ({missingMachineCount})</option>
+          {MACHINE_NUMBERS.map((n) => (
+            <option key={n} value={String(n)}>Máquina {n}</option>
+          ))}
+        </select>
       </div>
+
+      {missingMachineCount > 0 && machineFilter !== 'none' ? (
+        <p className="hint-text">
+          {missingMachineCount} retirada(s) antiga(s) sem máquina — use o filtro &quot;Sem máquina&quot; e edite para informar.
+        </p>
+      ) : null}
 
       <div className="card table-wrap">
         {loading ? (
           <div className="empty">Carregando…</div>
-        ) : rows.length === 0 ? (
-          <div className="empty">Nenhuma retirada registrada.</div>
+        ) : visibleRows.length === 0 ? (
+          <div className="empty">Nenhuma retirada neste filtro.</div>
         ) : (
           <table>
             <thead>
@@ -107,6 +132,7 @@ export function WithdrawalsPage() {
                 <th>Data</th>
                 <th>Peça</th>
                 <th>Qtd</th>
+                <th>Máq.</th>
                 <th>Turno</th>
                 <th>Retirou</th>
                 <th>Solicitou</th>
@@ -115,13 +141,14 @@ export function WithdrawalsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
+              {visibleRows.map((row) => (
+                <tr key={row.id} className={row.machine == null ? 'row-missing-machine' : undefined}>
                   <td>{formatDate(row.created_at)}</td>
                   <td>
                     <span className="mono">{row.part_code}</span> — {row.part_name}
                   </td>
                   <td>{row.quantity}</td>
+                  <td>{row.machine ?? '—'}</td>
                   <td>{row.shift ? SHIFT_LABELS[row.shift] : '—'}</td>
                   <td>{row.withdrawn_by ?? '—'}</td>
                   <td>{row.requested_by ?? '—'}</td>
@@ -168,6 +195,15 @@ export function WithdrawalsPage() {
               </select>
             </div>
             <div className="field">
+              <label>Máquina</label>
+              <select required value={machine} onChange={(e) => setMachine(e.target.value)}>
+                <option value="" disabled>Selecione a máquina</option>
+                {MACHINE_NUMBERS.map((n) => (
+                  <option key={n} value={n}>Máquina {n}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
               <label>Quem retirou</label>
               <input required value={withdrawnBy} onChange={(e) => setWithdrawnBy(e.target.value)} />
             </div>
@@ -190,6 +226,11 @@ export function WithdrawalsPage() {
           </form>
         </Modal>
       ) : null}
+
+      <style>{`
+        .hint-text { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+        .row-missing-machine td:nth-child(4) { color: var(--warn, #b45309); font-weight: 700; }
+      `}</style>
     </div>
   );
 }

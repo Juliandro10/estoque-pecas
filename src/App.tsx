@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
+import { MaquinasPage } from './pages/MaquinasPage';
 import { MonthlyReportsPage } from './pages/MonthlyReportsPage';
 import { PartsPage } from './pages/PartsPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -28,6 +29,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="pecas" element={<PartsPage />} />
           <Route path="retiradas" element={<WithdrawalsPage />} />
+          <Route path="maquinas" element={<MaquinasPage />} />
           <Route path="relatorios" element={<ReportsPage />} />
           <Route path="relatorios-mensais" element={<MonthlyReportsPage />} />
           <Route path="desenv-controle" element={<DesenvControleLayout />}>

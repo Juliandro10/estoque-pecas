@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 
 import type { MonthlyReport } from '../types';
 import { SHIFT_LABELS } from '../types';
+import { needleQty, peakNeedleMachine, sortedByMachineNeedles } from './machine-report';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('pt-BR');
@@ -106,6 +107,8 @@ export function exportReplenishmentPdf(report: MonthlyReport) {
 
 export function exportAnalysisTxt(report: MonthlyReport) {
   const peak = report.peak_shift ? SHIFT_LABELS[report.peak_shift] : '—';
+  const byMachine = sortedByMachineNeedles(report.by_machine ?? []);
+  const peakMachine = peakNeedleMachine(byMachine);
 
   const lines = [
     'RELATÓRIO DE ANÁLISE DE QUEBRAS',
@@ -115,6 +118,22 @@ export function exportAnalysisTxt(report: MonthlyReport) {
     '',
     `TOTAL DE PEÇAS QUE SAÍRAM: ${report.total_withdrawn}`,
     `TURNO COM MAIS RETIRADAS: ${peak}`,
+    peakMachine
+      ? `MÁQUINA COM MAIS AGULHAS: Máq. ${peakMachine.machine} (${peakMachine.qty} un.)`
+      : 'MÁQUINA COM MAIS AGULHAS: —',
+    '',
+    '--- POR MÁQUINA ---',
+    'MÁQ. | AGULHAS | TOTAL | RETIRADAS | PRINCIPAIS PEÇAS',
+    '-'.repeat(80),
+    ...(byMachine.length
+      ? byMachine.map(
+          (m) =>
+            `${String(m.machine).padStart(4)} | ${String(needleQty(m) || '—').padStart(7)} | ${String(m.total_qty).padStart(5)} | ${String(m.records).padStart(9)} | ${m.parts
+              .slice(0, 3)
+              .map((p) => `${p.part_code}(${p.total_qty})`)
+              .join(', ') || '—'}`
+        )
+      : ['(nenhuma retirada com máquina informada)']),
     '',
     '--- POR TURNO (detalhado) ---',
     ...report.by_shift.flatMap((s) => [
@@ -143,6 +162,8 @@ export function exportAnalysisTxt(report: MonthlyReport) {
 
 export function exportAnalysisPdf(report: MonthlyReport) {
   const peak = report.peak_shift ? SHIFT_LABELS[report.peak_shift] : '—';
+  const byMachine = sortedByMachineNeedles(report.by_machine ?? []);
+  const peakMachine = peakNeedleMachine(byMachine);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   doc.setFontSize(16);
@@ -153,10 +174,40 @@ export function exportAnalysisPdf(report: MonthlyReport) {
   doc.text('Avaliação de consumo e horários', 14, 32);
   doc.text(`Total que saiu: ${report.total_withdrawn} peças`, 14, 38);
   doc.text(`Turno com mais retiradas: ${peak}`, 14, 44);
+  doc.text(
+    peakMachine
+      ? `Máquina com mais agulhas: Máq. ${peakMachine.machine} (${peakMachine.qty} un.)`
+      : 'Máquina com mais agulhas: —',
+    14,
+    50
+  );
   doc.setTextColor(0);
 
   autoTable(doc, {
-    startY: 50,
+    startY: 56,
+    head: [['Máq.', 'Agulhas', 'Total peças', 'Retiradas', 'Principais peças']],
+    body: byMachine.length
+      ? byMachine.map((m) => [
+          String(m.machine),
+          needleQty(m) ? String(needleQty(m)) : '—',
+          String(m.total_qty),
+          String(m.records),
+          m.parts
+            .slice(0, 3)
+            .map((p) => `${p.part_code} (${p.total_qty})`)
+            .join(', ') || '—',
+        ])
+      : [['—', '—', '—', '—', 'Sem retiradas com máquina']],
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [18, 28, 46] },
+  });
+
+  let finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 56;
+
+  doc.setFontSize(12);
+  doc.text('Por turno', 14, finalY + 12);
+  autoTable(doc, {
+    startY: finalY + 16,
     head: [['Turno', 'Peças', 'Retiradas', 'Principais peças']],
     body: report.by_shift.map((s) => [
       SHIFT_LABELS[s.shift],
@@ -171,7 +222,7 @@ export function exportAnalysisPdf(report: MonthlyReport) {
     headStyles: { fillColor: [18, 28, 46] },
   });
 
-  let finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 50;
+  finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? finalY;
 
   doc.setFontSize(12);
   doc.text('Quem retirou', 14, finalY + 12);

@@ -8,6 +8,7 @@ import type {
   M1MeshResult,
   M1TimeBatchResult,
   M1TimeLookup,
+  ModelCadastro,
   ProgramLookup,
   ProgramPartsResponse,
   SintralTimePart,
@@ -97,6 +98,20 @@ export const localProgramsApi = {
   syntechFios: () => localRequest<SyntechYarnCatalogFile>('/api/programs/syntech-fios'),
   syncSyntechFios: () =>
     localRequest<SyntechYarnCatalogFile>('/api/programs/syntech-fios/sync', { method: 'POST' }),
+  saveCadastroPdf: (payload: {
+    reference: string;
+    full_search?: boolean;
+    model_folder?: string;
+    cadastro: Pick<
+      ModelCadastro,
+      'reference' | 'name' | 'parts' | 'yarn_parts' | 'observations' | 'updated_at'
+    >;
+  }) =>
+    localRequest<{ ok: boolean; path: string; file_name: string }>('/api/programs/cadastro-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   m1Density: (reference: string, fullSearch = false, partFile?: string) =>
     localRequest<M1DensityResult>(
       `/api/programs/m1-density?ref=${encodeURIComponent(reference.trim())}${fullSearch ? '&full=1' : ''}${partFile ? `&part=${encodeURIComponent(partFile)}` : ''}`

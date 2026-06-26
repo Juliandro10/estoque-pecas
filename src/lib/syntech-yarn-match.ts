@@ -13,7 +13,6 @@ import {
 const FIXED_BICO_TIPO_FIO: Record<number, number> = {
   1: 70,
   2: 13,
-  8: 70,
 };
 
 export function parseYarnDescription(description: string, yarnTypes: string[] = []) {

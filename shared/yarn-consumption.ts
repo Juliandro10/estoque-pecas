@@ -1,5 +1,10 @@
 /** Cálculo de consumo de fio — sem Firebase (cliente + servidor). */
 
+import {
+  fabricGuideWeightShare,
+  fabricWeightShareSum,
+} from './yarn-blend-core';
+
 export type YarnGuideRow = {
   guide: number;
   letter: string;
@@ -67,6 +72,16 @@ export function formatConsumption(value: number) {
   const rounded = roundConsumption(value);
   if (!rounded) return '';
   return rounded.toFixed(3).replace('.', ',');
+}
+
+export function ceilPct(value: number) {
+  return Math.ceil(value * 100) / 100;
+}
+
+export function formatPct(value: number, options?: { ceil?: boolean }) {
+  if (!value || value <= 0) return '—';
+  const rounded = options?.ceil ? ceilPct(value) : Math.round(value * 100) / 100;
+  return `${rounded.toFixed(2).replace('.', ',')}%`;
 }
 
 export function programPartsOnly(parts: PartWeightRow[]) {
@@ -139,17 +154,20 @@ export function partMatchesYarnPart(part: PartWeightRow, yarnPart: YarnPartRow) 
   return false;
 }
 
-function wastePctOnYarnPart(guides: YarnGuideRow[]) {
-  return guides
-    .filter((guide) => isProgramFixedWasteYarnGuide(guide.guide))
-    .reduce((sum, guide) => sum + (guide.pct ?? 0), 0);
+/** Soma dos pesos relativos dos fios do tecido (% simx × cabos × fator; exclui fixos 1–2). */
+function fabricYarnWeightShareSum(guides: YarnGuideRow[]) {
+  return fabricWeightShareSum(guides, isProgramFixedWasteYarnGuide);
 }
 
-function totalWeightForYarnPart(parts: PartWeightRow[], yarnPart: YarnPartRow) {
-  return parts.filter((part) => partMatchesYarnPart(part, yarnPart)).reduce(
-    (sum, part) => sum + parseConsumptionInput(part.weight_kg),
-    0
-  );
+function totalWeightForYarnPart(
+  parts: PartWeightRow[],
+  yarnPart: YarnPartRow,
+  allYarnParts: YarnPartRow[]
+) {
+  return parts.filter((part) => partMatchesYarnPart(part, yarnPart)).reduce((sum, part) => {
+    const claimCount = allYarnParts.filter((yp) => partMatchesYarnPart(part, yp)).length;
+    return sum + parseConsumptionInput(part.weight_kg) / Math.max(1, claimCount);
+  }, 0);
 }
 
 /** Soma pesos do push por .mdv (inclui linhas duplicadas, ex. 2 mangas). */
@@ -222,8 +240,8 @@ export function applyAutoYarnConsumption(
   const fixedAssigned = new Set<number>();
 
   return yarnParts.map((yarnPart) => {
-    const weight = totalWeightForYarnPart(parts, yarnPart);
-    const fabricPctBase = Math.max(0, 100 - wastePctOnYarnPart(yarnPart.guides));
+    const weight = totalWeightForYarnPart(parts, yarnPart, yarnParts);
+    const fabricWeightSum = fabricYarnWeightShareSum(yarnPart.guides);
 
     return {
       ...yarnPart,
@@ -236,10 +254,10 @@ export function applyAutoYarnConsumption(
           }
           return { ...guide, consumption: '' };
         }
-        const pct = guide.pct ?? 0;
+        const share = fabricGuideWeightShare(guide);
         const consumption =
-          weight > 0 && pct > 0 && fabricPctBase > 0
-            ? formatConsumption(weight * (pct / fabricPctBase))
+          weight > 0 && share > 0 && fabricWeightSum > 0
+            ? formatConsumption(weight * (share / fabricWeightSum))
             : '';
         return { ...guide, consumption };
       }),
@@ -259,8 +277,42 @@ function formatPartContribution(label: string, count: number) {
   return count > 1 ? `${label}×${count}` : label;
 }
 
-function consolidatedYarnKey(guide: Pick<YarnGuideRow, 'guide' | 'letter'>) {
-  return `${guide.guide}:${guide.letter.toUpperCase()}`;
+/** Chave de consolidação — ignora variações como "ELASTICO PENTE" vs "ELASTICO DE PENTE". */
+export function normalizeYarnDescriptionKey(description: string) {
+  let text = description.trim().toUpperCase();
+  if (!text) return '';
+
+  text = text.replace(/\b(DE|DO|DA|DOS|DAS)\b/g, ' ');
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
+
+/** Identidade do fio: tipo + cor + cabos (ignora letra M1). */
+export function yarnFioIdentityKey(description: string): string {
+  const text = description.trim();
+  if (!text) return '';
+
+  const caboMatch = text.match(/(\d+)\s+CABOS?\w*/i);
+  const cabo = caboMatch?.[1] ?? '';
+  const body =
+    caboMatch && caboMatch.index !== undefined
+      ? text.slice(0, caboMatch.index).trim()
+      : text;
+
+  return `${normalizeYarnDescriptionKey(body)}|${cabo}`;
+}
+
+/** Mesmo bico + mesmo fio e mesma cor = uma linha — letra M1 pode variar entre partes. */
+export function consolidatedYarnIdentityKey(guide: number, description: string) {
+  return `${guide}:${yarnFioIdentityKey(description)}`;
+}
+
+function consolidatedYarnKey(guide: Pick<YarnGuideRow, 'guide' | 'description'>) {
+  return consolidatedYarnIdentityKey(guide.guide, guide.description);
+}
+
+function primaryYarnLetter(letters: Set<string>) {
+  return [...letters].sort((a, b) => a.localeCompare(b, 'pt-BR'))[0] ?? '';
 }
 
 export function consolidateYarnParts(
@@ -286,7 +338,7 @@ export function consolidateYarnParts(
       if (existing) {
         existing.sum += add;
         existing.letters.add(guide.letter.toUpperCase());
-        existing.letter = [...existing.letters].sort((a, b) => a.localeCompare(b, 'pt-BR')).join('/');
+        existing.letter = primaryYarnLetter(existing.letters);
         existing.consumption = formatConsumption(existing.sum);
         existing.description = pickRicherYarnDescription(existing.description, guide.description);
         if (!existing.parts.includes(partLabel)) existing.parts.push(partLabel);

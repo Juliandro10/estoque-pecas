@@ -2,7 +2,6 @@
 export const FIXED_BICO_TIPO_FIO: Record<number, number> = {
   1: 70, // RESTO DE FIO — separação
   2: 13, // LASTEX — elástico pente
-  8: 70, // RESTO DE FIO — remonte / variados
 };
 
 export const RESTO_FIO_CODIGO = 70;

@@ -29,9 +29,19 @@ export type MovementRow = {
   shift: Shift | null;
   withdrawn_by: string | null;
   requested_by: string | null;
+  machine: number | null;
   notes: string | null;
   created_at: string;
 };
+
+const MACHINE_MIN = 1;
+const MACHINE_MAX = 15;
+
+function parseMachine(value: unknown) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < MACHINE_MIN || n > MACHINE_MAX) throw new Error('INVALID_MACHINE');
+  return n;
+}
 
 type DbState = {
   parts: PartRow[];
@@ -67,6 +77,7 @@ function load() {
       shift: null,
       withdrawn_by: null,
       requested_by: null,
+      machine: null,
       notes: null,
       ...m,
     })),
@@ -153,6 +164,7 @@ export const store = {
       shift: null,
       withdrawn_by: null,
       requested_by: null,
+      machine: null,
       notes: null,
       created_at: now(),
     };
@@ -170,6 +182,7 @@ export const store = {
       quantity: number;
       shift: Shift;
       withdrawn_by: string;
+      machine: number;
       requested_by?: string;
       notes?: string;
     }
@@ -181,6 +194,7 @@ export const store = {
     if (!qty || qty <= 0) throw new Error('INVALID_QUANTITY');
     if (!input.withdrawn_by?.trim()) throw new Error('MISSING_WITHDRAWN_BY');
     if (!['cedo', 'tarde', 'noite'].includes(input.shift)) throw new Error('INVALID_SHIFT');
+    const machine = parseMachine(input.machine);
 
     const newQty = part.quantity - qty;
     if (newQty < 0) throw new Error('INSUFFICIENT_STOCK');
@@ -196,6 +210,7 @@ export const store = {
       shift: input.shift,
       withdrawn_by: input.withdrawn_by.trim(),
       requested_by: input.requested_by?.trim() || null,
+      machine,
       notes: input.notes?.trim() || null,
       created_at: now(),
     };
@@ -238,6 +253,7 @@ export const store = {
       quantity: number;
       shift: Shift;
       withdrawn_by: string;
+      machine: number;
       requested_by?: string;
       notes?: string;
     }
@@ -253,6 +269,7 @@ export const store = {
     if (!qty || qty <= 0) throw new Error('INVALID_QUANTITY');
     if (!input.withdrawn_by?.trim()) throw new Error('MISSING_WITHDRAWN_BY');
     if (!['cedo', 'tarde', 'noite'].includes(input.shift)) throw new Error('INVALID_SHIFT');
+    const machine = parseMachine(input.machine);
 
     const newPartQty = part.quantity + movement.quantity - qty;
     if (newPartQty < 0) throw new Error('INSUFFICIENT_STOCK');
@@ -266,6 +283,7 @@ export const store = {
       shift: input.shift,
       withdrawn_by: input.withdrawn_by.trim(),
       requested_by: input.requested_by?.trim() || null,
+      machine,
       notes: input.notes?.trim() || null,
     };
     save();

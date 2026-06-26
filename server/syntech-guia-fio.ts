@@ -1,11 +1,7 @@
 import type { SinYarnGuide } from './sin-yarn';
 import { parseYarnGuidesFromSin } from './sin-yarn';
 import { readSinTextsForModel } from './sin-read';
-import {
-  GUIA_COR_BICO_8,
-  RESTO_FIO_NOME,
-  resolveCaboForBico,
-} from './syntech-bico-rules';
+import { resolveCaboForBico } from './syntech-bico-rules';
 import { clipSyntechText } from './syntech-db';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
 import {
@@ -123,17 +119,6 @@ function applyGuiaFioRules(
         ...row,
         cabo: null,
         cabod: cabo,
-      };
-    }
-
-    if (row.numero === 8 && guiaRowFilled(row)) {
-      return {
-        ...row,
-        esquerda: null,
-        cabo: null,
-        direita: RESTO_FIO_NOME,
-        cabod: cabo,
-        cor_do_fio: GUIA_COR_BICO_8,
       };
     }
 

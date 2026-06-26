@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-06-15T13:44:58.505Z",
+  "updated_at": "2026-06-25T10:49:14.729Z",
   "source": "C:\\Textil\\Empresas\\FABRICA.MDB",
   "types": [
     {
@@ -1165,6 +1165,7 @@
         "MARINHO FORTE",
         "MARROM TERRA",
         "MARRON TERRA",
+        "MARRON TERRAI",
         "MILITAR",
         "NATURAL",
         "NAVAL",
@@ -1206,6 +1207,7 @@
         "TERRA",
         "TOMATE",
         "UNA",
+        "VARIADOSI",
         "VERDE DIAMANTINA",
         "VERDE MILITAR",
         "VINO",
@@ -1919,7 +1921,19 @@
       "codigo": 70,
       "tipo": "RESTO DE FIO",
       "cores": [
+        "BRANCO",
         "VARIADOS"
+      ]
+    },
+    {
+      "codigo": 71,
+      "tipo": "MALTA",
+      "cores": [
+        "BEGE",
+        "CHOCOLATE3",
+        "GRIS",
+        "PRETO",
+        "VINHO"
       ]
     }
   ]

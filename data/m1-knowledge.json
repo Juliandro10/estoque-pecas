@@ -519,6 +519,206 @@
       "id": "d2f54536-13f3-4fb8-a92d-33622c0d55e1",
       "createdAt": "2026-06-12T14:12:59.689Z",
       "updatedAt": "2026-06-12T14:12:59.689Z"
+    },
+    {
+      "reference": "5311",
+      "programFolder": "C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS\\PROGRAMAS-POR-CLIENTE\\CANTÃO\\5311-SAIA-NERVURAS",
+      "partBase": "5311-SAIA-NERVURAS-CORPO",
+      "partLabel": "CORPO",
+      "machine": {
+        "cms": "CMS502",
+        "gauge": "E6.2",
+        "label": "CMS 502 E6.2",
+        "syntechMaquina": 5
+      },
+      "swatch": {
+        "widthCm": 50,
+        "heightCm": 43,
+        "fabricState": "raw"
+      },
+      "programCounts": {
+        "wales": 314,
+        "courses": 128,
+        "source": "sin-formula"
+      },
+      "density": {
+        "walesPer10cm": 62.800000000000004,
+        "coursesPer10cm": 29.767441860465116
+      },
+      "regulation": {
+        "primarySource": "sin",
+        "sinNps": [
+          {
+            "np": 1,
+            "value": 11,
+            "label": "Setup Row"
+          },
+          {
+            "np": 2,
+            "value": 13.5,
+            "label": "Tubular Cycle front"
+          },
+          {
+            "np": 3,
+            "value": 13.5,
+            "label": "Tubular Cycle rear"
+          },
+          {
+            "np": 4,
+            "value": 14,
+            "label": "Loose Row"
+          },
+          {
+            "np": 5,
+            "value": 13.5,
+            "label": "MEIA MALHA"
+          },
+          {
+            "np": 6,
+            "value": 13.5,
+            "label": "MEIA MALHA"
+          },
+          {
+            "np": 7,
+            "value": 10,
+            "label": "CHEIA"
+          },
+          {
+            "np": 8,
+            "value": 12.5,
+            "label": "REMONTE"
+          },
+          {
+            "np": 9,
+            "value": 11,
+            "label": "Transition-2"
+          },
+          {
+            "np": 11,
+            "value": 11,
+            "label": "Setup Row front"
+          },
+          {
+            "np": 12,
+            "value": 12.5,
+            "label": "TUBULAR COM ELASTANO"
+          },
+          {
+            "np": 15,
+            "value": 12.5,
+            "label": "Link-off front"
+          },
+          {
+            "np": 16,
+            "value": 12.5,
+            "label": "Link-off rear"
+          },
+          {
+            "np": 17,
+            "value": 13,
+            "label": "Safety rows"
+          },
+          {
+            "np": 20,
+            "value": 11,
+            "label": "Start 1"
+          },
+          {
+            "np": 21,
+            "value": 11.5,
+            "label": "Start 2"
+          },
+          {
+            "np": 22,
+            "value": 12,
+            "label": "Start 3"
+          },
+          {
+            "np": 23,
+            "value": 12.5,
+            "label": "Start 4"
+          },
+          {
+            "np": 24,
+            "value": 13,
+            "label": "Start 5"
+          },
+          {
+            "np": 25,
+            "value": 16,
+            "label": "Comb Thread"
+          }
+        ],
+        "setxNps": [],
+        "ydf": 2,
+        "ygc": "YGC:/1=A 2=B 3=C 4=D 5=E 7=F;",
+        "mseci": 0.7
+      },
+      "yarns": [
+        {
+          "bico": 7,
+          "sinDescription": "ELASTANO 20/20 3 CABOS PRETO",
+          "sinDescriptionKey": "ELASTANO 20/20 3 CABOS PRETO",
+          "syntechCod": 12,
+          "syntechDesc": "ELASTANO 20/20",
+          "pct": null,
+          "letter": "F"
+        },
+        {
+          "bico": 5,
+          "sinDescription": "SIENA 1 CABO MARINHO",
+          "sinDescriptionKey": "SIENA 1 CABO MARINHO",
+          "syntechCod": 65,
+          "syntechDesc": "SIENA",
+          "pct": null,
+          "letter": "E"
+        },
+        {
+          "bico": 4,
+          "sinDescription": "SIENA 2 CABOS OFF WHITTE",
+          "sinDescriptionKey": "SIENA 2 CABOS OFF WHITTE",
+          "syntechCod": 65,
+          "syntechDesc": "SIENA",
+          "pct": null,
+          "letter": "D"
+        },
+        {
+          "bico": 3,
+          "sinDescription": "SIENA 2 CABOS MARINHO",
+          "sinDescriptionKey": "SIENA 2 CABOS MARINHO",
+          "syntechCod": 65,
+          "syntechDesc": "SIENA",
+          "pct": null,
+          "letter": "C"
+        },
+        {
+          "bico": 2,
+          "sinDescription": "ELASTICO PENTE",
+          "sinDescriptionKey": "ELASTICO PENTE",
+          "syntechCod": 13,
+          "syntechDesc": "LASTEX",
+          "pct": null,
+          "letter": "B"
+        },
+        {
+          "bico": 1,
+          "sinDescription": "SEPARACAO",
+          "sinDescriptionKey": "SEPARACAO",
+          "syntechCod": 70,
+          "syntechDesc": "RESTO DE FIO",
+          "pct": null,
+          "letter": "A"
+        }
+      ],
+      "files": {
+        "sin": "5311-SAIA-NERVURAS-CORPO.sin",
+        "jac": "5311-SAIA-NERVURAS-CORPO.jac",
+        "simx": "5311-SAIA-NERVURAS-CORPO.simx"
+      },
+      "notes": "Saia de Nervuras",
+      "id": "8788473d-3a71-4c82-a997-077cf7235ce6",
+      "createdAt": "2026-06-23T18:05:55.544Z",
+      "updatedAt": "2026-06-23T18:05:55.544Z"
     }
   ]
 }

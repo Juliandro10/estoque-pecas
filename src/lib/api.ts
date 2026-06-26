@@ -30,6 +30,7 @@ export const api = {
         quantity: number;
         shift: Shift;
         withdrawn_by: string;
+        machine: number;
         requested_by?: string;
         notes?: string;
       }
@@ -49,6 +50,7 @@ export const api = {
         quantity: number;
         shift: Shift;
         withdrawn_by: string;
+        machine: number;
         requested_by?: string;
         notes?: string;
       }

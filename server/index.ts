@@ -36,12 +36,13 @@ app.get('/api/parts', (req, res) => {
 });
 
 app.post('/api/parts/:id/withdraw', (req, res) => {
-  const { quantity, shift, withdrawn_by, requested_by, notes } = req.body;
+  const { quantity, shift, withdrawn_by, requested_by, notes, machine } = req.body;
   try {
     const result = store.withdraw(Number(req.params.id), {
       quantity: Number(quantity),
       shift,
       withdrawn_by,
+      machine: Number(machine),
       requested_by,
       notes,
     });
@@ -69,6 +70,10 @@ app.post('/api/parts/:id/withdraw', (req, res) => {
       }
       if (err.message === 'INVALID_SHIFT') {
         res.status(400).json({ error: 'Turno inválido.' });
+        return;
+      }
+      if (err.message === 'INVALID_MACHINE') {
+        res.status(400).json({ error: 'Informe a máquina (1 a 15).' });
         return;
       }
     }
@@ -112,12 +117,13 @@ app.get('/api/withdrawals', (req, res) => {
 });
 
 app.put('/api/withdrawals/:id', (req, res) => {
-  const { quantity, shift, withdrawn_by, requested_by, notes } = req.body;
+  const { quantity, shift, withdrawn_by, requested_by, notes, machine } = req.body;
   try {
     const result = store.updateWithdrawal(Number(req.params.id), {
       quantity: Number(quantity),
       shift,
       withdrawn_by,
+      machine: Number(machine),
       requested_by,
       notes,
     });
@@ -142,6 +148,10 @@ app.put('/api/withdrawals/:id', (req, res) => {
       }
       if (err.message === 'INVALID_SHIFT') {
         res.status(400).json({ error: 'Turno inválido.' });
+        return;
+      }
+      if (err.message === 'INVALID_MACHINE') {
+        res.status(400).json({ error: 'Informe a máquina (1 a 15).' });
         return;
       }
     }

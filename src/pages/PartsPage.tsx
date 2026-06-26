@@ -4,7 +4,7 @@ import { Modal } from '../components/Modal';
 import { StockBadge } from '../components/StockBadge';
 import { api } from '../lib/api';
 import type { Part, PartStatus, Shift } from '../types';
-import { SHIFT_LABELS } from '../types';
+import { MACHINE_NUMBERS, SHIFT_LABELS } from '../types';
 
 export function PartsPage() {
   const [parts, setParts] = useState<Part[]>([]);
@@ -18,6 +18,7 @@ export function PartsPage() {
   const [shift, setShift] = useState<Shift>('cedo');
   const [withdrawnBy, setWithdrawnBy] = useState('');
   const [requestedBy, setRequestedBy] = useState('');
+  const [machine, setMachine] = useState('1');
   const [notes, setNotes] = useState('');
   const [adjustQty, setAdjustQty] = useState('');
 
@@ -43,6 +44,7 @@ export function PartsPage() {
     setShift('cedo');
     setWithdrawnBy('');
     setRequestedBy('');
+    setMachine('1');
     setNotes('');
   }
 
@@ -54,6 +56,7 @@ export function PartsPage() {
         quantity: Number(qty),
         shift,
         withdrawn_by: withdrawnBy,
+        machine: Number(machine),
         requested_by: requestedBy || undefined,
         notes: notes || undefined,
       });
@@ -176,6 +179,14 @@ export function PartsPage() {
               </select>
             </div>
             <div className="field">
+              <label>Máquina</label>
+              <select required value={machine} onChange={(e) => setMachine(e.target.value)}>
+                {MACHINE_NUMBERS.map((n) => (
+                  <option key={n} value={n}>Máquina {n}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
               <label>Quem retirou</label>
               <input required value={withdrawnBy} onChange={(e) => setWithdrawnBy(e.target.value)} />
             </div>
@@ -185,7 +196,7 @@ export function PartsPage() {
             </div>
             <div className="field">
               <label>Observações</label>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Motivo, máquina, etc." />
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações" />
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setWithdrawing(null)}>

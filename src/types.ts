@@ -7,6 +7,15 @@ export const SHIFT_LABELS: Record<Shift, string> = {
   noite: 'Noite',
 };
 
+export const MACHINE_MIN = 1;
+export const MACHINE_MAX = 15;
+export const MACHINE_NUMBERS = Array.from({ length: MACHINE_MAX }, (_, i) => i + 1);
+
+export function isValidMachine(value: unknown): value is number {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= MACHINE_MIN && n <= MACHINE_MAX;
+}
+
 export type Part = {
   id: string;
   code: string;
@@ -29,6 +38,7 @@ export type Movement = {
   shift: Shift | null;
   withdrawn_by: string | null;
   requested_by: string | null;
+  machine: number | null;
   notes: string | null;
   created_at: string;
   part_code?: string;
@@ -79,6 +89,13 @@ export type MonthlyEmployeeTotal = {
   by_shift: Record<Shift, number>;
 };
 
+export type MonthlyMachineTotal = {
+  machine: number;
+  total_qty: number;
+  records: number;
+  parts: Array<{ part_code: string; part_name: string; total_qty: number }>;
+};
+
 export type MonthlyReport = {
   month: string;
   period_label: string;
@@ -90,5 +107,6 @@ export type MonthlyReport = {
   by_shift: MonthlyShiftTotal[];
   by_withdrawn_by: MonthlyEmployeeTotal[];
   by_requested_by: MonthlyEmployeeTotal[];
+  by_machine: MonthlyMachineTotal[];
   details: Movement[];
 };

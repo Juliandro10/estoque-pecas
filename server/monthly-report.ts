@@ -57,6 +57,7 @@ export function getMonthlyReport(monthKey: string) {
 
   const byWithdrawnMap = new Map<string, { total_qty: number; records: number; by_shift: Record<Shift, number> }>();
   const byRequestedMap = new Map<string, { total_qty: number; records: number; by_shift: Record<Shift, number> }>();
+  const byMachineMap = new Map<number, { machine: number; total_qty: number; records: number; parts: Map<string, { part_code: string; part_name: string; total_qty: number }> }>();
 
   let totalWithdrawn = 0;
 
@@ -112,6 +113,24 @@ export function getMonthlyReport(monthKey: string) {
     requestedRow.total_qty += w.quantity;
     requestedRow.records += 1;
     requestedRow.by_shift[shift] += w.quantity;
+
+    if (w.machine != null) {
+      if (!byMachineMap.has(w.machine)) {
+        byMachineMap.set(w.machine, { machine: w.machine, total_qty: 0, records: 0, parts: new Map() });
+      }
+      const machineRow = byMachineMap.get(w.machine)!;
+      machineRow.total_qty += w.quantity;
+      machineRow.records += 1;
+      const machinePartKey = String(w.part_id);
+      if (!machineRow.parts.has(machinePartKey)) {
+        machineRow.parts.set(machinePartKey, {
+          part_code: partRow.part_code,
+          part_name: partRow.part_name,
+          total_qty: 0,
+        });
+      }
+      machineRow.parts.get(machinePartKey)!.total_qty += w.quantity;
+    }
   }
 
   const by_part = [...byPartMap.values()].sort((a, b) => b.total_qty - a.total_qty || a.part_name.localeCompare(b.part_name, 'pt-BR'));
@@ -139,6 +158,15 @@ export function getMonthlyReport(monthKey: string) {
       .map(([name, row]) => ({ name, ...row }))
       .sort((a, b) => b.total_qty - a.total_qty || a.name.localeCompare(b.name, 'pt-BR'));
 
+  const by_machine = [...byMachineMap.values()]
+    .sort((a, b) => a.machine - b.machine)
+    .map((row) => ({
+      machine: row.machine,
+      total_qty: row.total_qty,
+      records: row.records,
+      parts: [...row.parts.values()].sort((a, b) => b.total_qty - a.total_qty),
+    }));
+
   return {
     month: monthKey,
     period_label: monthLabel(monthKey),
@@ -150,6 +178,7 @@ export function getMonthlyReport(monthKey: string) {
     by_shift,
     by_withdrawn_by: mapEmployees(byWithdrawnMap),
     by_requested_by: mapEmployees(byRequestedMap),
+    by_machine,
     details: withdrawals,
   };
 }

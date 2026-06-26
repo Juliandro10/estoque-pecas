@@ -27,6 +27,8 @@ import {
 } from './sintral-screen';
 import { readM1TimeForPart, readM1TimesForModel } from './stoll-time';
 import { pushCadastroToSyntech, testSyntechConnection } from './syntech-push';
+import { buildCadastroPdfBuffer, cadastroPdfFileName } from '../shared/cadastro-pdf';
+import { DADOS_PROGRAMA_DIR } from './sintral-capture';
 import {
   readSyntechYarnCatalog,
   syncSyntechYarnCatalogFromDb,
@@ -769,6 +771,48 @@ app.post('/api/programs/syntech-fios/sync', async (_req, res) => {
   }
 });
 
+app.post('/api/programs/cadastro-pdf', async (req, res) => {
+  try {
+    const reference = String(req.body?.reference ?? '').trim();
+    const cadastro = req.body?.cadastro;
+    const full = req.body?.full_search === true || req.body?.full === true;
+    let model_folder = String(req.body?.model_folder ?? '').trim();
+
+    if (!reference || !cadastro || typeof cadastro !== 'object') {
+      res.status(400).json({ error: 'Informe referência e dados do cadastro.' });
+      return;
+    }
+
+    if (!model_folder) {
+      const match = findProgram(reference, full);
+      if (match) model_folder = match.folder_path;
+    }
+
+    if (!model_folder || !fs.existsSync(model_folder)) {
+      res.status(404).json({ error: 'Pasta do programa não encontrada.' });
+      return;
+    }
+
+    const dadosDir = path.join(model_folder, DADOS_PROGRAMA_DIR);
+    fs.mkdirSync(dadosDir, { recursive: true });
+    const fileName = cadastroPdfFileName(reference);
+    const filePath = path.join(dadosDir, fileName);
+    const pdf = buildCadastroPdfBuffer({
+      reference,
+      name: String(cadastro.name ?? ''),
+      parts: Array.isArray(cadastro.parts) ? cadastro.parts : [],
+      yarn_parts: Array.isArray(cadastro.yarn_parts) ? cadastro.yarn_parts : [],
+      observations: String(cadastro.observations ?? ''),
+      updated_at: String(cadastro.updated_at ?? new Date().toISOString()),
+    });
+    fs.writeFileSync(filePath, pdf);
+
+    res.json({ ok: true, path: filePath, file_name: fileName });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao gerar PDF.' });
+  }
+});
+
 app.post('/api/programs/syntech-push', async (req, res) => {
   try {
     const reference = String(req.body?.reference ?? '').trim();
@@ -834,6 +878,7 @@ app.get('/api/programs/health', (_req, res) => {
       'sintral-yarns',
       'syntech-push',
       'syntech-fios',
+      'cadastro-pdf',
       'm1-density',
       'm1-knowledge',
       'm1-measurements',

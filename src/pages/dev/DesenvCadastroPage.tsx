@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   applyAutoYarnConsumption,
@@ -15,6 +15,8 @@ import {
   partKindToken,
   programPartsOnly,
   programFixedWasteYarnTotalKg,
+  setYarnDescriptionForGuideLetter,
+  setYarnGuideDescription,
   totalCalculatedYarnConsumption,
   totalPartsWeight,
   totalYarnConsumption,
@@ -24,7 +26,7 @@ import {
   expandConsolidatedForProcessos,
   processYarnRowsReadyForSyntech,
 } from '../../lib/yarn-blend';
-import { correctYarnDescription, resolveConsolidatedYarns } from '../../lib/syntech-yarn-match';
+import { resolveConsolidatedYarns } from '../../lib/syntech-yarn-match';
 import {
   isLocalScannerAvailable,
   localProgramsApi,
@@ -86,6 +88,46 @@ function applySintralTimes(currentParts: CadastroPart[], times: SintralTimesResu
   return { parts: updated, message, missing };
 }
 
+function YarnDescInput({
+  value,
+  onCommit,
+  className,
+  title,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  className?: string;
+  title?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) setDraft(value);
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      className={className}
+      title={title}
+      value={draft}
+      onFocus={() => {
+        editingRef.current = true;
+        setDraft(value);
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        editingRef.current = false;
+        if (draft !== value) onCommit(draft);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
 export function DesenvCadastroPage() {
   const [reference, setReference] = useState('');
   const [fullSearch, setFullSearch] = useState(false);
@@ -107,6 +149,9 @@ export function DesenvCadastroPage() {
   const [syncingYarnCatalog, setSyncingYarnCatalog] = useState(false);
   const [scannerOk, setScannerOk] = useState<boolean | null>(null);
   const [scannerOutdated, setScannerOutdated] = useState(false);
+  const [modelFolder, setModelFolder] = useState('');
+  const [exportingPdf, setExportingPdf] = useState(false);
+
   const localMode = isLocalScannerAvailable();
 
   const partsForYarn = useMemo(
@@ -155,6 +200,28 @@ export function DesenvCadastroPage() {
     [consolidatedYarns]
   );
   const fixedWasteKg = programFixedWasteYarnTotalKg();
+
+  function rawConsolidatedDescription(guide: number, letter: string, fallback = '') {
+    return (
+      consolidatedYarns.find(
+        (row) => row.guide === guide && row.letter.toUpperCase() === letter.toUpperCase()
+      )?.description ?? fallback
+    );
+  }
+
+  function patchYarnDescriptionByGuideLetter(guide: number, letter: string, description: string) {
+    setYarnParts((prev) => setYarnDescriptionForGuideLetter(prev, guide, letter, description));
+  }
+
+  function patchYarnGuideDescription(
+    partKey: string,
+    guide: number,
+    letter: string,
+    side: 'left' | 'right',
+    description: string
+  ) {
+    setYarnParts((prev) => setYarnGuideDescription(prev, partKey, guide, letter, side, description));
+  }
 
   useEffect(() => {
     if (!localMode) {
@@ -248,6 +315,7 @@ export function DesenvCadastroPage() {
     setError('');
     setInfo('');
     setMachineLabel('');
+    setModelFolder('');
     try {
       const saved = await cadastroDb.get(ref);
       if (saved) {
@@ -257,6 +325,7 @@ export function DesenvCadastroPage() {
 
         if (localMode && scannerOk) {
           const found = await localProgramsApi.lookup(ref, fullSearch, true, false);
+          if (found.folder_path) setModelFolder(found.folder_path);
           const folderParts =
             found?.parts?.map((p) => ({
               key: p.key,
@@ -293,6 +362,7 @@ export function DesenvCadastroPage() {
       }
 
       const found = await localProgramsApi.lookup(ref, fullSearch, true, true);
+      if (found.folder_path) setModelFolder(found.folder_path);
       if (!found.parts) {
         setError('Scanner antigo ainda ativo. Feche todas as janelas do Iniciar.bat e abra de novo.');
         return;
@@ -551,7 +621,7 @@ export function DesenvCadastroPage() {
     }
   }
 
-  function exportPdf() {
+  async function exportPdf() {
     const ref = reference.trim();
     if (!ref || parts.length === 0) {
       setError('Carregue e salve o cadastro antes de exportar.');
@@ -566,7 +636,40 @@ export function DesenvCadastroPage() {
       observations,
       updated_at: new Date().toISOString(),
     };
-    exportCadastroPdf(cadastro);
+
+    if (!localMode || !scannerOk) {
+      exportCadastroPdf(cadastro);
+      return;
+    }
+
+    setExportingPdf(true);
+    setError('');
+    try {
+      let folder = modelFolder.trim();
+      if (!folder) {
+        const found = await localProgramsApi.lookup(ref, fullSearch, false, false);
+        folder = found.folder_path ?? '';
+        if (folder) setModelFolder(folder);
+      }
+      if (!folder) {
+        setError('Pasta do programa não encontrada. Use busca completa se necessário.');
+        exportCadastroPdf(cadastro);
+        return;
+      }
+
+      const result = await localProgramsApi.saveCadastroPdf({
+        reference: ref,
+        full_search: fullSearch,
+        model_folder: folder,
+        cadastro,
+      });
+      setInfo(`PDF salvo em dados do programa/${result.file_name}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao salvar PDF na pasta do programa.');
+      exportCadastroPdf(cadastro);
+    } finally {
+      setExportingPdf(false);
+    }
   }
 
   return (
@@ -689,7 +792,7 @@ export function DesenvCadastroPage() {
                           <tbody>
                             {consolidatedYarnsResolved.map((row) => (
                               <tr
-                                key={`${row.syntech_slot}-${row.guide}-${row.component_index}-${row.description}`}
+                                key={`yarn-${row.syntech_slot ?? row.guide}-${row.guide}-${row.component_index ?? 0}-${row.letter}`}
                                 className={!row.codigo_ok ? 'yarn-row-error' : !row.cor_ok ? 'yarn-row-warn' : undefined}
                               >
                                 <td className="yarn-col-pct mono">{formatPct(row.pct)}</td>
@@ -701,10 +804,21 @@ export function DesenvCadastroPage() {
                                 </td>
                                 <td className="yarn-col-fio mono">{row.letter}</td>
                                 <td className="yarn-col-desc">
-                                  {row.description || '—'}
                                   {row.blend_source ? (
-                                    <span className="yarn-blend-note"> · mistura</span>
-                                  ) : null}
+                                    <>
+                                      {row.description || '—'}
+                                      <span className="yarn-blend-note"> · mistura</span>
+                                    </>
+                                  ) : (
+                                    <YarnDescInput
+                                      className="cell-input yarn-desc-input"
+                                      value={rawConsolidatedDescription(row.guide, row.letter, row.description)}
+                                      title="Editar nome do fio para bater com o Syntech"
+                                      onCommit={(next) =>
+                                        patchYarnDescriptionByGuideLetter(row.guide, row.letter, next)
+                                      }
+                                    />
+                                  )}
                                 </td>
                                 <td className="yarn-col-parts">
                                   <div className="yarn-part-tags">
@@ -735,12 +849,9 @@ export function DesenvCadastroPage() {
                                 </span>
                                 {' + fixos '}
                                 <span className="mono">{formatConsumption(fixedWasteKg)} kg</span>
-                                {' = total fio '}
+                                {' = total '}
                                 <span className="mono">
-                                  {totalPartWeight > 0
-                                    ? formatConsumption(totalPartWeight + fixedWasteKg)
-                                    : '—'}{' '}
-                                  kg
+                                  {totalConsumption > 0 ? formatConsumption(totalConsumption) : '—'} kg
                                 </span>
                               </td>
                             </tr>
@@ -785,7 +896,20 @@ export function DesenvCadastroPage() {
                                       <td className="yarn-col-bico mono">{guide.guide}</td>
                                       <td className="yarn-col-fio mono">{guide.letter}</td>
                                       <td className="yarn-col-desc">
-                                        {correctYarnDescription(guide.description || '', yarnCatalog) || '—'}
+                                        <YarnDescInput
+                                          className="cell-input yarn-desc-input"
+                                          value={guide.description}
+                                          title="Editar nome do fio para bater com o Syntech"
+                                          onCommit={(next) =>
+                                            patchYarnGuideDescription(
+                                              part.key,
+                                              guide.guide,
+                                              guide.letter,
+                                              guide.side,
+                                              next
+                                            )
+                                          }
+                                        />
                                       </td>
                                     </tr>
                                   )) ?? null}
@@ -908,8 +1032,13 @@ export function DesenvCadastroPage() {
                 {pushingSyntech ? 'Enviando…' : 'Enviar ao Syntech'}
               </button>
             ) : null}
-            <button type="button" className="btn btn-ghost" onClick={exportPdf}>
-              PDF
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={exportingPdf}
+              onClick={() => void exportPdf()}
+            >
+              {exportingPdf ? 'PDF…' : 'PDF'}
             </button>
           </div>
         </>
@@ -925,6 +1054,7 @@ export function DesenvCadastroPage() {
         .machine-label { margin: 0; font-size: 14px; color: var(--text); }
         .table-toolbar { margin-bottom: 12px; }
         .cell-input { max-width: none; padding: 6px 8px; font-size: 13px; }
+        .yarn-desc-input { width: 100%; box-sizing: border-box; min-width: 0; }
         .file-cell { font-size: 11px; color: var(--muted); max-width: 200px; word-break: break-all; }
         .row-actions { white-space: nowrap; display: flex; gap: 4px; flex-wrap: wrap; }
         .actions { display: flex; gap: 10px; margin-top: 16px; }

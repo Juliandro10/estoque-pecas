@@ -23,6 +23,7 @@ type LocalMovement = {
   shift: string | null;
   withdrawn_by: string | null;
   requested_by: string | null;
+  machine: number | null;
   notes: string | null;
   created_at: string;
 };
@@ -158,6 +159,7 @@ async function importWithdrawals(
       shift: m.shift,
       withdrawn_by: m.withdrawn_by,
       requested_by: m.requested_by,
+      machine: m.machine ?? null,
       notes: m.notes,
       created_at: admin.firestore.Timestamp.fromDate(new Date(m.created_at)),
     });

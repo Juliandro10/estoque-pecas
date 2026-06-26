@@ -12,12 +12,15 @@ export type YarnWeightFactorsFile = {
   types: Record<string, number>;
 };
 
+/** 1 cabo elastano × 1 cabo linha (mesmo % simx) → 8% / 92% do peso. */
+export const ELASTANO_WEIGHT_FACTOR = 8 / 92;
+
 export const DEFAULT_YARN_WEIGHT_FACTORS: YarnWeightFactorsFile = {
   default_factor: 1,
   types: {
     CAPRICE: 2.5,
     LINHA: 1,
-    ELASTANO: 1.2,
+    ELASTANO: ELASTANO_WEIGHT_FACTOR,
     LASTEX: 1,
   },
 };
@@ -98,6 +101,50 @@ export function yarnWeightFactor(
     if (upper.includes(key.toUpperCase())) return value;
   }
   return factors.default_factor;
+}
+
+export function yarnWeightFactorFromDescription(
+  description: string,
+  factors: YarnWeightFactorsFile = loadYarnWeightFactors()
+) {
+  const upper = description.trim().toUpperCase();
+  for (const [key, value] of Object.entries(factors.types)) {
+    if (upper.includes(key.toUpperCase())) return value;
+  }
+  return factors.default_factor;
+}
+
+export function parseCabosForWeightShare(guide: number, description: string) {
+  if (guide === 1 || guide === 2) return 1;
+  const text = description.trim();
+  const numeric = text.match(/(\d+)\s+CABOS?\w*/i);
+  if (numeric) {
+    const value = Number(numeric[1]);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }
+  if (/\bTRES\s+CABOS?\b/i.test(text)) return 3;
+  if (/\bDOIS\s+CABOS?\b/i.test(text)) return 2;
+  return 1;
+}
+
+export function fabricGuideWeightShare(
+  guide: { guide: number; pct?: number; description: string },
+  factors: YarnWeightFactorsFile = loadYarnWeightFactors()
+) {
+  const pct = guide.pct ?? 0;
+  if (pct <= 0) return 0;
+  const cabos = parseCabosForWeightShare(guide.guide, guide.description);
+  const factor = yarnWeightFactorFromDescription(guide.description, factors);
+  return pct * cabos * factor;
+}
+
+export function fabricWeightShareSum(
+  guides: { guide: number; pct?: number; description: string }[],
+  isFixedWasteGuide: (guide: number) => boolean
+) {
+  return guides
+    .filter((guide) => !isFixedWasteGuide(guide.guide))
+    .reduce((sum, guide) => sum + fabricGuideWeightShare(guide), 0);
 }
 
 export function splitComponentWeightShares(

@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-06-10",
-  "note": "Peso relativo por cabo (cabos × fator). Ajuste conforme medição na balança.",
+  "updated_at": "2026-06-17",
+  "note": "Peso relativo por cabo: peso ∝ % simx × cabos × fator. ELASTANO: 1 cabo elast × 1 cabo linha (simx igual) = 8% / 92% peso.",
   "default_factor": 1,
   "types": {
     "CAPRICE": 2.5,
     "LINHA": 1,
-    "ELASTANO": 1.2,
+    "ELASTANO": 0.08695652173913043,
     "LASTEX": 1
   }
 }

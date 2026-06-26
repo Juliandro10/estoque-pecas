@@ -41,7 +41,7 @@ function withdrawalLines(rows: Movement[], shift?: Shift) {
   const filtered = shift ? rows.filter((r) => r.shift === shift) : rows;
   return filtered.map(
     (w) =>
-      `${formatDate(w.created_at)} | ${(w.part_code ?? '').padEnd(10)} | ${String(w.quantity).padStart(3)} | ${w.shift ? SHIFT_LABELS[w.shift].padEnd(5) : '—    '} | ${(w.withdrawn_by ?? '—').padEnd(16)} | ${(w.requested_by ?? '—').padEnd(16)} | ${w.notes ?? '—'}`
+      `${formatDate(w.created_at)} | ${(w.part_code ?? '').padEnd(10)} | ${String(w.quantity).padStart(3)} | ${String(w.machine ?? '—').padStart(3)} | ${w.shift ? SHIFT_LABELS[w.shift].padEnd(5) : '—    '} | ${(w.withdrawn_by ?? '—').padEnd(16)} | ${(w.requested_by ?? '—').padEnd(16)} | ${w.notes ?? '—'}`
   );
 }
 
@@ -156,11 +156,12 @@ export function exportWithdrawalsPdf(report: StockReport, shift?: Shift) {
 
   autoTable(doc, {
     startY: 32,
-    head: [['Data', 'Peça', 'Qtd', 'Turno', 'Retirou', 'Solicitou', 'Obs']],
+    head: [['Data', 'Peça', 'Qtd', 'Máq.', 'Turno', 'Retirou', 'Solicitou', 'Obs']],
     body: rows.map((w) => [
       formatDate(w.created_at),
       `${w.part_code} — ${w.part_name}`,
       String(w.quantity),
+      w.machine != null ? String(w.machine) : '—',
       w.shift ? SHIFT_LABELS[w.shift] : '—',
       w.withdrawn_by ?? '—',
       w.requested_by ?? '—',
@@ -168,7 +169,7 @@ export function exportWithdrawalsPdf(report: StockReport, shift?: Shift) {
     ]),
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [18, 28, 46] },
-    columnStyles: { 6: { cellWidth: 50 } },
+    columnStyles: { 7: { cellWidth: 50 } },
   });
 
   const suffix = shift ?? 'todos';

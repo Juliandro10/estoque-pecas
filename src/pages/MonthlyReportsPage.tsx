@@ -7,6 +7,7 @@ import {
   exportReplenishmentPdf,
   exportReplenishmentTxt,
 } from '../lib/monthly-report-export';
+import { needleQty, peakNeedleMachine, sortedByMachineNeedles, withdrawalsMissingMachine } from '../lib/machine-report';
 import type { MonthlyReport } from '../types';
 import { SHIFT_LABELS } from '../types';
 
@@ -57,6 +58,9 @@ export function MonthlyReportsPage() {
   if (loading || !report) return <div className="loader">Carregando relatório mensal…</div>;
 
   const peak = report.peak_shift ? SHIFT_LABELS[report.peak_shift] : '—';
+  const byMachine = sortedByMachineNeedles(report.by_machine ?? []);
+  const peakMachine = peakNeedleMachine(byMachine);
+  const missingMachine = withdrawalsMissingMachine(report);
 
   return (
     <div>
@@ -80,6 +84,9 @@ export function MonthlyReportsPage() {
       <div className="report-meta">
         {report.period_label} · {report.total_withdrawn} peças saíram · {report.total_records}{' '}
         retiradas · turno com mais saídas: <strong>{peak}</strong>
+        {peakMachine ? (
+          <> · máquina com mais agulhas: <strong>Máq. {peakMachine.machine} ({peakMachine.qty})</strong></>
+        ) : null}
       </div>
 
       <section className="report-section">
@@ -140,6 +147,53 @@ export function MonthlyReportsPage() {
             Análise PDF
           </button>
         </div>
+
+        <div className="card table-wrap" style={{ marginBottom: 16 }}>
+          <table>
+            <thead>
+              <tr>
+                <th colSpan={5}>Por máquina</th>
+              </tr>
+              <tr>
+                <th>Máquina</th>
+                <th>Agulhas</th>
+                <th>Total peças</th>
+                <th>Retiradas</th>
+                <th>Principais peças</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byMachine.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="empty">
+                    Nenhuma retirada com máquina informada neste mês.
+                  </td>
+                </tr>
+              ) : (
+                byMachine.map((m) => (
+                  <tr key={m.machine}>
+                    <td>Máq. {m.machine}</td>
+                    <td>{needleQty(m) || '—'}</td>
+                    <td>{m.total_qty}</td>
+                    <td>{m.records}</td>
+                    <td>
+                      {m.parts
+                        .slice(0, 3)
+                        .map((p) => `${p.part_code} (${p.total_qty})`)
+                        .join(' · ') || '—'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {missingMachine > 0 ? (
+          <p className="section-desc">
+            {missingMachine} retirada(s) sem máquina — não entram no ranking acima.
+          </p>
+        ) : null}
 
         <div className="card table-wrap" style={{ marginBottom: 16 }}>
           <table>

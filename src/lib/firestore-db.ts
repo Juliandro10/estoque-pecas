@@ -21,6 +21,7 @@ import type {
   Shift,
   StockReport,
 } from '../types';
+import { isValidMachine } from '../types';
 import { CATALOG_PARTS } from '../data/catalogo-seed';
 
 const partsCol = collection(db, 'parts');
@@ -62,6 +63,7 @@ function mapWithdrawal(id: string, data: Record<string, unknown>): Movement {
     shift: (data.shift as Shift) ?? null,
     withdrawn_by: (data.withdrawn_by as string) ?? null,
     requested_by: (data.requested_by as string) ?? null,
+    machine: typeof data.machine === 'number' ? data.machine : null,
     notes: (data.notes as string) ?? null,
     created_at: data.created_at instanceof Timestamp
       ? data.created_at.toDate().toISOString()
@@ -135,6 +137,7 @@ export const firestoreDb = {
       quantity: number;
       shift: Shift;
       withdrawn_by: string;
+      machine: number;
       requested_by?: string;
       notes?: string;
     }
@@ -142,6 +145,7 @@ export const firestoreDb = {
     const qty = Number(input.quantity);
     if (!qty || qty <= 0) throw new Error('Informe a quantidade retirada.');
     if (!input.withdrawn_by?.trim()) throw new Error('Informe quem retirou.');
+    if (!isValidMachine(input.machine)) throw new Error('Informe a máquina (1 a 15).');
 
     const partRef = doc(partsCol, id);
     const withdrawalRef = doc(withdrawalsCol);
@@ -165,6 +169,7 @@ export const firestoreDb = {
         shift: input.shift,
         withdrawn_by: input.withdrawn_by.trim(),
         requested_by: input.requested_by?.trim() || null,
+        machine: input.machine,
         notes: input.notes?.trim() || null,
         created_at: serverTimestamp(),
       });
@@ -193,6 +198,7 @@ export const firestoreDb = {
       quantity: number;
       shift: Shift;
       withdrawn_by: string;
+      machine: number;
       requested_by?: string;
       notes?: string;
     }
@@ -200,6 +206,7 @@ export const firestoreDb = {
     const qty = Number(input.quantity);
     if (!qty || qty <= 0) throw new Error('Informe a quantidade retirada.');
     if (!input.withdrawn_by?.trim()) throw new Error('Informe quem retirou.');
+    if (!isValidMachine(input.machine)) throw new Error('Informe a máquina (1 a 15).');
 
     const withdrawalRef = doc(withdrawalsCol, id);
 
@@ -222,6 +229,7 @@ export const firestoreDb = {
         shift: input.shift,
         withdrawn_by: input.withdrawn_by.trim(),
         requested_by: input.requested_by?.trim() || null,
+        machine: input.machine,
         notes: input.notes?.trim() || null,
       });
 
@@ -302,6 +310,7 @@ export const firestoreDb = {
     const byShiftMap = new Map<Shift, MonthlyReport['by_shift'][0]>();
     const byWithdrawnMap = new Map<string, MonthlyReport['by_withdrawn_by'][0]>();
     const byRequestedMap = new Map<string, MonthlyReport['by_requested_by'][0]>();
+    const byMachineMap = new Map<number, MonthlyReport['by_machine'][0]>();
 
     let totalWithdrawn = 0;
 
@@ -367,6 +376,24 @@ export const firestoreDb = {
       rq.total_qty += w.quantity;
       rq.records += 1;
       rq.by_shift[shift] += w.quantity;
+
+      if (w.machine != null) {
+        if (!byMachineMap.has(w.machine)) {
+          byMachineMap.set(w.machine, { machine: w.machine, total_qty: 0, records: 0, parts: [] });
+        }
+        const machineRow = byMachineMap.get(w.machine)!;
+        machineRow.total_qty += w.quantity;
+        machineRow.records += 1;
+        const existingMachinePart = machineRow.parts.find((p) => p.part_code === w.part_code);
+        if (existingMachinePart) existingMachinePart.total_qty += w.quantity;
+        else {
+          machineRow.parts.push({
+            part_code: w.part_code ?? '',
+            part_name: w.part_name ?? '',
+            total_qty: w.quantity,
+          });
+        }
+      }
     }
 
     const by_part = [...byPartMap.values()].sort(
@@ -392,6 +419,13 @@ export const firestoreDb = {
     const mapEmployees = (map: Map<string, MonthlyReport['by_withdrawn_by'][0]>) =>
       [...map.values()].sort((a, b) => b.total_qty - a.total_qty);
 
+    const by_machine = [...byMachineMap.values()]
+      .sort((a, b) => a.machine - b.machine)
+      .map((row) => ({
+        ...row,
+        parts: [...row.parts].sort((a, b) => b.total_qty - a.total_qty),
+      }));
+
     const [year, month] = monthKeyStr.split('-').map(Number);
     const MONTH_NAMES = [
       'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -409,6 +443,7 @@ export const firestoreDb = {
       by_shift,
       by_withdrawn_by: mapEmployees(byWithdrawnMap),
       by_requested_by: mapEmployees(byRequestedMap),
+      by_machine,
       details: withdrawals,
     };
   },
