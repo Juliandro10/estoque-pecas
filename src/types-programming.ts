@@ -113,6 +113,8 @@ export type ProgramEntry = {
   value: number;
   month: string;
   work_type: WorkType;
+  paid: boolean;
+  paid_at: string | null;
   created_at: string;
 };
 
@@ -122,6 +124,8 @@ export type ProgramWeekGroup = {
   end: string;
   entries: ProgramEntry[];
   subtotal: number;
+  paid_subtotal: number;
+  all_paid: boolean;
 };
 
 export type ProgramMonthlyReport = {
@@ -132,6 +136,10 @@ export type ProgramMonthlyReport = {
   weeks: ProgramWeekGroup[];
   total_programs: number;
   total_value: number;
+  paid_programs: number;
+  paid_value: number;
+  pending_programs: number;
+  pending_value: number;
 };
 
 export type CadastroPart = {

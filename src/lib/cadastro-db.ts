@@ -382,6 +382,57 @@ export function mergeSavedPartsWithFolder(saved: CadastroPart[], folder: FolderP
   return { parts, updated };
 }
 
+/** Remove linhas de peso cujo .mdv não existe mais na pasta do programa. */
+export function prunePartsToFolder(parts: CadastroPart[], folder: FolderPartRow[]) {
+  if (folder.length === 0) return { parts, removed: [] as string[] };
+
+  const validFiles = new Set(folder.map((part) => part.file_name.toLowerCase()));
+  const kept: CadastroPart[] = [];
+  const removed: string[] = [];
+
+  for (const part of parts) {
+    const file = part.file_name?.trim().toLowerCase() ?? '';
+    if (file && validFiles.has(file)) {
+      kept.push(part);
+      continue;
+    }
+    removed.push(part.label?.trim() || part.file_name || part.key);
+  }
+
+  return { parts: kept, removed };
+}
+
+/** Sincroniza cadastro salvo com a pasta e descarta partes fantasma. */
+export function syncSavedPartsWithFolder(saved: CadastroPart[], folder: FolderPartRow[]) {
+  const merged = mergeSavedPartsWithFolder(saved, folder);
+  const pruned = prunePartsToFolder(merged.parts, folder);
+  return {
+    parts: pruned.parts,
+    updated: merged.updated || pruned.removed.length > 0,
+    removed: pruned.removed,
+  };
+}
+
+/** Remove fios de partes cujo .mdv não está na pasta. */
+export function pruneYarnPartsToFolder(yarnParts: CadastroYarnPart[], folder: FolderPartRow[]) {
+  if (folder.length === 0) return { yarnParts, removed: [] as string[] };
+
+  const validFiles = new Set(folder.map((part) => part.file_name.toLowerCase()));
+  const kept: CadastroYarnPart[] = [];
+  const removed: string[] = [];
+
+  for (const yarnPart of yarnParts) {
+    const file = yarnPart.file_name?.trim().toLowerCase() ?? '';
+    if (file && validFiles.has(file)) {
+      kept.push(yarnPart);
+      continue;
+    }
+    removed.push(yarnPart.label?.trim() || yarnPart.file_name || yarnPart.key);
+  }
+
+  return { yarnParts: kept, removed };
+}
+
 function partLabelSuffixCompatible(partLabel: string, yarnLabel: string) {
   const a = partLabel.trim().toUpperCase();
   const b = yarnLabel.trim().toUpperCase();
@@ -448,12 +499,17 @@ function totalWeightForYarnPart(
 /** Garante linha de peso para cada .sin/.simx lido (ex.: manga no cadastro incompleto). */
 export function ensurePartsForYarnParts(
   parts: CadastroPart[],
-  yarnParts: CadastroYarnPart[]
-): CadastroPart[] {
+  yarnParts: CadastroYarnPart[],
+  allowedFiles?: ReadonlySet<string>
+) {
   const result = [...parts];
   for (const yarnPart of yarnParts) {
     const matched = programPartsOnly(result).some((part) => partMatchesYarnPart(part, yarnPart));
     if (matched || !yarnPart.file_name) continue;
+
+    const fileKey = yarnPart.file_name.trim().toLowerCase();
+    if (allowedFiles && allowedFiles.size > 0 && !allowedFiles.has(fileKey)) continue;
+
     result.push({
       key: yarnPart.key || yarnPart.label.toUpperCase(),
       label: yarnPart.label,

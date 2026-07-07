@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { findYarnTypeIndex } from '../shared/syntech-name-match';
+import { findYarnTypeIndex, repairSyntechText } from '../shared/syntech-name-match';
 
 import { attachSyntechDb, detachDb, queryDb } from './syntech-db';
 
@@ -41,7 +41,15 @@ export function readSyntechYarnCatalog(filePath = syntechYarnCatalogPath): Synte
   if (!fs.existsSync(filePath)) {
     return { updated_at: '', source: '', types: [] };
   }
-  return JSON.parse(fs.readFileSync(filePath, 'utf8')) as SyntechYarnCatalogFile;
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as SyntechYarnCatalogFile;
+  return {
+    ...raw,
+    types: raw.types.map((item) => ({
+      ...item,
+      tipo: repairSyntechText(item.tipo),
+      cores: item.cores.map((cor) => repairSyntechText(cor)),
+    })),
+  };
 }
 
 export function writeSyntechYarnCatalog(catalog: SyntechYarnCatalogFile, filePath = syntechYarnCatalogPath) {
@@ -60,7 +68,7 @@ export async function syncSyntechYarnCatalogFromDb(): Promise<SyntechYarnCatalog
 
     const catalogTypes: SyntechYarnType[] = types.map((row) => ({
       codigo: row.CODIGO,
-      tipo: row.NOME.trim(),
+      tipo: repairSyntechText(row.NOME.trim()),
       cores: [],
     }));
 
@@ -87,7 +95,7 @@ export async function syncSyntechYarnCatalogFromDb(): Promise<SyntechYarnCatalog
 
     for (const row of colorRows) {
       const item = byCodigo.get(row.TIPO_FIO);
-      if (item) mergeColor(item.cores, row.COR);
+      if (item) mergeColor(item.cores, repairSyntechText(row.COR));
     }
 
     const guiaRows = await queryDb<{ TIPO: string; COR: string }>(
@@ -106,9 +114,9 @@ export async function syncSyntechYarnCatalogFromDb(): Promise<SyntechYarnCatalog
     );
 
     for (const row of guiaRows) {
-      const index = findTypeIndex(catalogTypes, row.TIPO);
+      const index = findTypeIndex(catalogTypes, repairSyntechText(row.TIPO));
       if (index < 0) continue;
-      mergeColor(catalogTypes[index].cores, row.COR);
+      mergeColor(catalogTypes[index].cores, repairSyntechText(row.COR));
     }
 
     for (const item of catalogTypes) {

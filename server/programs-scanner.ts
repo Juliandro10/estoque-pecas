@@ -29,6 +29,7 @@ import { readM1TimeForPart, readM1TimesForModel } from './stoll-time';
 import { pushCadastroToSyntech, testSyntechConnection } from './syntech-push';
 import { buildCadastroPdfBuffer, cadastroPdfFileName } from '../shared/cadastro-pdf';
 import { DADOS_PROGRAMA_DIR } from './sintral-capture';
+import { openLocalFile } from './open-local-file';
 import {
   readSyntechYarnCatalog,
   syncSyntechYarnCatalogFromDb,
@@ -806,8 +807,9 @@ app.post('/api/programs/cadastro-pdf', async (req, res) => {
       updated_at: String(cadastro.updated_at ?? new Date().toISOString()),
     });
     fs.writeFileSync(filePath, pdf);
+    openLocalFile(filePath);
 
-    res.json({ ok: true, path: filePath, file_name: fileName });
+    res.json({ ok: true, path: filePath, file_name: fileName, opened: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao gerar PDF.' });
   }

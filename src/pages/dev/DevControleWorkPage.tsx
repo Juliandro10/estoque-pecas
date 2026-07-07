@@ -60,6 +60,9 @@ export function DevControleWorkPage({ workType }: Props) {
 
   const options = useMemo(() => monthOptions(), []);
   const total = rows.reduce((sum, r) => sum + r.value, 0);
+  const paidTotal = rows.filter((r) => r.paid).reduce((sum, r) => sum + r.value, 0);
+  const pendingTotal = total - paidTotal;
+  const paidCount = rows.filter((r) => r.paid).length;
   const localMode = isLocalScannerAvailable();
 
   const load = useCallback(async () => {
@@ -136,6 +139,15 @@ export function DevControleWorkPage({ workType }: Props) {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao apagar.');
+    }
+  }
+
+  async function togglePaid(row: ProgramEntry) {
+    try {
+      await programmingDb.setPaid(row.id, !row.paid);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar pagamento.');
     }
   }
 
@@ -252,18 +264,31 @@ export function DevControleWorkPage({ workType }: Props) {
                 <th>Data início</th>
                 <th>Data término</th>
                 {isExtra ? <th>Valor</th> : null}
+                {isExtra ? <th>Pago</th> : null}
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className={row.paid ? 'row-paid' : undefined}>
                   <td className="mono">{row.reference}</td>
                   <td>{row.name}</td>
                   <td>{formatJobKindLabel(row.job_kind, row.job_kind_note)}</td>
                   <td>{formatBr(row.start_date)}</td>
                   <td>{formatBr(row.end_date)}</td>
                   {isExtra ? <td>{formatMoney(row.value)}</td> : null}
+                  {isExtra ? (
+                    <td className="paid-cell">
+                      <label className="paid-check" title={row.paid ? 'Marcado como pago' : 'Marcar como pago'}>
+                        <input
+                          type="checkbox"
+                          checked={row.paid}
+                          onChange={() => void togglePaid(row)}
+                        />
+                        <span>{row.paid ? 'Sim' : '—'}</span>
+                      </label>
+                    </td>
+                  ) : null}
                   <td>
                     <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove(row)}>
                       Apagar
@@ -278,9 +303,22 @@ export function DevControleWorkPage({ workType }: Props) {
                   <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700 }}>
                     Total ({rows.length} programas)
                   </td>
-                  <td colSpan={2} style={{ fontWeight: 700 }}>
-                    {formatMoney(total)}
+                  <td style={{ fontWeight: 700 }}>{formatMoney(total)}</td>
+                  <td colSpan={2}></td>
+                </tr>
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--danger, #dc2626)' }}>
+                    Pago ({paidCount})
                   </td>
+                  <td style={{ fontWeight: 700, color: 'var(--danger, #dc2626)' }}>{formatMoney(paidTotal)}</td>
+                  <td colSpan={2}></td>
+                </tr>
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700 }}>
+                    A pagar ({rows.length - paidCount})
+                  </td>
+                  <td style={{ fontWeight: 700 }}>{formatMoney(pendingTotal)}</td>
+                  <td colSpan={2}></td>
                 </tr>
               </tfoot>
             ) : (
@@ -314,6 +352,19 @@ export function DevControleWorkPage({ workType }: Props) {
           font-size: 14px;
         }
         tfoot td { border-bottom: none; }
+        .row-paid td { opacity: 0.72; }
+        .row-paid .paid-cell { opacity: 1; }
+        .paid-cell { white-space: nowrap; }
+        .paid-check {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          font-size: 13px;
+          color: var(--muted);
+        }
+        .paid-check input { width: auto; cursor: pointer; }
+        .row-paid .paid-check span { color: var(--danger, #dc2626); font-weight: 600; }
       `}</style>
     </div>
   );

@@ -24,8 +24,13 @@ const AMBIGUOUS_COLOR_TOKENS = new Set([
   'WHITE',
 ]);
 
+/** Caractere � (U+FFFD) aparece quando o Firebird devolve Latin-1 lido como UTF-8. */
+export function repairSyntechText(value: string): string {
+  return value.replace(/\uFFFD/g, '');
+}
+
 export function normalizeSyntechName(value: string): string {
-  return value
+  return repairSyntechText(value)
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toUpperCase()

@@ -8,6 +8,7 @@ import {
   serverTimestamp,
   setDoc,
   Timestamp,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 
@@ -44,6 +45,13 @@ function mapProgram(id: string, data: Record<string, unknown>): ProgramEntry {
     value: Number(data.value ?? (workType === 'extra' ? PROGRAM_VALUE : 0)),
     month: String(data.month ?? ''),
     work_type: workType,
+    paid: data.paid === true,
+    paid_at:
+      data.paid_at instanceof Timestamp
+        ? data.paid_at.toDate().toISOString()
+        : data.paid === true
+          ? String(data.paid_at ?? '')
+          : null,
     created_at: data.created_at instanceof Timestamp
       ? data.created_at.toDate().toISOString()
       : String(data.created_at ?? new Date().toISOString()),
@@ -99,11 +107,18 @@ function groupByWeek(entries: ProgramEntry[]): ProgramWeekGroup[] {
         end: we.toISOString().slice(0, 10),
         entries: [],
         subtotal: 0,
+        paid_subtotal: 0,
+        all_paid: false,
       });
     }
     const group = groups.get(key)!;
     group.entries.push(entry);
     group.subtotal += entry.value;
+    if (entry.paid) group.paid_subtotal += entry.value;
+  }
+
+  for (const group of groups.values()) {
+    group.all_paid = group.entries.length > 0 && group.entries.every((entry) => entry.paid);
   }
 
   return [...groups.values()].sort((a, b) => a.start.localeCompare(b.start));
@@ -179,6 +194,8 @@ export const programmingDb = {
       value,
       month,
       work_type: workType,
+      paid: false,
+      paid_at: null,
       created_at: serverTimestamp(),
     });
 
@@ -190,10 +207,20 @@ export const programmingDb = {
     await deleteDoc(doc(programsCol, id));
   },
 
+  setPaid: async (id: string, paid: boolean) => {
+    await updateDoc(doc(programsCol, id), {
+      paid,
+      paid_at: paid ? serverTimestamp() : null,
+    });
+  },
+
   getMonthlyReport: async (month: string, workType: WorkType): Promise<ProgramMonthlyReport> => {
     const entries = await programmingDb.listByMonth(month, workType);
     const weeks = groupByWeek(entries);
     const [year, mon] = month.split('-').map(Number);
+    const paidEntries = entries.filter((entry) => entry.paid);
+    const paid_value = paidEntries.reduce((sum, entry) => sum + entry.value, 0);
+    const total_value = entries.reduce((sum, entry) => sum + entry.value, 0);
 
     return {
       month,
@@ -202,7 +229,11 @@ export const programmingDb = {
       work_type: workType,
       weeks,
       total_programs: entries.length,
-      total_value: entries.reduce((sum, e) => sum + e.value, 0),
+      total_value,
+      paid_programs: paidEntries.length,
+      paid_value,
+      pending_programs: entries.length - paidEntries.length,
+      pending_value: total_value - paid_value,
     };
   },
 };

@@ -3,7 +3,7 @@ import './setup-firebird-client';
 import Firebird from 'node-firebird';
 
 export const SYNTech_FB_CONFIG = {
-  host: process.env.SYNTECH_FB_HOST ?? '192.168.1.69',
+  host: process.env.SYNTECH_FB_HOST ?? 'RENATA',
   port: Number(process.env.SYNTECH_FB_PORT ?? 3050),
   database: process.env.SYNTECH_FB_DATABASE ?? 'C:\\Textil\\Empresas\\FABRICA.MDB',
   user: process.env.SYNTECH_FB_USER ?? 'SYSDBA',

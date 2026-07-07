@@ -20,5 +20,6 @@ export function exportCadastroPdf(cadastro: ModelCadastro) {
   link.href = url;
   link.download = cadastroPdfFileName(cadastro.reference);
   link.click();
-  URL.revokeObjectURL(url);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

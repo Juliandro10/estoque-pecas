@@ -10,7 +10,9 @@ import {
   formatConsumptionInput,
   formatPct,
   mergeYarnPartsFromSin,
-  mergeSavedPartsWithFolder,
+  prunePartsToFolder,
+  pruneYarnPartsToFolder,
+  syncSavedPartsWithFolder,
   parseTimeInput,
   partKindToken,
   programPartsOnly,
@@ -150,13 +152,24 @@ export function DesenvCadastroPage() {
   const [scannerOk, setScannerOk] = useState<boolean | null>(null);
   const [scannerOutdated, setScannerOutdated] = useState(false);
   const [modelFolder, setModelFolder] = useState('');
+  const [folderParts, setFolderParts] = useState<Pick<CadastroPart, 'key' | 'label' | 'file_name'>[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
 
   const localMode = isLocalScannerAvailable();
 
+  const folderFileNames = useMemo(
+    () => new Set(folderParts.map((part) => part.file_name.toLowerCase())),
+    [folderParts]
+  );
+
   const partsForYarn = useMemo(
-    () => ensurePartsForYarnParts(parts, yarnParts),
-    [parts, yarnParts]
+    () =>
+      ensurePartsForYarnParts(
+        parts,
+        yarnParts,
+        folderFileNames.size > 0 ? folderFileNames : undefined
+      ),
+    [parts, yarnParts, folderFileNames]
   );
 
   const yarnPartsComputed = useMemo(
@@ -256,7 +269,11 @@ export function DesenvCadastroPage() {
       .catch(() => setYarnCatalog(null));
   }, [localMode, scannerOk, syntechFiosSupported]);
 
-  async function refreshYarnParts(ref: string, saved: CadastroYarnPart[] = []) {
+  async function refreshYarnParts(
+    ref: string,
+    saved: CadastroYarnPart[] = [],
+    folder: Pick<CadastroPart, 'key' | 'label' | 'file_name'>[] = folderParts
+  ) {
     if (!localMode || !scannerOk) {
       return { yarnParts: saved, message: null as string | null, machineLabel: null as string | null };
     }
@@ -264,21 +281,34 @@ export function DesenvCadastroPage() {
     setReadingYarns(true);
     try {
       const yarns = await localProgramsApi.sintralYarns(ref, fullSearch);
-      const merged = mergeYarnPartsFromSin(yarns.parts, saved);
+      let yarnParts = mergeYarnPartsFromSin(yarns.parts, saved);
+      let removedNote: string | null = null;
+      if (folder.length > 0) {
+        const pruned = pruneYarnPartsToFolder(yarnParts, folder);
+        yarnParts = pruned.yarnParts;
+        if (pruned.removed.length > 0) {
+          removedNote = `fios removidos (parte fora da pasta): ${pruned.removed.join(', ')}`;
+        }
+      }
       const message =
-        yarns.filled > 0
-          ? `${yarns.filled} de ${yarns.total} partes com fio no .sin`
-          : yarns.total > 0
-            ? 'Nenhum .sin com guias ainda — rode o cheque Sintral.'
-            : null;
+        [
+          yarns.filled > 0
+            ? `${yarns.filled} de ${yarns.total} partes com fio no .sin`
+            : yarns.total > 0
+              ? 'Nenhum .sin com guias ainda — rode o cheque Sintral.'
+              : null,
+          removedNote,
+        ]
+          .filter(Boolean)
+          .join(' · ') || null;
       return {
-        yarnParts: merged,
+        yarnParts,
         message,
         machineLabel: yarns.machine?.label ?? null,
       };
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao ler fios do .sin.');
-      return { yarnParts: saved, message: null, machineLabel: null };
+      return { yarnParts: [], message: null, machineLabel: null };
     } finally {
       setReadingYarns(false);
     }
@@ -316,6 +346,7 @@ export function DesenvCadastroPage() {
     setInfo('');
     setMachineLabel('');
     setModelFolder('');
+    setFolderParts([]);
     try {
       const saved = await cadastroDb.get(ref);
       if (saved) {
@@ -326,24 +357,29 @@ export function DesenvCadastroPage() {
         if (localMode && scannerOk) {
           const found = await localProgramsApi.lookup(ref, fullSearch, true, false);
           if (found.folder_path) setModelFolder(found.folder_path);
-          const folderParts =
+          const folderPartsRows =
             found?.parts?.map((p) => ({
               key: p.key,
               label: p.label,
               file_name: p.file_name,
             })) ?? [];
-          const merged = mergeSavedPartsWithFolder(savedParts, folderParts);
-          savedParts = merged.parts;
+          setFolderParts(folderPartsRows);
+          const synced = syncSavedPartsWithFolder(savedParts, folderPartsRows);
+          savedParts = synced.parts;
 
           const [timesResult, yarnsResult] = await Promise.all([
             refreshSintralTimes(ref, savedParts),
-            refreshYarnParts(ref, saved.yarn_parts ?? []),
+            refreshYarnParts(ref, [], folderPartsRows),
           ]);
           setParts(timesResult.parts);
           setYarnParts(yarnsResult.yarnParts);
           setMachineLabel(yarnsResult.machineLabel ?? '');
           const bits = [
-            merged.updated ? 'Arquivos sincronizados com a pasta' : null,
+            synced.updated && synced.removed.length > 0
+              ? `Partes removidas (não estão na pasta): ${synced.removed.join(', ')}`
+              : synced.updated
+                ? 'Arquivos sincronizados com a pasta'
+                : null,
             timesResult.message,
             yarnsResult.message,
           ].filter(Boolean);
@@ -363,6 +399,13 @@ export function DesenvCadastroPage() {
 
       const found = await localProgramsApi.lookup(ref, fullSearch, true, true);
       if (found.folder_path) setModelFolder(found.folder_path);
+      const folderPartsRows =
+        found.parts?.map((p) => ({
+          key: p.key,
+          label: p.label,
+          file_name: p.file_name,
+        })) ?? [];
+      setFolderParts(folderPartsRows);
       if (!found.parts) {
         setError('Scanner antigo ainda ativo. Feche todas as janelas do Iniciar.bat e abra de novo.');
         return;
@@ -379,7 +422,7 @@ export function DesenvCadastroPage() {
       setName(found.name);
       setMachineLabel(found.machine?.label ?? '');
 
-      const yarnsResult = await refreshYarnParts(ref);
+      const yarnsResult = await refreshYarnParts(ref, [], folderPartsRows);
       setYarnParts(yarnsResult.yarnParts);
       if (yarnsResult.machineLabel) setMachineLabel(yarnsResult.machineLabel);
 
@@ -479,7 +522,7 @@ export function DesenvCadastroPage() {
     }
 
     setError('');
-    const result = await refreshYarnParts(ref, yarnParts);
+    const result = await refreshYarnParts(ref, [], folderParts);
     setYarnParts(result.yarnParts);
     if (result.machineLabel) setMachineLabel(result.machineLabel);
     if (result.message) setInfo(result.message);
@@ -517,11 +560,17 @@ export function DesenvCadastroPage() {
     setSaving(true);
     setError('');
     try {
+      let partsToSave = programPartsOnly(parts);
+      let yarnToSave = yarnPartsComputed;
+      if (folderParts.length > 0) {
+        partsToSave = prunePartsToFolder(partsToSave, folderParts).parts;
+        yarnToSave = pruneYarnPartsToFolder(yarnToSave, folderParts).yarnParts;
+      }
       const saved = await cadastroDb.save({
         reference: ref,
         name: name.trim(),
-        parts: programPartsOnly(parts),
-        yarn_parts: yarnPartsComputed,
+        parts: partsToSave,
+        yarn_parts: yarnToSave,
         observations: observations,
       });
       setInfo(`Cadastro ${saved.reference} salvo.`);
@@ -663,7 +712,7 @@ export function DesenvCadastroPage() {
         model_folder: folder,
         cadastro,
       });
-      setInfo(`PDF salvo em dados do programa/${result.file_name}`);
+      setInfo(`PDF salvo em dados do programa/${result.file_name} e aberto.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar PDF na pasta do programa.');
       exportCadastroPdf(cadastro);
