@@ -214,6 +214,20 @@ export const programmingDb = {
     });
   },
 
+  updateDates: async (id: string, startDate: string, endDate: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      throw new Error('Data inválida.');
+    }
+    if (endDate < startDate) {
+      throw new Error('Data de término não pode ser anterior à de início.');
+    }
+    await updateDoc(doc(programsCol, id), {
+      start_date: startDate,
+      end_date: endDate,
+      month: monthKeyFromDate(startDate),
+    });
+  },
+
   getMonthlyReport: async (month: string, workType: WorkType): Promise<ProgramMonthlyReport> => {
     const entries = await programmingDb.listByMonth(month, workType);
     const weeks = groupByWeek(entries);

@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-07T02:37:10.700Z",
+  "updated_at": "2026-07-27T14:15:36.188Z",
   "source": "C:\\Textil\\Empresas\\FABRICA.MDB",
   "types": [
     {
@@ -372,6 +372,7 @@
         "BEIGE (AREIA K.)",
         "BLUE SKY",
         "BRANCO",
+        "BRANCOI",
         "CAMELO",
         "CANARIO",
         "CAVALINHA",
@@ -398,6 +399,7 @@
         "MARINHO",
         "MARROM CAF",
         "MARRON",
+        "MARRONI",
         "MARSALA",
         "MESCLA CHUMBO",
         "MINT",
@@ -687,6 +689,7 @@
         "ROSA PRATA",
         "ROYAL INTENSO",
         "SHOK",
+        "SNOW",
         "VERDE ACIDO",
         "VERDE BEACH",
         "VERDE COPA",
@@ -1620,6 +1623,7 @@
         "COURO",
         "DESCAFEINADO",
         "ESCARLATE",
+        "FRAPUCINO",
         "FUCSIA",
         "FUM",
         "FUME",
@@ -1656,12 +1660,14 @@
         "SACHET PINK",
         "SCARLATE",
         "SODALITO",
+        "SODALITO AZULI",
         "SONHO",
         "TABACO",
         "TINTA PRETA",
         "TOFFE",
         "TULLE",
         "TURMALINA",
+        "VARIADOS",
         "VERDE CH",
         "VERDE CHA",
         "VERDE COLONIA",
@@ -1706,7 +1712,8 @@
         "NAVAL",
         "PAPIRO",
         "PRETO",
-        "RED"
+        "RED",
+        "RUSTICO"
       ]
     },
     {
@@ -1718,6 +1725,7 @@
         "BRANCO",
         "CAF",
         "CAFE",
+        "COFFEE",
         "DUNAS",
         "FERRUGEM",
         "FERRUGINOSO",
@@ -1866,6 +1874,7 @@
       "codigo": 65,
       "tipo": "SIENA",
       "cores": [
+        "AZUL MARINHO",
         "BEGE CLARO",
         "BEGE ESCURO",
         "BEGE MDIO",

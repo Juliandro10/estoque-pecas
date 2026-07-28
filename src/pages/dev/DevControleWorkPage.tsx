@@ -151,6 +151,22 @@ export function DevControleWorkPage({ workType }: Props) {
     }
   }
 
+  async function saveDates(row: ProgramEntry, startDate: string, endDate: string) {
+    if (startDate === row.start_date && endDate === row.end_date) return;
+    try {
+      await programmingDb.updateDates(row.id, startDate, endDate);
+      setError('');
+      const nextMonth = startDate.slice(0, 7);
+      if (nextMonth !== month) {
+        setInfo(`${row.reference} movido para ${formatMonthOption(nextMonth)}.`);
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar data.');
+      await load();
+    }
+  }
+
   async function exportReport() {
     try {
       const report: ProgramMonthlyReport = await programmingDb.getMonthlyReport(month, workType);
@@ -274,8 +290,34 @@ export function DevControleWorkPage({ workType }: Props) {
                   <td className="mono">{row.reference}</td>
                   <td>{row.name}</td>
                   <td>{formatJobKindLabel(row.job_kind, row.job_kind_note)}</td>
-                  <td>{formatBr(row.start_date)}</td>
-                  <td>{formatBr(row.end_date)}</td>
+                  <td>
+                    <input
+                      type="date"
+                      className="date-edit"
+                      value={row.start_date}
+                      title="Data início"
+                      onChange={(e) => {
+                        const nextStart = e.target.value;
+                        if (!nextStart) return;
+                        const nextEnd = row.end_date < nextStart ? nextStart : row.end_date;
+                        void saveDates(row, nextStart, nextEnd);
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="date"
+                      className="date-edit"
+                      value={row.end_date}
+                      min={row.start_date}
+                      title="Data término"
+                      onChange={(e) => {
+                        const nextEnd = e.target.value;
+                        if (!nextEnd) return;
+                        void saveDates(row, row.start_date, nextEnd);
+                      }}
+                    />
+                  </td>
                   {isExtra ? <td>{formatMoney(row.value)}</td> : null}
                   {isExtra ? (
                     <td className="paid-cell">
@@ -365,6 +407,21 @@ export function DevControleWorkPage({ workType }: Props) {
         }
         .paid-check input { width: auto; cursor: pointer; }
         .row-paid .paid-check span { color: var(--danger, #dc2626); font-weight: 600; }
+        .date-edit {
+          width: 140px;
+          max-width: 100%;
+          padding: 6px 8px;
+          border-radius: 8px;
+          border: 1px solid var(--border, rgba(255,255,255,0.12));
+          background: var(--bg-elevated, rgba(0,0,0,0.25));
+          color: inherit;
+          font: inherit;
+          font-size: 13px;
+        }
+        .date-edit:focus {
+          outline: 2px solid rgba(45, 212, 191, 0.45);
+          outline-offset: 1px;
+        }
       `}</style>
     </div>
   );
