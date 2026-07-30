@@ -53,6 +53,7 @@ import { m1FabricLibForApi } from './m1-fabric-lib';
 import { listM1BitmapCatalog, resolveM1BitmapFile, suggestBitmapForStitchCode } from './m1-bitmap-catalog';
 import { readM1MeshForModel, readM1MeshForPart } from './m1-mesh-read';
 import { isIgnoredProgramSubfolder } from './program-folders';
+import { handleBackupRequest } from './backup-handler';
 
 const PORT = 3848;
 const PROGRAMS_ROOT = process.env.PROGRAMS_ROOT ?? 'C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS';
@@ -859,10 +860,29 @@ app.get('/api/programs/syntech-test', async (_req, res) => {
   }
 });
 
+app.post('/api/programs/backup', async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { localOnly?: boolean; firestoreOnly?: boolean };
+    const result = await handleBackupRequest({
+      localOnly: body.localOnly === true,
+      firestoreOnly: body.firestoreOnly === true,
+    });
+    res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (err) {
+    res.status(err instanceof Error && err.message.includes('em andamento') ? 409 : 500).json({
+      ok: false,
+      error: err instanceof Error ? err.message : 'Falha ao gerar backup.',
+    });
+  }
+});
+
 app.get('/api/programs/health', (_req, res) => {
   res.json({
     ok: true,
-    version: 29,
+    version: 30,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: PROGRAMS_ROOT,
@@ -890,6 +910,7 @@ app.get('/api/programs/health', (_req, res) => {
       'm1-bitmaps',
       'm1-mesh',
       'm1-fabric-lib',
+      'backup',
     ],
   });
 });

@@ -7,3 +7,4 @@ data/estoque.json
 *-firebase-adminsdk-*.json
 service-account.json
 logs/
+backups/

@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
+import { BackupButton } from './BackupButton';
 import { useAuth } from '../hooks/useAuth';
 
 export function Layout() {
@@ -47,6 +48,7 @@ export function Layout() {
           </NavLink>
         </nav>
         <div className="sidebar-footer">
+          <BackupButton />
           <span className="user-email" title={user?.email ?? ''}>
             {user?.email}
           </span>

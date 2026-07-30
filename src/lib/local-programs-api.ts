@@ -189,6 +189,23 @@ export const localProgramsApi = {
       search_days: number;
       features?: string[];
     }>('/api/programs/health'),
+  backup: (options?: { localOnly?: boolean; firestoreOnly?: boolean }) =>
+    localRequest<BackupApiResult>('/api/programs/backup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options ?? {}),
+    }),
+};
+
+export type BackupApiResult = {
+  ok: boolean;
+  created_at: string;
+  project_id: string;
+  firestore_collections: Record<string, number>;
+  local_files: string[];
+  zip_file?: string;
+  zip_path?: string;
+  manifest_path: string;
 };
 
 export function scannerSupportsParts(health: { version?: number; stoll_tmp?: string }) {
@@ -221,6 +238,10 @@ export function scannerSupportsM1Visual(health: { version?: number; features?: s
 
 export function scannerSupportsM1Native(health: { version?: number; features?: string[] }) {
   return (health.version ?? 0) >= 29 || health.features?.includes('m1-fabric-lib') === true;
+}
+
+export function scannerSupportsBackup(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 30 || health.features?.includes('backup') === true;
 }
 
 export function isLocalScannerAvailable() {

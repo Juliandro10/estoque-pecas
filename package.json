@@ -10,6 +10,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "import:estoque": "tsx scripts/import-estoque.ts",
+    "backup": "tsx scripts/backup.ts",
+    "backup:local": "tsx scripts/backup.ts -- --local-only",
+    "restore:backup": "tsx scripts/restore-backup.ts",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:hosting": "npm run build && firebase deploy --only hosting",
     "deploy": "npm run build && firebase deploy --only firestore:rules,hosting"

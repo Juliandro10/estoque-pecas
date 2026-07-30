@@ -1,7 +1,9 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import admin from 'firebase-admin';
+
+import { initFirebaseAdmin } from './lib/firebase-admin-init';
 
 const DEFAULT_ESTOQUE = resolve('data/estoque.json');
 
@@ -32,78 +34,6 @@ type EstoqueFile = {
   parts: LocalPart[];
   movements: LocalMovement[];
 };
-
-function loadEnvFile() {
-  try {
-    const raw = readFileSync(resolve('.env'), 'utf8');
-    for (const line of raw.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      const value = trimmed.slice(eq + 1).trim();
-      if (!(key in process.env)) process.env[key] = value;
-    }
-  } catch {
-    // .env opcional — projectId pode vir do argumento ou .firebaserc
-  }
-}
-
-function loadProjectId() {
-  loadEnvFile();
-  if (process.env.VITE_FIREBASE_PROJECT_ID) return process.env.VITE_FIREBASE_PROJECT_ID;
-  try {
-    const rc = JSON.parse(readFileSync(resolve('.firebaserc'), 'utf8')) as {
-      projects?: { default?: string };
-    };
-    if (rc.projects?.default) return rc.projects.default;
-  } catch {
-    // ignore
-  }
-  throw new Error('Defina VITE_FIREBASE_PROJECT_ID em .env ou configure .firebaserc');
-}
-
-function findServiceAccountPath() {
-  const fromEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (fromEnv) {
-    const resolved = resolve(fromEnv);
-    try {
-      readFileSync(resolved);
-      return resolved;
-    } catch {
-      console.warn(`Arquivo não encontrado: ${resolved}`);
-    }
-  }
-
-  const candidates = [
-    resolve('service-account.json'),
-    ...readdirSync('.').filter((f) => f.includes('firebase-adminsdk') && f.endsWith('.json')).map((f) => resolve(f)),
-  ];
-
-  for (const path of candidates) {
-    try {
-      readFileSync(path);
-      return path;
-    } catch {
-      // try next
-    }
-  }
-
-  throw new Error(
-    'Coloque o JSON da service account na pasta do projeto (ou defina GOOGLE_APPLICATION_CREDENTIALS).'
-  );
-}
-
-function initAdmin(projectId: string) {
-  const credPath = findServiceAccountPath();
-  console.log(`Credencial: ${credPath}`);
-  const serviceAccount = JSON.parse(readFileSync(credPath, 'utf8'));
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    projectId,
-  });
-}
 
 async function importParts(db: admin.firestore.Firestore, parts: LocalPart[]) {
   const batch = db.batch();
@@ -170,14 +100,12 @@ async function importWithdrawals(
 
 async function main() {
   const estoquePath = resolve(process.argv[2] ?? DEFAULT_ESTOQUE);
-  const projectId = loadProjectId();
-  initAdmin(projectId);
+  const { projectId, db } = initFirebaseAdmin();
 
   console.log(`Projeto: ${projectId}`);
   console.log(`Arquivo: ${estoquePath}`);
 
   const raw = JSON.parse(readFileSync(estoquePath, 'utf8')) as EstoqueFile;
-  const db = admin.firestore();
 
   await importParts(db, raw.parts);
   await importWithdrawals(db, raw.parts, raw.movements);
