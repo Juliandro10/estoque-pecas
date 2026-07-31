@@ -54,11 +54,36 @@ import { listM1BitmapCatalog, resolveM1BitmapFile, suggestBitmapForStitchCode } 
 import { readM1MeshForModel, readM1MeshForPart } from './m1-mesh-read';
 import { isIgnoredProgramSubfolder } from './program-folders';
 import { handleBackupRequest } from './backup-handler';
+import {
+  formatProgramsRootsLabel,
+  getProgramsRoots,
+  requireProgramsRoots,
+} from './programs-roots';
 
 const PORT = 3848;
-const PROGRAMS_ROOT = process.env.PROGRAMS_ROOT ?? 'C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS';
 const STOLL_TMP = process.env.STOLL_TMP ?? 'C:\\Stoll\\Tmp';
 const SEARCH_DAYS = Number(process.env.PROGRAMS_SEARCH_DAYS ?? 15);
+
+function programsRootsLabel() {
+  const roots = getProgramsRoots();
+  return roots.length > 0
+    ? formatProgramsRootsLabel(roots)
+    : formatProgramsRootsLabel(requireProgramsRoots());
+}
+
+function scanAllProgramsRoots() {
+  const roots = getProgramsRoots();
+  for (const root of roots) {
+    scanM1SinCaptures(STOLL_TMP, root);
+  }
+}
+
+async function scanAllSintralScreens() {
+  const roots = getProgramsRoots();
+  for (const root of roots) {
+    await scanSintralScreen(root);
+  }
+}
 
 function folderMatchesRef(folderName: string, ref: string) {
   const normalized = folderName.trim();
@@ -151,11 +176,10 @@ function findProgram(reference: string, fullSearch: boolean): MatchRow | null {
     }
   }
 
-  if (!fs.existsSync(PROGRAMS_ROOT)) {
-    throw new Error(`Pasta de programas não encontrada: ${PROGRAMS_ROOT}`);
+  const programsRoots = requireProgramsRoots();
+  for (const programsRoot of programsRoots) {
+    walk(programsRoot);
   }
-
-  walk(PROGRAMS_ROOT);
   if (matches.length === 0) return null;
 
   matches.sort((a, b) => b.latest_ms - a.latest_ms);
@@ -252,7 +276,7 @@ app.get('/api/programs/lookup', (req, res) => {
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias. Tente busca completa.`,
       });
       return;
@@ -301,7 +325,7 @@ app.get('/api/programs/parts', (req, res) => {
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias. Tente busca completa.`,
       });
       return;
@@ -351,7 +375,7 @@ app.get('/api/programs/m1-times', (req, res) => {
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
       });
       return;
@@ -387,7 +411,7 @@ app.get('/api/programs/sintral-yarns', (req, res) => {
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
       });
       return;
@@ -423,7 +447,7 @@ app.get('/api/programs/sintral-times', (req, res) => {
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
       });
       return;
@@ -454,14 +478,14 @@ app.get('/api/programs/sintral-dados', async (req, res) => {
       return;
     }
 
-    scanM1SinCaptures(STOLL_TMP, PROGRAMS_ROOT);
-    await scanSintralScreen(PROGRAMS_ROOT);
+    scanAllProgramsRoots();
+    await scanAllSintralScreens();
 
     const match = findProgramFolder(ref, full);
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
       });
       return;
@@ -493,7 +517,7 @@ app.get('/api/programs/m1-density', (req, res) => {
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
       });
       return;
@@ -623,7 +647,7 @@ app.get('/api/programs/m1-mesh', (req, res) => {
     if (!match) {
       res.status(404).json({
         error: full
-          ? `Referência ${ref} não encontrada em ${PROGRAMS_ROOT}.`
+          ? `Referência ${ref} não encontrada em ${programsRootsLabel()}.`
           : `Referência ${ref} não encontrada nos últimos ${SEARCH_DAYS} dias.`,
       });
       return;
@@ -880,12 +904,14 @@ app.post('/api/programs/backup', async (req, res) => {
 });
 
 app.get('/api/programs/health', (_req, res) => {
+  const roots = getProgramsRoots();
   res.json({
     ok: true,
     version: 30,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
-    root: PROGRAMS_ROOT,
+    root: formatProgramsRootsLabel(roots),
+    roots,
     stoll_tmp: STOLL_TMP,
     search_days: SEARCH_DAYS,
     features: [
@@ -916,8 +942,16 @@ app.get('/api/programs/health', (_req, res) => {
 });
 
 app.listen(PORT, '127.0.0.1', () => {
-  startM1SinCaptureWatcher(STOLL_TMP, PROGRAMS_ROOT);
-  startSintralScreenWatcher(PROGRAMS_ROOT);
+  const roots = getProgramsRoots();
+  if (roots.length === 0) {
+    console.warn('Nenhuma pasta PROGRAMAS encontrada. Verifique PROGRAMS_ROOTS no .env');
+  } else {
+    console.log(`Pastas PROGRAMAS: ${formatProgramsRootsLabel(roots)}`);
+    for (const root of roots) {
+      startM1SinCaptureWatcher(STOLL_TMP, root);
+      startSintralScreenWatcher(root);
+    }
+  }
   console.log(`Scanner de programas em http://127.0.0.1:${PORT} (${SEARCH_DAYS} dias)`);
   console.log(`${M1_SIN_CAPTURE_BUILD}: M1 processa → .sin + .simx em dados do programa/{{parte}}/`);
   console.log('Sintral tela: cheque aberto → controle-sintral.json + .txt em dados do programa/{parte}/');

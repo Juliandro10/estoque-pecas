@@ -1,23 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const PROGRAMS_ROOT = path.resolve(
-  process.env.PROGRAMS_ROOT ?? 'C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS'
-);
+import { getProgramsRoots } from './programs-roots';
+
 const DADOS_PROGRAMA_DIR = 'dados do programa';
 const BLOCKED_EXT = /\.(sin|setx|simx|jac|cfgx|wkt)$/i;
 
 function isBlockedProgramsWrite(target: string) {
   const resolved = path.resolve(target);
   if (!BLOCKED_EXT.test(resolved)) return false;
-  if (!resolved.startsWith(PROGRAMS_ROOT + path.sep)) return false;
 
-  const rel = path.relative(PROGRAMS_ROOT, resolved);
-  const parts = rel.split(/[\\/]/);
-  const dadosIdx = parts.findIndex((p) => p.toLowerCase() === DADOS_PROGRAMA_DIR.toLowerCase());
+  for (const programsRoot of getProgramsRoots()) {
+    if (!resolved.startsWith(programsRoot + path.sep) && resolved !== programsRoot) continue;
 
-  if (dadosIdx < 0) return true;
-  return parts.length <= dadosIdx + 1;
+    const rel = path.relative(programsRoot, resolved);
+    const parts = rel.split(/[\\/]/);
+    const dadosIdx = parts.findIndex((p) => p.toLowerCase() === DADOS_PROGRAMA_DIR.toLowerCase());
+
+    if (dadosIdx < 0) return true;
+    return parts.length <= dadosIdx + 1;
+  }
+
+  return false;
 }
 
 function guardTarget(target: string, op: string) {
