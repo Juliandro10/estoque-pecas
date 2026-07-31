@@ -53,7 +53,7 @@ import { m1FabricLibForApi } from './m1-fabric-lib';
 import { listM1BitmapCatalog, resolveM1BitmapFile, suggestBitmapForStitchCode } from './m1-bitmap-catalog';
 import { readM1MeshForModel, readM1MeshForPart } from './m1-mesh-read';
 import { isIgnoredProgramSubfolder } from './program-folders';
-import { handleBackupRequest } from './backup-handler';
+import { handleBackupRequest, type BackupRequest } from './backup-handler';
 import {
   formatProgramsRootsLabel,
   getProgramsRoots,
@@ -259,7 +259,7 @@ app.post(
   }
 );
 
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: '32mb' }));
 
 app.get('/api/programs/lookup', (req, res) => {
   try {
@@ -886,10 +886,15 @@ app.get('/api/programs/syntech-test', async (_req, res) => {
 
 app.post('/api/programs/backup', async (req, res) => {
   try {
-    const body = (req.body ?? {}) as { localOnly?: boolean; firestoreOnly?: boolean };
+    const body = (req.body ?? {}) as {
+      localOnly?: boolean;
+      firestoreOnly?: boolean;
+      firestore?: BackupRequest['firestore'];
+    };
     const result = await handleBackupRequest({
       localOnly: body.localOnly === true,
       firestoreOnly: body.firestoreOnly === true,
+      firestore: body.firestore,
     });
     res.json({
       ok: true,

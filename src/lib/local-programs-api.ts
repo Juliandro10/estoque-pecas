@@ -17,6 +17,7 @@ import type {
   SyntechPushResult,
   SyntechYarnCatalogFile,
 } from '../types-programming';
+import type { ClientFirestoreBackup } from './backup-export';
 
 async function localRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -189,7 +190,11 @@ export const localProgramsApi = {
       search_days: number;
       features?: string[];
     }>('/api/programs/health'),
-  backup: (options?: { localOnly?: boolean; firestoreOnly?: boolean }) =>
+  backup: (options?: {
+    localOnly?: boolean;
+    firestoreOnly?: boolean;
+    firestore?: ClientFirestoreBackup;
+  }) =>
     localRequest<BackupApiResult>('/api/programs/backup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

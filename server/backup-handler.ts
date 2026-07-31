@@ -5,6 +5,15 @@ let backupRunning = false;
 export type BackupRequest = {
   localOnly?: boolean;
   firestoreOnly?: boolean;
+  firestore?: Record<
+    string,
+    {
+      collection: string;
+      exported_at: string;
+      count: number;
+      documents: { id: string; data: unknown }[];
+    }
+  >;
 };
 
 export async function handleBackupRequest(body: BackupRequest = {}): Promise<BackupResult> {
@@ -17,6 +26,7 @@ export async function handleBackupRequest(body: BackupRequest = {}): Promise<Bac
     return await runBackup({
       skipFirestore: body.localOnly === true,
       skipLocal: body.firestoreOnly === true,
+      firestoreFromClient: body.firestore,
       log: (message) => console.log(`[backup] ${message}`),
     });
   } finally {

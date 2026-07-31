@@ -5,6 +5,7 @@ import type { CadastroPart, CadastroYarnGuide, CadastroYarnPart, ConsolidatedYar
 import {
   consolidatedYarnIdentityKey,
   normalizeYarnDescriptionKey,
+  yarnFioIdentityKey,
 } from '../../shared/yarn-consumption';
 import {
   fabricGuideWeightShare,
@@ -14,6 +15,46 @@ import {
 export { consolidatedYarnIdentityKey, normalizeYarnDescriptionKey, yarnFioIdentityKey };
 
 const cadastroCol = 'model_cadastro';
+
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripUndefined(entry)) as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .map(([key, entry]) => [key, stripUndefined(entry)])
+    ) as T;
+  }
+  return value;
+}
+
+function normalizePart(part: CadastroPart): CadastroPart {
+  return {
+    key: String(part.key ?? ''),
+    label: String(part.label ?? ''),
+    file_name: String(part.file_name ?? ''),
+    time_mmss: String(part.time_mmss ?? ''),
+    weight_kg: String(part.weight_kg ?? ''),
+  };
+}
+
+function normalizeYarnPart(part: CadastroYarnPart): CadastroYarnPart {
+  return {
+    key: String(part.key ?? ''),
+    label: String(part.label ?? ''),
+    file_name: String(part.file_name ?? ''),
+    guides: part.guides.map((guide) => ({
+      guide: Number(guide.guide ?? 0),
+      letter: String(guide.letter ?? ''),
+      description: String(guide.description ?? ''),
+      side: guide.side === 'left' ? 'left' : 'right',
+      consumption: String(guide.consumption ?? ''),
+      ...(guide.pct === undefined || guide.pct === null ? {} : { pct: Number(guide.pct) }),
+    })),
+  };
+}
 
 function mapYarnGuide(raw: Record<string, unknown>): CadastroYarnGuide {
   const pctRaw = raw.pct;
@@ -71,14 +112,15 @@ export const cadastroDb = {
     observations: string;
   }) => {
     const reference = input.reference.trim();
-    await setDoc(doc(db, cadastroCol, reference), {
+    const payload = stripUndefined({
       reference,
       name: input.name.trim(),
-      parts: input.parts,
-      yarn_parts: input.yarn_parts,
+      parts: input.parts.map(normalizePart),
+      yarn_parts: input.yarn_parts.map(normalizeYarnPart),
       observations: input.observations.trim(),
       updated_at: serverTimestamp(),
     });
+    await setDoc(doc(db, cadastroCol, reference), payload);
     const saved = await getDoc(doc(db, cadastroCol, reference));
     return mapCadastro(saved.id, saved.data()!);
   },

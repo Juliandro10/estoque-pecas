@@ -35,6 +35,7 @@ export function loadProjectId() {
 }
 
 export function findServiceAccountPath() {
+  loadEnvFile();
   const fromEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS ?? process.env.FIREBASE_SERVICE_ACCOUNT;
   if (fromEnv) {
     const resolved = resolve(fromEnv);
@@ -61,7 +62,7 @@ export function findServiceAccountPath() {
   }
 
   throw new Error(
-    'Coloque o JSON da service account na pasta do projeto (ou defina GOOGLE_APPLICATION_CREDENTIALS).'
+    'Coloque o JSON da service account na pasta do projeto (ou defina GOOGLE_APPLICATION_CREDENTIALS). No painel web, use o botão Fazer backup — ele exporta o Firestore com seu login, sem precisar desse arquivo.'
   );
 }
 

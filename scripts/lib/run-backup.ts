@@ -4,7 +4,7 @@ import { basename, join, resolve } from 'node:path';
 import AdmZip from 'adm-zip';
 
 import { copyDirRecursive, copyFileIfExists } from './fs-copy';
-import { initFirebaseAdmin } from './firebase-admin-init';
+import { initFirebaseAdmin, loadProjectId } from './firebase-admin-init';
 import { serializeFirestoreValue } from './firestore-serialize';
 
 const FIRESTORE_COLLECTIONS = ['parts', 'withdrawals', 'programs', 'model_cadastro'] as const;
@@ -32,6 +32,15 @@ export type BackupOptions = {
   skipZip?: boolean;
   skipFirestore?: boolean;
   skipLocal?: boolean;
+  firestoreFromClient?: Record<
+    string,
+    {
+      collection: string;
+      exported_at: string;
+      count: number;
+      documents: { id: string; data: unknown }[];
+    }
+  >;
   log?: (message: string) => void;
 };
 
@@ -139,6 +148,7 @@ export async function runBackup(options: BackupOptions = {}): Promise<BackupResu
   const skipZip = options.skipZip ?? false;
   const skipFirestore = options.skipFirestore ?? false;
   const skipLocal = options.skipLocal ?? false;
+  const firestoreFromClient = options.firestoreFromClient;
   const log = options.log ?? (() => {});
 
   const stamp = timestampFolderName();
@@ -152,10 +162,19 @@ export async function runBackup(options: BackupOptions = {}): Promise<BackupResu
 
   if (!skipFirestore) {
     mkdirSync(firestoreDir, { recursive: true });
-    const admin = initFirebaseAdmin();
-    projectId = admin.projectId;
-    for (const col of FIRESTORE_COLLECTIONS) {
-      firestoreCounts[col] = await exportCollection(admin.db, col, firestoreDir, log);
+    if (firestoreFromClient) {
+      projectId = loadProjectId();
+      for (const [collectionName, payload] of Object.entries(firestoreFromClient)) {
+        writeFileSync(join(firestoreDir, `${collectionName}.json`), JSON.stringify(payload, null, 2), 'utf8');
+        firestoreCounts[collectionName] = payload.count;
+        log(`${collectionName}: ${payload.count} documento(s)`);
+      }
+    } else {
+      const admin = initFirebaseAdmin();
+      projectId = admin.projectId;
+      for (const col of FIRESTORE_COLLECTIONS) {
+        firestoreCounts[col] = await exportCollection(admin.db, col, firestoreDir, log);
+      }
     }
   }
 

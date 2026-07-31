@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { isLocalScannerAvailable, localProgramsApi, scannerSupportsBackup } from '../lib/local-programs-api';
+import { exportFirestoreForBackup } from '../lib/backup-export';
 
 type BackupStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -41,7 +42,8 @@ export function BackupButton() {
     setMessage('');
 
     try {
-      const result = await localProgramsApi.backup();
+      const firestore = await exportFirestoreForBackup();
+      const result = await localProgramsApi.backup({ firestore });
       const fileName = result.zip_file ?? result.manifest_path.split(/[/\\]/).pop() ?? 'backup';
       setStatus('success');
       setMessage(`${formatSummary(result.firestore_collections)} → ${fileName}`);
