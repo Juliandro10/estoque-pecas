@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 import type { ProgramMonthlyReport } from '../types-programming';
-import { formatJobKindLabel, PROGRAM_VALUE } from '../types-programming';
+import { formatJobKindLabel } from '../types-programming';
 
 function formatBr(iso: string) {
   const [y, m, d] = iso.split('-');
@@ -46,15 +46,16 @@ export function exportProgrammingPdf(report: ProgramMonthlyReport) {
   const contentWidth = pageWidth - 28;
 
   doc.setFontSize(16);
+  const titleClient = report.client_name ? ` — ${report.client_name}` : '';
   doc.text(
-    isExtra ? 'Planilha de Programação — Extra' : 'Planilha de Programação — Dia normal',
+    isExtra ? `Planilha de Programação — Extra${titleClient}` : 'Planilha de Programação — Dia normal',
     14,
     y
   );
   y += 7;
   doc.setFontSize(11);
   doc.setTextColor(80);
-  doc.text('TRICOT & CIA', 14, y);
+  doc.text(report.client_name?.trim() || 'TRICOT & CIA', 14, y);
   y += 5;
   doc.text(`Período: ${report.period_label}`, 14, y);
   y += 4;
@@ -79,13 +80,16 @@ export function exportProgrammingPdf(report: ProgramMonthlyReport) {
     autoTable(doc, {
       startY: y + 1,
       head: isExtra
-        ? [['Referência', 'Descrição', 'Tipo', 'Data início', 'Data término', 'Valor']]
+        ? [
+            ['Referência', 'Descrição', ...(report.client_name ? [] : ['Cliente']), 'Tipo', 'Data início', 'Data término', 'Valor'],
+          ]
         : [['Referência', 'Descrição', 'Tipo', 'Data início', 'Data término']],
       body: week.entries.map((e) =>
         isExtra
           ? [
               e.reference,
               e.name,
+              ...(report.client_name ? [] : [e.client_name]),
               formatJobKindLabel(e.job_kind, e.job_kind_note),
               formatBr(e.start_date),
               formatBr(e.end_date),
@@ -104,6 +108,7 @@ export function exportProgrammingPdf(report: ProgramMonthlyReport) {
             [
               '',
               '',
+              ...(report.client_name ? [] : ['']),
               '',
               '',
               week.all_paid ? 'Total (pago)' : 'Total',
@@ -137,7 +142,7 @@ export function exportProgrammingPdf(report: ProgramMonthlyReport) {
     y += 4;
     doc.setFont('helvetica', 'bold');
     doc.text(
-      `Total do mês: ${report.total_programs} programas — R$ ${formatMoney(report.total_value)} (R$ ${formatMoney(PROGRAM_VALUE)} cada)`,
+      `Total do mês: ${report.total_programs} programas — R$ ${formatMoney(report.total_value)}`,
       14,
       y
     );
@@ -160,5 +165,7 @@ export function exportProgrammingPdf(report: ProgramMonthlyReport) {
     doc.text(`Total do mês: ${report.total_programs} programas`, 14, y + 4);
   }
 
-  doc.save(`${isExtra ? 'extra' : 'dia-normal'}-${report.month}.pdf`);
+  doc.save(
+    `${isExtra ? 'extra' : 'dia-normal'}${report.client_name ? `-${report.client_name.replace(/[^\w.-]+/g, '_')}` : ''}-${report.month}.pdf`
+  );
 }

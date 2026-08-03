@@ -7,7 +7,7 @@ import { copyDirRecursive, copyFileIfExists } from './fs-copy';
 import { initFirebaseAdmin, loadProjectId } from './firebase-admin-init';
 import { serializeFirestoreValue } from './firestore-serialize';
 
-const FIRESTORE_COLLECTIONS = ['parts', 'withdrawals', 'programs', 'model_cadastro'] as const;
+const FIRESTORE_COLLECTIONS = ['parts', 'withdrawals', 'programs', 'model_cadastro', 'program_clients'] as const;
 
 const LOCAL_DATA_FILES = [
   'data/catalogo.json',

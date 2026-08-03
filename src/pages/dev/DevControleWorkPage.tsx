@@ -2,9 +2,17 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { exportProgrammingPdf } from '../../lib/programming-report-export';
 import { isLocalScannerAvailable, localProgramsApi } from '../../lib/local-programs-api';
+import { programmingClientsDb } from '../../lib/programming-clients-db';
 import { programmingDb } from '../../lib/programming-db';
-import type { JobKind, ProgramEntry, ProgramMonthlyReport, WorkType } from '../../types-programming';
-import { formatJobKindLabel, JOB_KIND_OPTIONS, PROGRAM_VALUE } from '../../types-programming';
+import type { JobKind, ProgramEntry, ProgramMonthlyReport, ProgrammingClient, WorkType } from '../../types-programming';
+import {
+  DEFAULT_PROGRAM_CLIENT_ID,
+  formatJobKindLabel,
+  formatMoneyInput,
+  JOB_KIND_OPTIONS,
+  parseMoneyInput,
+  PROGRAM_VALUE,
+} from '../../types-programming';
 
 type Props = {
   workType: WorkType;
@@ -48,10 +56,17 @@ export function DevControleWorkPage({ workType }: Props) {
   const isExtra = workType === 'extra';
   const [month, setMonth] = useState(currentMonth);
   const [rows, setRows] = useState<ProgramEntry[]>([]);
+  const [clients, setClients] = useState<ProgrammingClient[]>([]);
+  const [clientFilter, setClientFilter] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState(DEFAULT_PROGRAM_CLIENT_ID);
+  const [programValue, setProgramValue] = useState(formatMoneyInput(PROGRAM_VALUE));
   const [reference, setReference] = useState('');
   const [jobKind, setJobKind] = useState<JobKind>('novo');
   const [jobKindNote, setJobKindNote] = useState('');
   const [fullSearch, setFullSearch] = useState(false);
+  const [showClientManager, setShowClientManager] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientValue, setNewClientValue] = useState(formatMoneyInput(PROGRAM_VALUE));
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(true);
@@ -59,27 +74,53 @@ export function DevControleWorkPage({ workType }: Props) {
   const [scannerOk, setScannerOk] = useState<boolean | null>(null);
 
   const options = useMemo(() => monthOptions(), []);
+  const selectedClient = useMemo(
+    () => clients.find((client) => client.id === selectedClientId) ?? null,
+    [clients, selectedClientId]
+  );
   const total = rows.reduce((sum, r) => sum + r.value, 0);
   const paidTotal = rows.filter((r) => r.paid).reduce((sum, r) => sum + r.value, 0);
   const pendingTotal = total - paidTotal;
   const paidCount = rows.filter((r) => r.paid).length;
   const localMode = isLocalScannerAvailable();
+  const showClientColumn = isExtra && !clientFilter;
+
+  const loadClients = useCallback(async () => {
+    if (!isExtra) return;
+    const list = await programmingClientsDb.list();
+    setClients(list);
+    setSelectedClientId((current) =>
+      list.some((client) => client.id === current) ? current : list[0]?.id ?? DEFAULT_PROGRAM_CLIENT_ID
+    );
+  }, [isExtra]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await programmingDb.listByMonth(month, workType));
+      setRows(await programmingDb.listByMonth(month, workType, clientFilter || null));
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar.');
     } finally {
       setLoading(false);
     }
-  }, [month, workType]);
+  }, [month, workType, clientFilter]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isExtra) return;
+    void loadClients().catch((err) => {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar clientes.');
+    });
+  }, [isExtra, loadClients]);
+
+  useEffect(() => {
+    if (!selectedClient) return;
+    setProgramValue(formatMoneyInput(selectedClient.default_value));
+  }, [selectedClient]);
 
   useEffect(() => {
     if (!localMode) {
@@ -102,6 +143,14 @@ export function DevControleWorkPage({ workType }: Props) {
       return;
     }
 
+    if (isExtra) {
+      const parsedValue = parseMoneyInput(programValue);
+      if (parsedValue === null) {
+        setError('Informe um valor válido para o programa.');
+        return;
+      }
+    }
+
     if (!localMode || !scannerOk) {
       setError('Busca na pasta PROGRAMAS só funciona pelo atalho local (Iniciar.bat).');
       return;
@@ -119,10 +168,14 @@ export function DevControleWorkPage({ workType }: Props) {
         work_type: workType,
         job_kind: jobKind,
         job_kind_note: jobKind === 'outro' ? jobKindNote : undefined,
+        client_id: isExtra ? selectedClientId : undefined,
+        value: isExtra ? parseMoneyInput(programValue) ?? undefined : undefined,
       });
       setReference('');
       setJobKindNote('');
-      setInfo(`${saved.reference} — ${saved.name} (${formatBr(saved.start_date)})`);
+      setInfo(
+        `${saved.reference} — ${saved.name} (${formatBr(saved.start_date)})${isExtra ? ` · ${saved.client_name} · ${formatMoney(saved.value)}` : ''}`
+      );
       if (saved.month !== month) setMonth(saved.month);
       else await load();
     } catch (err) {
@@ -167,9 +220,71 @@ export function DevControleWorkPage({ workType }: Props) {
     }
   }
 
+  async function saveValue(row: ProgramEntry, raw: string) {
+    const parsed = parseMoneyInput(raw);
+    if (parsed === null) {
+      setError('Valor inválido.');
+      await load();
+      return;
+    }
+    if (parsed === row.value) return;
+    try {
+      await programmingDb.updateValue(row.id, parsed);
+      setError('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar valor.');
+      await load();
+    }
+  }
+
+  async function addClient(e: FormEvent) {
+    e.preventDefault();
+    const parsed = parseMoneyInput(newClientValue);
+    if (parsed === null) {
+      setError('Informe um valor padrão válido para o cliente.');
+      return;
+    }
+    try {
+      const created = await programmingClientsDb.add(newClientName, parsed);
+      setNewClientName('');
+      setNewClientValue(formatMoneyInput(PROGRAM_VALUE));
+      setSelectedClientId(created.id);
+      setClientFilter(created.id);
+      await loadClients();
+      setInfo(`Cliente ${created.name} adicionado.`);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao adicionar cliente.');
+    }
+  }
+
+  async function saveClientDefault(client: ProgrammingClient, raw: string) {
+    const parsed = parseMoneyInput(raw);
+    if (parsed === null) {
+      setError('Valor padrão inválido.');
+      return;
+    }
+    if (parsed === client.default_value) return;
+    try {
+      await programmingClientsDb.update(client.id, { default_value: parsed });
+      await loadClients();
+      if (selectedClientId === client.id) {
+        setProgramValue(formatMoneyInput(parsed));
+      }
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar cliente.');
+    }
+  }
+
   async function exportReport() {
     try {
-      const report: ProgramMonthlyReport = await programmingDb.getMonthlyReport(month, workType);
+      const report: ProgramMonthlyReport = await programmingDb.getMonthlyReport(
+        month,
+        workType,
+        clientFilter || null
+      );
       if (report.total_programs === 0) {
         setError('Nenhum programa neste mês para exportar.');
         return;
@@ -185,7 +300,7 @@ export function DevControleWorkPage({ workType }: Props) {
     <div>
       <p className="section-desc">
         {isExtra
-          ? `Programas extras — R$ ${PROGRAM_VALUE.toFixed(2).replace('.', ',')} por modelo`
+          ? 'Programas extras por cliente — valor editável por modelo'
           : 'Programas feitos no horário normal do dia'}
       </p>
 
@@ -212,13 +327,83 @@ export function DevControleWorkPage({ workType }: Props) {
             </option>
           ))}
         </select>
+        {isExtra ? (
+          <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} title="Filtrar por cliente">
+            <option value="">Todos os clientes</option>
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <button type="button" className="btn btn-ghost" onClick={() => void exportReport()}>
           PDF do mês
         </button>
+        {isExtra ? (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setShowClientManager((open) => !open)}
+          >
+            {showClientManager ? 'Fechar clientes' : 'Clientes'}
+          </button>
+        ) : null}
       </div>
+
+      {isExtra && showClientManager ? (
+        <div className="card client-panel">
+          <h3>Clientes</h3>
+          <p className="client-panel-desc">Cada cliente pode ter um valor padrão diferente por programa.</p>
+          <div className="client-list">
+            {clients.map((client) => (
+              <div key={client.id} className="client-row">
+                <strong>{client.name}</strong>
+                <label className="client-default">
+                  Padrão R$
+                  <input
+                    key={`${client.id}-${client.default_value}`}
+                    defaultValue={formatMoneyInput(client.default_value)}
+                    onBlur={(e) => void saveClientDefault(client, e.target.value)}
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+          <form className="client-add" onSubmit={(e) => void addClient(e)}>
+            <input
+              placeholder="Nome do cliente"
+              value={newClientName}
+              onChange={(e) => setNewClientName(e.target.value)}
+            />
+            <input
+              placeholder="Valor padrão"
+              value={newClientValue}
+              onChange={(e) => setNewClientValue(e.target.value)}
+            />
+            <button type="submit" className="btn btn-sm">
+              Adicionar
+            </button>
+          </form>
+        </div>
+      ) : null}
 
       <form className="card add-form" onSubmit={(e) => void handleAdd(e)}>
         <div className="add-row">
+          {isExtra ? (
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              disabled={submitting || !scannerOk}
+              title="Cliente"
+            >
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <input
             placeholder="Referência (ex.: 5402)"
             value={reference}
@@ -241,6 +426,16 @@ export function DevControleWorkPage({ workType }: Props) {
               </option>
             ))}
           </select>
+          {isExtra ? (
+            <input
+              className="value-input"
+              placeholder="Valor"
+              value={programValue}
+              onChange={(e) => setProgramValue(e.target.value)}
+              disabled={submitting || !scannerOk}
+              title="Valor do programa"
+            />
+          ) : null}
           {jobKind === 'outro' ? (
             <input
               className="outro-note"
@@ -276,6 +471,7 @@ export function DevControleWorkPage({ workType }: Props) {
               <tr>
                 <th>Referência</th>
                 <th>Descrição</th>
+                {showClientColumn ? <th>Cliente</th> : null}
                 <th>Tipo</th>
                 <th>Data início</th>
                 <th>Data término</th>
@@ -289,6 +485,7 @@ export function DevControleWorkPage({ workType }: Props) {
                 <tr key={row.id} className={row.paid ? 'row-paid' : undefined}>
                   <td className="mono">{row.reference}</td>
                   <td>{row.name}</td>
+                  {showClientColumn ? <td>{row.client_name}</td> : null}
                   <td>{formatJobKindLabel(row.job_kind, row.job_kind_note)}</td>
                   <td>
                     <input
@@ -318,7 +515,17 @@ export function DevControleWorkPage({ workType }: Props) {
                       }}
                     />
                   </td>
-                  {isExtra ? <td>{formatMoney(row.value)}</td> : null}
+                  {isExtra ? (
+                    <td>
+                      <input
+                        key={`${row.id}-${row.value}`}
+                        className="value-edit"
+                        defaultValue={formatMoneyInput(row.value)}
+                        onBlur={(e) => void saveValue(row, e.target.value)}
+                        title="Valor do programa"
+                      />
+                    </td>
+                  ) : null}
                   {isExtra ? (
                     <td className="paid-cell">
                       <label className="paid-check" title={row.paid ? 'Marcado como pago' : 'Marcar como pago'}>
@@ -342,21 +549,24 @@ export function DevControleWorkPage({ workType }: Props) {
             {isExtra ? (
               <tfoot>
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700 }}>
+                  <td colSpan={showClientColumn ? 6 : 5} style={{ textAlign: 'right', fontWeight: 700 }}>
                     Total ({rows.length} programas)
                   </td>
                   <td style={{ fontWeight: 700 }}>{formatMoney(total)}</td>
                   <td colSpan={2}></td>
                 </tr>
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, color: 'var(--danger, #dc2626)' }}>
+                  <td
+                    colSpan={showClientColumn ? 6 : 5}
+                    style={{ textAlign: 'right', fontWeight: 700, color: 'var(--danger, #dc2626)' }}
+                  >
                     Pago ({paidCount})
                   </td>
                   <td style={{ fontWeight: 700, color: 'var(--danger, #dc2626)' }}>{formatMoney(paidTotal)}</td>
                   <td colSpan={2}></td>
                 </tr>
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700 }}>
+                  <td colSpan={showClientColumn ? 6 : 5} style={{ textAlign: 'right', fontWeight: 700 }}>
                     A pagar ({rows.length - paidCount})
                   </td>
                   <td style={{ fontWeight: 700 }}>{formatMoney(pendingTotal)}</td>
@@ -378,10 +588,21 @@ export function DevControleWorkPage({ workType }: Props) {
 
       <style>{`
         .section-desc { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+        .client-panel { padding: 16px; margin-bottom: 16px; }
+        .client-panel h3 { margin: 0 0 6px; font-size: 15px; }
+        .client-panel-desc { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+        .client-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+        .client-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+        .client-default { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+        .client-default input { width: 96px; }
+        .client-add { display: flex; gap: 10px; flex-wrap: wrap; }
+        .client-add input { flex: 1; min-width: 140px; }
         .add-form { padding: 16px; margin-bottom: 16px; }
         .add-row { display: flex; gap: 10px; flex-wrap: wrap; }
         .add-row input { flex: 1; min-width: 140px; max-width: none; }
-        .add-row select { min-width: 200px; max-width: 260px; }
+        .add-row select { min-width: 160px; max-width: 220px; }
+        .add-row .value-input { flex: 0 0 110px; min-width: 110px; max-width: 110px; }
         .add-row .outro-note { flex: 1; min-width: 180px; max-width: none; }
         .check-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); }
         .check-row input { width: auto; }
@@ -407,7 +628,7 @@ export function DevControleWorkPage({ workType }: Props) {
         }
         .paid-check input { width: auto; cursor: pointer; }
         .row-paid .paid-check span { color: var(--danger, #dc2626); font-weight: 600; }
-        .date-edit {
+        .date-edit, .value-edit {
           width: 140px;
           max-width: 100%;
           padding: 6px 8px;
@@ -418,7 +639,8 @@ export function DevControleWorkPage({ workType }: Props) {
           font: inherit;
           font-size: 13px;
         }
-        .date-edit:focus {
+        .value-edit { width: 96px; }
+        .date-edit:focus, .value-edit:focus {
           outline: 2px solid rgba(45, 212, 191, 0.45);
           outline-offset: 1px;
         }

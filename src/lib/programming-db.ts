@@ -20,7 +20,8 @@ import type {
   WorkType,
   JobKind,
 } from '../types-programming';
-import { PROGRAM_VALUE } from '../types-programming';
+import { PROGRAM_VALUE, DEFAULT_PROGRAM_CLIENT_ID } from '../types-programming';
+import { programmingClientsDb } from './programming-clients-db';
 
 const programsCol = collection(db, 'programs');
 
@@ -34,12 +35,15 @@ function mapProgram(id: string, data: Record<string, unknown>): ProgramEntry {
   const rawKind = data.job_kind as JobKind | undefined;
   const jobKind =
     rawKind && ['novo', 'ajuste', 'graduacao', 'outro'].includes(rawKind) ? rawKind : null;
+  const clientId = String(data.client_id ?? DEFAULT_PROGRAM_CLIENT_ID);
   return {
     id,
     reference: String(data.reference ?? ''),
     name: String(data.name ?? ''),
     job_kind: jobKind,
     job_kind_note: jobKind === 'outro' ? String(data.job_kind_note ?? '').trim() || null : null,
+    client_id: clientId,
+    client_name: String(data.client_name ?? 'Tricot & Cia'),
     start_date: String(data.start_date ?? ''),
     end_date: String(data.end_date ?? ''),
     value: Number(data.value ?? (workType === 'extra' ? PROGRAM_VALUE : 0)),
@@ -124,37 +128,54 @@ function groupByWeek(entries: ProgramEntry[]): ProgramWeekGroup[] {
   return [...groups.values()].sort((a, b) => a.start.localeCompare(b.start));
 }
 
-function docId(month: string, workType: WorkType, reference: string) {
+function docId(month: string, workType: WorkType, reference: string, clientId?: string) {
+  if (workType === 'extra') {
+    const client = clientId?.trim() || DEFAULT_PROGRAM_CLIENT_ID;
+    return `${month}_extra_${client}_${reference}`;
+  }
   return `${month}_${workType}_${reference}`;
 }
 
-function newEntryId(month: string, workType: WorkType, reference: string) {
+function newEntryId(month: string, workType: WorkType, reference: string, clientId?: string) {
   if (workType === 'normal') {
     return `${month}_normal_${reference}_${Date.now()}`;
   }
-  return docId(month, workType, reference);
+  return docId(month, workType, reference, clientId);
 }
 
 export const programmingDb = {
-  listByMonth: async (month: string, workType: WorkType) => {
+  listByMonth: async (month: string, workType: WorkType, clientId?: string | null) => {
     const q = query(programsCol, where('month', '==', month));
     const snap = await getDocs(q);
     return snap.docs
       .map((d) => mapProgram(d.id, d.data()))
       .filter((row) => row.work_type === workType)
-      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+      .filter((row) => !clientId || row.client_id === clientId)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.client_name.localeCompare(b.client_name, 'pt-BR'));
   },
 
-  existsInMonth: async (month: string, workType: WorkType, reference: string) => {
-    const id = docId(month, workType, reference.trim());
+  existsInMonth: async (
+    month: string,
+    workType: WorkType,
+    reference: string,
+    clientId?: string
+  ) => {
+    const ref = reference.trim();
+    const client = clientId?.trim() || DEFAULT_PROGRAM_CLIENT_ID;
+    const id = docId(month, workType, ref, client);
     const snap = await getDoc(doc(programsCol, id));
     if (snap.exists()) return true;
 
-    const legacyId = `${month}_${reference.trim()}`;
-    if (workType === 'extra') {
+    if (workType === 'extra' && client === DEFAULT_PROGRAM_CLIENT_ID) {
+      const legacyId = `${month}_${ref}`;
       const legacy = await getDoc(doc(programsCol, legacyId));
-      return legacy.exists();
+      if (legacy.exists()) return true;
+
+      const legacyExtraId = `${month}_extra_${ref}`;
+      const legacyExtra = await getDoc(doc(programsCol, legacyExtraId));
+      return legacyExtra.exists();
     }
+
     return false;
   },
 
@@ -166,29 +187,36 @@ export const programmingDb = {
     job_kind: JobKind;
     job_kind_note?: string;
     value?: number;
+    client_id?: string;
   }) => {
     const reference = input.reference.trim();
     const month = monthKeyFromDate(input.date);
     const workType = input.work_type;
     const note = input.job_kind_note?.trim() ?? '';
+    const clientId = input.client_id?.trim() || DEFAULT_PROGRAM_CLIENT_ID;
+    const client = await programmingClientsDb.get(clientId);
+    if (!client) throw new Error('Cliente não encontrado.');
+
     if (input.job_kind === 'outro' && !note) {
       throw new Error('Informe a descrição quando o tipo for Outro.');
     }
     if (workType === 'extra') {
-      const exists = await programmingDb.existsInMonth(month, workType, reference);
+      const exists = await programmingDb.existsInMonth(month, workType, reference, clientId);
       if (exists) {
-        throw new Error(`Referência ${reference} já lançada em ${month} (Extra).`);
+        throw new Error(`Referência ${reference} já lançada em ${month} para ${client.name}.`);
       }
     }
 
-    const id = newEntryId(month, workType, reference);
-    const value = input.value ?? (workType === 'extra' ? PROGRAM_VALUE : 0);
+    const id = newEntryId(month, workType, reference, clientId);
+    const value = input.value ?? (workType === 'extra' ? client.default_value : 0);
 
     await setDoc(doc(programsCol, id), {
       reference,
       name: input.name.trim(),
       job_kind: input.job_kind,
       job_kind_note: input.job_kind === 'outro' ? note : null,
+      client_id: clientId,
+      client_name: client.name,
       start_date: input.date,
       end_date: input.date,
       value,
@@ -228,19 +256,37 @@ export const programmingDb = {
     });
   },
 
-  getMonthlyReport: async (month: string, workType: WorkType): Promise<ProgramMonthlyReport> => {
-    const entries = await programmingDb.listByMonth(month, workType);
+  updateValue: async (id: string, value: number) => {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error('Valor inválido.');
+    }
+    await updateDoc(doc(programsCol, id), { value });
+  },
+
+  getMonthlyReport: async (
+    month: string,
+    workType: WorkType,
+    clientId?: string | null
+  ): Promise<ProgramMonthlyReport> => {
+    const entries = await programmingDb.listByMonth(month, workType, clientId);
     const weeks = groupByWeek(entries);
     const [year, mon] = month.split('-').map(Number);
     const paidEntries = entries.filter((entry) => entry.paid);
     const paid_value = paidEntries.reduce((sum, entry) => sum + entry.value, 0);
     const total_value = entries.reduce((sum, entry) => sum + entry.value, 0);
+    let clientName: string | null = null;
+    if (clientId) {
+      const client = await programmingClientsDb.get(clientId);
+      clientName = client?.name ?? entries[0]?.client_name ?? null;
+    }
 
     return {
       month,
       period_label: `${MONTH_NAMES[mon - 1]}/${year}`,
       generated_at: new Date().toISOString(),
       work_type: workType,
+      client_id: clientId ?? null,
+      client_name: clientName,
       weeks,
       total_programs: entries.length,
       total_value,

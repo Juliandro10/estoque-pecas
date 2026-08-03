@@ -2,7 +2,7 @@ import { collection, getDocs, Timestamp } from 'firebase/firestore';
 
 import { db } from '../firebase';
 
-const FIRESTORE_COLLECTIONS = ['parts', 'withdrawals', 'programs', 'model_cadastro'] as const;
+const FIRESTORE_COLLECTIONS = ['parts', 'withdrawals', 'programs', 'model_cadastro', 'program_clients'] as const;
 
 export type ClientFirestoreBackup = Record<
   (typeof FIRESTORE_COLLECTIONS)[number],

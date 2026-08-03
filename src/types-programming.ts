@@ -1,5 +1,14 @@
 export const PROGRAM_VALUE = 150;
 
+export const DEFAULT_PROGRAM_CLIENT_ID = 'tricot';
+
+export type ProgrammingClient = {
+  id: string;
+  name: string;
+  default_value: number;
+  is_internal?: boolean;
+};
+
 export type WorkType = 'extra' | 'normal';
 
 export type JobKind = 'novo' | 'ajuste' | 'graduacao' | 'outro';
@@ -22,6 +31,17 @@ export function formatJobKindLabel(kind: JobKind | null, note?: string | null) {
     return text ? `Outro: ${text}` : 'Outro';
   }
   return JOB_KIND_LABELS[kind];
+}
+
+export function parseMoneyInput(raw: string) {
+  const text = raw.trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  if (!text) return null;
+  const value = Number(text);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+export function formatMoneyInput(value: number) {
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export type SintralTimePart = {
@@ -108,6 +128,8 @@ export type ProgramEntry = {
   name: string;
   job_kind: JobKind | null;
   job_kind_note: string | null;
+  client_id: string;
+  client_name: string;
   start_date: string;
   end_date: string;
   value: number;
@@ -133,6 +155,8 @@ export type ProgramMonthlyReport = {
   period_label: string;
   generated_at: string;
   work_type: WorkType;
+  client_id?: string | null;
+  client_name?: string | null;
   weeks: ProgramWeekGroup[];
   total_programs: number;
   total_value: number;

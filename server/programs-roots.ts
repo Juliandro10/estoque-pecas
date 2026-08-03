@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const DEFAULT_ROOTS = [
   'H:\\Outros computadores\\Desenvolvimento\\PROGRAMAS\\PROGRAMAS-POR-CLIENTE',
+  'G:\\Outros computadores\\Meu computador\\PROGRAMAS-HOME',
   'C:\\Users\\Tricot&Cia\\Desktop\\PROGRAMAS',
 ];
 
