@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-27T14:15:36.188Z",
+  "updated_at": "2026-08-06T19:18:03.530Z",
   "source": "C:\\Textil\\Empresas\\FABRICA.MDB",
   "types": [
     {
@@ -1486,6 +1486,7 @@
       "codigo": 44,
       "tipo": "YORK/SAVANA",
       "cores": [
+        "AMARALINA",
         "AMARELO P",
         "ANDES",
         "AZUL BIC",
@@ -1501,6 +1502,7 @@
         "CONHAQUE,",
         "COSMOS",
         "COURO",
+        "DARK OLIVE",
         "DUNAS CALIENTES",
         "DUNE",
         "ENCANTO",
@@ -1933,6 +1935,8 @@
       "codigo": 69,
       "tipo": "VISCOSTRTETCH",
       "cores": [
+        "BEGE",
+        "BEGE CLARO",
         "BORDEAUX",
         "DUNAS CALIENTES",
         "OFF WHITE",
