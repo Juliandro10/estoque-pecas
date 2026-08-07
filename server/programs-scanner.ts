@@ -823,13 +823,21 @@ app.post('/api/programs/cadastro-pdf', async (req, res) => {
     fs.mkdirSync(dadosDir, { recursive: true });
     const fileName = cadastroPdfFileName(reference);
     const filePath = path.join(dadosDir, fileName);
+    const parts = Array.isArray(cadastro.parts) ? cadastro.parts : [];
+    const machineFromSin = machinePayload(
+      model_folder,
+      parts.map((part: { file_name?: string }) => ({ file_name: String(part?.file_name ?? '') }))
+    );
     const pdf = buildCadastroPdfBuffer({
       reference,
       name: String(cadastro.name ?? ''),
-      parts: Array.isArray(cadastro.parts) ? cadastro.parts : [],
+      parts,
       yarn_parts: Array.isArray(cadastro.yarn_parts) ? cadastro.yarn_parts : [],
       observations: String(cadastro.observations ?? ''),
       updated_at: String(cadastro.updated_at ?? new Date().toISOString()),
+      machine_cms: String(cadastro.machine_cms ?? machineFromSin?.cms ?? ''),
+      machine_gauge: String(cadastro.machine_gauge ?? machineFromSin?.gauge ?? ''),
+      machine_label: String(cadastro.machine_label ?? machineFromSin?.label ?? ''),
     });
     fs.writeFileSync(filePath, pdf);
     openLocalFile(filePath);

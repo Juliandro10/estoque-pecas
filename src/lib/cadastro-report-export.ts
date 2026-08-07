@@ -1,7 +1,12 @@
-import type { ModelCadastro } from '../types-programming';
+import type { ModelCadastro, ProgramMachineInfo } from '../types-programming';
 import { buildCadastroPdfBuffer, cadastroPdfFileName, type CadastroPdfInput } from '../../shared/cadastro-pdf';
 
-export function cadastroToPdfInput(cadastro: ModelCadastro): CadastroPdfInput {
+export type CadastroPdfMachine = Pick<ProgramMachineInfo, 'cms' | 'gauge' | 'label'> | { label: string };
+
+export function cadastroToPdfInput(
+  cadastro: ModelCadastro,
+  machine?: CadastroPdfMachine | null
+): CadastroPdfInput {
   return {
     reference: cadastro.reference,
     name: cadastro.name,
@@ -9,11 +14,14 @@ export function cadastroToPdfInput(cadastro: ModelCadastro): CadastroPdfInput {
     yarn_parts: cadastro.yarn_parts,
     observations: cadastro.observations,
     updated_at: cadastro.updated_at,
+    machine_cms: machine && 'cms' in machine ? machine.cms : undefined,
+    machine_gauge: machine && 'gauge' in machine ? machine.gauge : undefined,
+    machine_label: machine?.label,
   };
 }
 
-export function exportCadastroPdf(cadastro: ModelCadastro) {
-  const buffer = buildCadastroPdfBuffer(cadastroToPdfInput(cadastro));
+export function exportCadastroPdf(cadastro: ModelCadastro, machine?: CadastroPdfMachine | null) {
+  const buffer = buildCadastroPdfBuffer(cadastroToPdfInput(cadastro, machine));
   const blob = new Blob([buffer], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

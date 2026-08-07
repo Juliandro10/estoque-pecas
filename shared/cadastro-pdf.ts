@@ -18,6 +18,12 @@ export type CadastroPdfInput = {
   yarn_parts: YarnPartRow[];
   observations: string;
   updated_at: string;
+  /** Ex.: CMS502 — do cabeçalho .sin / Sintral */
+  machine_cms?: string;
+  /** Ex.: E6.2 */
+  machine_gauge?: string;
+  /** Ex.: CMS 502 E6.2 — usado se cms/gauge não vierem separados */
+  machine_label?: string;
 };
 
 function formatGenerated(iso: string) {
@@ -48,6 +54,40 @@ function totalPartsWeight(parts: CadastroPdfInput['parts']) {
   return total > 0 ? formatConsumption(total) : '—';
 }
 
+function formatCmsForPdf(cms: string) {
+  const match = cms.trim().toUpperCase().match(/^CMS(\d+)(\+?)$/);
+  if (!match) return cms.trim();
+  return `CMS ${match[1]}${match[2]}`;
+}
+
+function formatGaugeForPdf(gauge: string) {
+  const normalized = gauge.trim().toUpperCase().replace(',', '.');
+  const parts = normalized.split('.');
+  if (parts.length === 3 && parts[0].startsWith('E')) {
+    return `${parts[0]},${parts[1]}.${parts[2]}`;
+  }
+  return normalized;
+}
+
+/** Linha "Máquina: CMS 502 · Finura: E6.2" a partir do .sin / label da tela. */
+export function formatMachinePdfLine(input: Pick<CadastroPdfInput, 'machine_cms' | 'machine_gauge' | 'machine_label'>) {
+  const cms = input.machine_cms?.trim() ?? '';
+  const gauge = input.machine_gauge?.trim() ?? '';
+  if (cms && gauge) {
+    return `Máquina: ${formatCmsForPdf(cms)} · Finura: ${formatGaugeForPdf(gauge)}`;
+  }
+
+  const label = input.machine_label?.trim() ?? '';
+  if (!label) return '';
+
+  const fromLabel = label.match(/^(CMS\s*\d+\+?)\s+(E[\d,.]+)$/i);
+  if (fromLabel) {
+    return `Máquina: ${formatCmsForPdf(fromLabel[1].replace(/\s+/g, ''))} · Finura: ${formatGaugeForPdf(fromLabel[2])}`;
+  }
+
+  return `Máquina: ${label}`;
+}
+
 export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -57,11 +97,18 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
   doc.setTextColor(80);
   doc.text('TRICOT & CIA', 14, 26);
   doc.text(`Ref: ${cadastro.reference} — ${cadastro.name}`, 14, 32);
-  doc.text(`Atualizado: ${formatGenerated(cadastro.updated_at)}`, 14, 38);
+
+  let y = 38;
+  const machineLine = formatMachinePdfLine(cadastro);
+  if (machineLine) {
+    doc.text(machineLine, 14, y);
+    y += 6;
+  }
+  doc.text(`Atualizado: ${formatGenerated(cadastro.updated_at)}`, 14, y);
   doc.setTextColor(0);
 
   autoTable(doc, {
-    startY: 44,
+    startY: y + 6,
     head: [['Parte', 'Arquivo', 'Tempo', 'Peso bruto (kg)']],
     body: cadastro.parts.map((p) => [p.label, p.file_name || '—', p.time_mmss || '—', p.weight_kg || '—']),
     foot: [['Total', '', totalPartsTime(cadastro.parts), totalPartsWeight(cadastro.parts)]],
@@ -71,17 +118,17 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
     theme: 'grid',
   });
 
-  let y = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 44;
-  y += 8;
+  let yAfterParts = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 6;
+  yAfterParts += 8;
 
   const yarnParts = applyAutoYarnConsumption(cadastro.yarn_parts, cadastro.parts);
   const consolidated = consolidateYarnParts(yarnParts, cadastro.parts);
   if (consolidated.length > 0) {
     doc.setFontSize(11);
-    doc.text('Fios consolidados (programa)', 14, y);
-    y += 4;
+    doc.text('Fios consolidados (programa)', 14, yAfterParts);
+    yAfterParts += 4;
     autoTable(doc, {
-      startY: y + 2,
+      startY: yAfterParts + 2,
       head: [['%', 'Consumo total', 'Bico', 'Fio', 'Descrição', 'Partes']],
       body: consolidated.map((row) => [
         formatPct(row.pct),
@@ -95,13 +142,13 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
       headStyles: { fillColor: [18, 28, 46] },
       theme: 'grid',
     });
-    y = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
-    y += 8;
+    yAfterParts = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? yAfterParts;
+    yAfterParts += 8;
   }
 
   doc.setFontSize(10);
   if (cadastro.observations) {
-    doc.text(`Obs: ${cadastro.observations}`, 14, y);
+    doc.text(`Obs: ${cadastro.observations}`, 14, yAfterParts);
   }
 
   const arrayBuffer = doc.output('arraybuffer');

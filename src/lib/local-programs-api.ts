@@ -106,7 +106,11 @@ export const localProgramsApi = {
     cadastro: Pick<
       ModelCadastro,
       'reference' | 'name' | 'parts' | 'yarn_parts' | 'observations' | 'updated_at'
-    >;
+    > & {
+      machine_cms?: string;
+      machine_gauge?: string;
+      machine_label?: string;
+    };
   }) =>
     localRequest<{ ok: boolean; path: string; file_name: string }>('/api/programs/cadastro-pdf', {
       method: 'POST',
