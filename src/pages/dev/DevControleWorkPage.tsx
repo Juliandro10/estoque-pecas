@@ -94,15 +94,15 @@ export function DevControleWorkPage({ workType }: Props) {
     );
   }, [isExtra]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       setRows(await programmingDb.listByMonth(month, workType, clientFilter || null));
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar.');
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [month, workType, clientFilter]);
 
@@ -198,7 +198,7 @@ export function DevControleWorkPage({ workType }: Props) {
   async function togglePaid(row: ProgramEntry) {
     try {
       await programmingDb.setPaid(row.id, !row.paid);
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao atualizar pagamento.');
     }
@@ -213,10 +213,10 @@ export function DevControleWorkPage({ workType }: Props) {
       if (nextMonth !== month) {
         setInfo(`${row.reference} movido para ${formatMonthOption(nextMonth)}.`);
       }
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao atualizar data.');
-      await load();
+      await load({ silent: true });
     }
   }
 
@@ -224,17 +224,17 @@ export function DevControleWorkPage({ workType }: Props) {
     const parsed = parseMoneyInput(raw);
     if (parsed === null) {
       setError('Valor inválido.');
-      await load();
+      await load({ silent: true });
       return;
     }
     if (parsed === row.value) return;
     try {
       await programmingDb.updateValue(row.id, parsed);
       setError('');
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao atualizar valor.');
-      await load();
+      await load({ silent: true });
     }
   }
 
