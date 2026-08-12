@@ -72,17 +72,11 @@ function programsRootsLabel() {
 }
 
 function scanAllProgramsRoots() {
-  const roots = getProgramsRoots();
-  for (const root of roots) {
-    scanM1SinCaptures(STOLL_TMP, root);
-  }
+  scanM1SinCaptures(STOLL_TMP);
 }
 
 async function scanAllSintralScreens() {
-  const roots = getProgramsRoots();
-  for (const root of roots) {
-    await scanSintralScreen(root);
-  }
+  await scanSintralScreen();
 }
 
 function folderMatchesRef(folderName: string, ref: string) {
@@ -398,7 +392,7 @@ app.get('/api/programs/m1-times', (req, res) => {
   }
 });
 
-app.get('/api/programs/sintral-yarns', (req, res) => {
+app.get('/api/programs/sintral-yarns', async (req, res) => {
   try {
     const ref = String(req.query.ref ?? '').trim();
     const full = req.query.full === '1' || req.query.full === 'true';
@@ -406,6 +400,8 @@ app.get('/api/programs/sintral-yarns', (req, res) => {
       res.status(400).json({ error: 'Informe a referência.' });
       return;
     }
+
+    scanAllProgramsRoots();
 
     const match = findProgramFolder(ref, full);
     if (!match) {
@@ -434,7 +430,7 @@ app.get('/api/programs/sintral-yarns', (req, res) => {
   }
 });
 
-app.get('/api/programs/sintral-times', (req, res) => {
+app.get('/api/programs/sintral-times', async (req, res) => {
   try {
     const ref = String(req.query.ref ?? '').trim();
     const full = req.query.full === '1' || req.query.full === 'true';
@@ -442,6 +438,8 @@ app.get('/api/programs/sintral-times', (req, res) => {
       res.status(400).json({ error: 'Informe a referência.' });
       return;
     }
+
+    await scanAllSintralScreens();
 
     const match = findProgramFolder(ref, full);
     if (!match) {
@@ -960,10 +958,8 @@ app.listen(PORT, '127.0.0.1', () => {
     console.warn('Nenhuma pasta PROGRAMAS encontrada. Verifique PROGRAMS_ROOTS no .env');
   } else {
     console.log(`Pastas PROGRAMAS: ${formatProgramsRootsLabel(roots)}`);
-    for (const root of roots) {
-      startM1SinCaptureWatcher(STOLL_TMP, root);
-      startSintralScreenWatcher(root);
-    }
+    startM1SinCaptureWatcher(STOLL_TMP);
+    startSintralScreenWatcher();
   }
   console.log(`Scanner de programas em http://127.0.0.1:${PORT} (${SEARCH_DAYS} dias)`);
   console.log(`${M1_SIN_CAPTURE_BUILD}: M1 processa → .sin + .simx em dados do programa/{{parte}}/`);

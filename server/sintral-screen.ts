@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   DADOS_PROGRAMA_DIR,
-  findModelFolderForPart,
+  findModelFolderForPartInRoots,
   sintralPartDir,
 } from './sintral-capture';
 
@@ -219,8 +219,8 @@ async function readSintralWindowRaw() {
   }
 }
 
-function saveCapture(programsRoot: string, capture: SintralScreenCapture) {
-  const modelFolder = findModelFolderForPart(capture.part_base, programsRoot);
+function saveCapture(capture: SintralScreenCapture) {
+  const modelFolder = findModelFolderForPartInRoots(capture.part_base);
   if (!modelFolder) return null;
 
   const partDir = sintralPartDir(modelFolder, capture.part_base);
@@ -256,7 +256,7 @@ function saveCapture(programsRoot: string, capture: SintralScreenCapture) {
   return event;
 }
 
-export async function scanSintralScreen(programsRoot: string) {
+export async function scanSintralScreen(_programsRoot?: string) {
   const raw = await readSintralWindowRaw();
   const capture = parseSintralWindowPayload(raw);
   if (!capture) {
@@ -264,7 +264,7 @@ export async function scanSintralScreen(programsRoot: string) {
   }
 
   const key = `${capture.part_base}|${capture.seconds}|${capture.raw_text.length}`;
-  const event = saveCapture(programsRoot, capture);
+  const event = saveCapture(capture);
   if (event) lastSavedKey.set(capture.part_base, key);
 
   return { running: true, captured: Boolean(event), capture, event };
@@ -339,11 +339,11 @@ export function getSintralScreenStatus() {
   };
 }
 
-export function startSintralScreenWatcher(programsRoot: string, intervalMs = 1500) {
+export function startSintralScreenWatcher(_programsRoot?: string, intervalMs = 1500) {
   if (pollTimer) return;
-  void scanSintralScreen(programsRoot);
+  void scanSintralScreen();
   pollTimer = setInterval(() => {
-    void scanSintralScreen(programsRoot).catch(() => {
+    void scanSintralScreen().catch(() => {
       // Controle Sintral pode estar fechando
     });
   }, intervalMs);

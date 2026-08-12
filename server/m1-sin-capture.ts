@@ -5,7 +5,7 @@ import { parsePartBaseFromSin } from './m1-capture';
 import {
   copyPartDataFile,
   fileMtimeMs,
-  findModelFolderForPart,
+  findModelFolderForPartInRoots,
   listDirFiles,
   sintralPartDir,
   writePartManifest,
@@ -129,7 +129,6 @@ function findSimxSource(tmpDir: string, modelFolder: string, partBase: string, a
 
 function captureM1Process(
   tmpDir: string,
-  programsRoot: string,
   partBase: string,
   anchorMs: number
 ): M1ProcessCaptureEvent | null {
@@ -137,7 +136,7 @@ function captureM1Process(
   const prev = lastCapturedAnchor.get(key) ?? 0;
   if (anchorMs <= prev) return null;
 
-  const modelFolder = findModelFolderForPart(partBase, programsRoot);
+  const modelFolder = findModelFolderForPartInRoots(partBase);
   if (!modelFolder) return null;
 
   const hit = findSinFileInTmp(tmpDir, partBase);
@@ -189,7 +188,7 @@ function captureM1Process(
   return event;
 }
 
-export function scanM1SinCaptures(tmpDir: string, programsRoot: string, maxAgeMs = RECENT_PROCESS_MS) {
+export function scanM1SinCaptures(tmpDir: string, _programsRoot?: string, maxAgeMs = RECENT_PROCESS_MS) {
   if (!fs.existsSync(tmpDir)) {
     return { captured: 0, triggers: 0, events: [] as M1ProcessCaptureEvent[] };
   }
@@ -205,7 +204,7 @@ export function scanM1SinCaptures(tmpDir: string, programsRoot: string, maxAgeMs
     if (!sinEntry) continue;
 
     const partBase = partBaseFromSinPath(tmpDir, sinEntry.name);
-    const event = captureM1Process(tmpDir, programsRoot, partBase, anchorMs);
+    const event = captureM1Process(tmpDir, partBase, anchorMs);
     if (event) events.push(event);
   }
 
@@ -219,16 +218,12 @@ export function getM1SinCaptureStatus() {
   };
 }
 
-export function startM1SinCaptureWatcher(
-  tmpDir: string,
-  programsRoot: string,
-  intervalMs = 400
-) {
+export function startM1SinCaptureWatcher(tmpDir: string, _programsRoot?: string, intervalMs = 400) {
   if (pollTimer) return;
-  scanM1SinCaptures(tmpDir, programsRoot);
+  scanM1SinCaptures(tmpDir);
   pollTimer = setInterval(() => {
     try {
-      scanM1SinCaptures(tmpDir, programsRoot);
+      scanM1SinCaptures(tmpDir);
     } catch {
       // Tmp pode estar sendo escrito pelo M1
     }

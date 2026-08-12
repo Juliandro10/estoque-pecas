@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { isIgnoredProgramSubfolder } from './program-folders';
+import { getProgramsRoots } from './programs-roots';
 
 
 
@@ -125,6 +126,23 @@ export function findModelFolderForPart(partBase: string, programsRoot: string) {
 
   return best?.path ?? null;
 
+}
+
+
+
+/** Busca a pasta do modelo em todas as raízes PROGRAMAS (ex.: G: e H:). */
+export function findModelFolderForPartInRoots(partBase: string, roots = getProgramsRoots()) {
+  let best: { path: string; mtime: number } | null = null;
+
+  for (const root of roots) {
+    const found = findModelFolderForPart(partBase, root);
+    if (!found) continue;
+
+    const mtime = fileMtimeMs(path.join(found, `${partBase}.mdv`));
+    if (!best || mtime > best.mtime) best = { path: found, mtime };
+  }
+
+  return best?.path ?? null;
 }
 
 
