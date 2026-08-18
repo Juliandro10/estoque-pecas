@@ -12,3 +12,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare module '@syntech-catalog' {
+  import type { SyntechYarnCatalogFile } from './types-programming';
+
+  const catalog: SyntechYarnCatalogFile;
+  export default catalog;
+}

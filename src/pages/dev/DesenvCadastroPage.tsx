@@ -728,13 +728,6 @@ export function DesenvCadastroPage() {
 
   return (
     <div>
-      <header className="page-header">
-        <div>
-          <h1>Desenv-Cadastro</h1>
-          <p>Tempos do Controle Sintral · peso bruto (balança)</p>
-        </div>
-      </header>
-
       {localMode && scannerOk && !scannerOutdated ? (
         <div className="info-box">
           Carregar a referência lê .sin (processamento M1) e controle-sintral.json (cheque) de cada parte em dados do programa/
@@ -822,6 +815,10 @@ export function DesenvCadastroPage() {
                             · catálogo {new Date(yarnCatalog.updated_at).toLocaleDateString('pt-BR')}
                           </span>
                         ) : null}
+                      </p>
+                      <p className="yarn-code-hint">
+                        Dica: use <span className="mono">Codigo 44 - seu nome 3 CABOS TOMATE</span> — veja a lista
+                        completa na aba <strong>Fios Syntech</strong>.
                       </p>
                       {unresolvedYarnCodes.length > 0 ? (
                         <p className="yarn-catalog-warn">
@@ -1123,6 +1120,7 @@ export function DesenvCadastroPage() {
         .field-hint { margin: 0; font-size: 13px; color: var(--muted); }
         .yarn-consolidated { margin-bottom: 12px; }
         .yarn-consolidated-title { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+        .yarn-code-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted); line-height: 1.45; }
         .yarn-part-review { margin-top: 4px; }
         .yarn-parts { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 0; }
         .yarn-part {

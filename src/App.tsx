@@ -11,6 +11,8 @@ import { ReportsPage } from './pages/ReportsPage';
 import { WithdrawalsPage } from './pages/WithdrawalsPage';
 import { DesenvControleLayout } from './pages/dev/DesenvControleLayout';
 import { DevControleWorkPage } from './pages/dev/DevControleWorkPage';
+import { DesenvCadastroLayout } from './pages/dev/DesenvCadastroLayout';
+import { DesenvCadastroFiosPage } from './pages/dev/DesenvCadastroFiosPage';
 import { DesenvCadastroPage } from './pages/dev/DesenvCadastroPage';
 import { DesenvM1Layout } from './pages/dev/DesenvM1Layout';
 import { DesenvM1MalhasPage } from './pages/dev/DesenvM1MalhasPage';
@@ -37,7 +39,10 @@ export default function App() {
             <Route path="extra" element={<DevControleWorkPage workType="extra" />} />
             <Route path="dia-normal" element={<DevControleWorkPage workType="normal" />} />
           </Route>
-          <Route path="desenv-cadastro" element={<DesenvCadastroPage />} />
+          <Route path="desenv-cadastro" element={<DesenvCadastroLayout />}>
+            <Route index element={<DesenvCadastroPage />} />
+            <Route path="fios" element={<DesenvCadastroFiosPage />} />
+          </Route>
           <Route path="desenv-m1" element={<DesenvM1Layout />}>
             <Route index element={<DesenvM1Page />} />
             <Route path="malhas" element={<DesenvM1MalhasPage />} />

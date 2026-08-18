@@ -9,6 +9,7 @@ import {
   normalizeSyntechName,
   yarnTypeNamesMatch,
 } from '../../shared/syntech-name-match';
+import { parseSyntechCodeLead } from '../../shared/syntech-code-parse';
 
 const FIXED_BICO_TIPO_FIO: Record<number, number> = {
   1: 70,
@@ -85,6 +86,41 @@ export type ResolvedYarnRow = ConsolidatedYarnRow & {
   cor_ok: boolean;
 };
 
+function findYarnTypeByCodigo(catalog: SyntechYarnCatalogFile, codigo: number) {
+  return catalog.types.find((item) => item.codigo === codigo) ?? null;
+}
+
+function resolveBySyntechCode(
+  row: ConsolidatedYarnRow,
+  catalog: SyntechYarnCatalogFile,
+  codeLead: { codigo: number; rest: string }
+): ResolvedYarnRow | null {
+  const match = findYarnTypeByCodigo(catalog, codeLead.codigo);
+  if (!match) return null;
+
+  const yarnTypes = catalog.types.map((item) => item.tipo);
+  const restParsed = codeLead.rest
+    ? parseYarnDescription(codeLead.rest, yarnTypes)
+    : { tipo: '', cabo: null, cor: null };
+  const cor = resolveCatalogColor(match.cores, restParsed.cor, catalog);
+  const description = correctedDescription(
+    row.description,
+    { ...restParsed, tipo: match.tipo },
+    match.tipo,
+    cor
+  );
+
+  return {
+    ...row,
+    description,
+    tipo_fio_codigo: match.codigo,
+    tipo_fio_nome: match.tipo,
+    cor,
+    codigo_ok: true,
+    cor_ok: colorMatches(match.cores, restParsed.cor),
+  };
+}
+
 export function resolveYarnRow(
   row: ConsolidatedYarnRow,
   catalog: SyntechYarnCatalogFile | null
@@ -92,6 +128,12 @@ export function resolveYarnRow(
   const fixedCodigo = FIXED_BICO_TIPO_FIO[row.guide];
   const yarnTypes = catalog?.types.map((item) => item.tipo) ?? [];
   const parsed = parseYarnDescription(row.description, yarnTypes);
+  const codeLead = parseSyntechCodeLead(row.description);
+
+  if (codeLead && catalog && (row.component_index ?? 0) === 0) {
+    const byCode = resolveBySyntechCode(row, catalog, codeLead);
+    if (byCode) return byCode;
+  }
 
   if (fixedCodigo !== undefined && (row.component_index ?? 0) === 0) {
     const fixedType = catalog?.types.find((item) => item.codigo === fixedCodigo) ?? null;

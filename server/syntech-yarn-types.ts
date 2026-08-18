@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { findBestYarnTypeMatch } from '../shared/syntech-name-match';
+import { parseSyntechCodeLead } from '../shared/syntech-code-parse';
 import { parseYarnDescription } from '../shared/yarn-description-parse';
 import { readSyntechYarnCatalog } from './syntech-yarn-catalog';
 
@@ -24,6 +25,12 @@ export function resolveTipoFioCodigoFromCatalog(text: string): number | null {
   const yarnTypes = catalog.types.map((item) => item.tipo);
   const trimmed = text.trim();
   if (!trimmed || yarnTypes.length === 0) return null;
+
+  const codeLead = parseSyntechCodeLead(trimmed);
+  if (codeLead) {
+    const byCode = catalog.types.find((item) => item.codigo === codeLead.codigo);
+    if (byCode) return byCode.codigo;
+  }
 
   const parsed = parseYarnDescription(trimmed, yarnTypes);
   const candidates = [
