@@ -627,6 +627,26 @@ export function setYarnDescriptionForGuideLetter(
   }));
 }
 
+/** Atualiza só as guias desta linha consolidada (mesmo bico + letra + identidade do fio). */
+export function setYarnDescriptionForConsolidatedRow(
+  yarnParts: CadastroYarnPart[],
+  guide: number,
+  letter: string,
+  previousDescription: string,
+  description: string
+): CadastroYarnPart[] {
+  const letterUp = letter.toUpperCase();
+  const identity = yarnFioIdentityKey(previousDescription);
+  return yarnParts.map((part) => ({
+    ...part,
+    guides: part.guides.map((g) => {
+      if (g.guide !== guide || g.letter.toUpperCase() !== letterUp) return g;
+      if (yarnFioIdentityKey(g.description) !== identity) return g;
+      return { ...g, description };
+    }),
+  }));
+}
+
 /** Atualiza uma guia específica (por parte / lado). */
 export function setYarnGuideDescription(
   yarnParts: CadastroYarnPart[],

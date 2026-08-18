@@ -17,8 +17,9 @@ import {
   partKindToken,
   programPartsOnly,
   programFixedWasteYarnTotalKg,
-  setYarnDescriptionForGuideLetter,
+  setYarnDescriptionForConsolidatedRow,
   setYarnGuideDescription,
+  yarnFioIdentityKey,
   totalCalculatedYarnConsumption,
   totalPartsWeight,
   totalYarnConsumption,
@@ -214,16 +215,25 @@ export function DesenvCadastroPage() {
   );
   const fixedWasteKg = programFixedWasteYarnTotalKg();
 
-  function rawConsolidatedDescription(guide: number, letter: string, fallback = '') {
-    return (
-      consolidatedYarns.find(
-        (row) => row.guide === guide && row.letter.toUpperCase() === letter.toUpperCase()
-      )?.description ?? fallback
+  function consolidatedRowForResolved(row: (typeof consolidatedYarnsResolved)[number]) {
+    return consolidatedYarns.find(
+      (item) =>
+        item.guide === row.guide &&
+        item.letter.toUpperCase() === row.letter.toUpperCase() &&
+        item.parts.length === row.parts.length &&
+        item.parts.every((part, index) => part === row.parts[index])
     );
   }
 
-  function patchYarnDescriptionByGuideLetter(guide: number, letter: string, description: string) {
-    setYarnParts((prev) => setYarnDescriptionForGuideLetter(prev, guide, letter, description));
+  function patchYarnDescriptionForConsolidatedRow(
+    guide: number,
+    letter: string,
+    previousDescription: string,
+    description: string
+  ) {
+    setYarnParts((prev) =>
+      setYarnDescriptionForConsolidatedRow(prev, guide, letter, previousDescription, description)
+    );
   }
 
   function patchYarnGuideDescription(
@@ -841,9 +851,13 @@ export function DesenvCadastroPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {consolidatedYarnsResolved.map((row) => (
+                            {consolidatedYarnsResolved.map((row) => {
+                              const consolidatedRow = consolidatedRowForResolved(row);
+                              const editableDescription =
+                                consolidatedRow?.description ?? row.description;
+                              return (
                               <tr
-                                key={`yarn-${row.syntech_slot ?? row.guide}-${row.guide}-${row.component_index ?? 0}-${row.letter}`}
+                                key={`yarn-${row.guide}-${row.letter}-${consolidatedRow?.parts.join('+') ?? row.parts.join('+')}-${yarnFioIdentityKey(editableDescription)}-${row.component_index ?? 0}`}
                                 className={!row.codigo_ok ? 'yarn-row-error' : !row.cor_ok ? 'yarn-row-warn' : undefined}
                               >
                                 <td className="yarn-col-pct mono">{formatPct(row.pct)}</td>
@@ -863,10 +877,15 @@ export function DesenvCadastroPage() {
                                   ) : (
                                     <YarnDescInput
                                       className="cell-input yarn-desc-input"
-                                      value={rawConsolidatedDescription(row.guide, row.letter, row.description)}
+                                      value={editableDescription}
                                       title="Editar nome do fio para bater com o Syntech"
                                       onCommit={(next) =>
-                                        patchYarnDescriptionByGuideLetter(row.guide, row.letter, next)
+                                        patchYarnDescriptionForConsolidatedRow(
+                                          row.guide,
+                                          row.letter,
+                                          editableDescription,
+                                          next
+                                        )
                                       }
                                     />
                                   )}
@@ -881,7 +900,8 @@ export function DesenvCadastroPage() {
                                   </div>
                                 </td>
                               </tr>
-                            ))}
+                            );
+                            })}
                           </tbody>
                           <tfoot>
                             <tr className="yarn-total-row">
