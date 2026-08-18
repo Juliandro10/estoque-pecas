@@ -1,7 +1,9 @@
 import {
   colorNamesMatch,
+  dedupePhantomIColors,
   findBestColorMatch,
   findBestYarnTypeMatch,
+  stripPhantomColorI,
   yarnTypeNamesMatch,
 } from '../shared/syntech-name-match.ts';
 import { buildCorrectedYarnDescription, parseYarnDescription } from '../shared/yarn-description-parse.ts';
@@ -75,6 +77,21 @@ const parsed = parseYarnDescription('MODAL AREZO SACHE PINK 1 CABO', yarnTypes);
 const corrected = buildCorrectedYarnDescription(parsed, 'MODAL AREZZO', 'SACHET PINK');
 if (corrected !== 'MODAL AREZZO SACHET PINK 1 CABO') {
   console.error(`FAIL corrected description -> "${corrected}"`);
+  failed++;
+}
+
+const polisterColors = ['BRANCO', 'BRANCOI', 'PRETO', 'PRETOI'];
+const dedupedPolister = dedupePhantomIColors(polisterColors);
+if (dedupedPolister.includes('BRANCOI') || dedupedPolister.includes('PRETOI')) {
+  console.error(`FAIL dedupePhantomIColors kept phantom I colors: ${dedupedPolister.join(', ')}`);
+  failed++;
+}
+if (findBestColorMatch('BRANCOI', dedupedPolister) !== 'BRANCO') {
+  console.error(`FAIL BRANCOI should resolve to BRANCO, got ${findBestColorMatch('BRANCOI', dedupedPolister)}`);
+  failed++;
+}
+if (stripPhantomColorI('PEACH PINKI', ['PEACH PINK', 'PINK']) !== 'PEACH PINK') {
+  console.error(`FAIL stripPhantomColorI PEACH PINKI -> ${stripPhantomColorI('PEACH PINKI', ['PEACH PINK', 'PINK'])}`);
   failed++;
 }
 

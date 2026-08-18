@@ -3,6 +3,41 @@ import path from 'node:path';
 
 import { pctByLetterFromSimx } from './simx-yarn';
 import { sintralPartDir } from './sintral-capture';
+import { dedupePhantomIColors, stripPhantomColorI } from '../shared/syntech-name-match';
+import { readSyntechYarnCatalog } from './syntech-yarn-catalog';
+
+let cachedCatalogColors: string[] | null = null;
+
+function catalogColorsForRepair(): string[] {
+  if (!cachedCatalogColors) {
+    cachedCatalogColors = dedupePhantomIColors(
+      readSyntechYarnCatalog().types.flatMap((item) => item.cores)
+    );
+  }
+  return cachedCatalogColors;
+}
+
+function repairSinGuideDescription(description: string): string {
+  let text = description.trim();
+  if (!text) return text;
+
+  text = text.replace(/\sI$/i, '').trim();
+  text = text.replace(/(\d+\s+)CABOSI\b/gi, '$1CABOS');
+
+  const caboMatch = text.match(/(\d+)\s+CABO(?:S(?:I)?)?\b/i);
+  if (caboMatch && caboMatch.index !== undefined) {
+    const end = caboMatch.index + caboMatch[0].length;
+    const colorPart = text.slice(end).trim();
+    if (colorPart) {
+      const fixed = stripPhantomColorI(colorPart, catalogColorsForRepair());
+      if (fixed !== colorPart) {
+        text = `${text.slice(0, end).trim()} ${fixed}`.trim();
+      }
+    }
+  }
+
+  return text;
+}
 
 export type SinYarnGuide = {
   guide: number;
@@ -65,7 +100,7 @@ function parseGuideCell(cell: string, side: 'left' | 'right'): SinYarnGuide | nu
   return {
     guide: Number(match[1]),
     letter: match[2],
-    description: (match[3] ?? '').trim(),
+    description: repairSinGuideDescription(match[3] ?? ''),
     side,
   };
 }

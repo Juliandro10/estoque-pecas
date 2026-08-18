@@ -39,6 +39,38 @@ export function normalizeSyntechName(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
+/** Remove I fantasma do separador LEFT I RIGHT / MDB quando a cor canônica existe. */
+export function stripPhantomColorI(value: string, peers: string[] = []): string {
+  const trimmed = value.trim();
+  if (!trimmed || peers.length === 0) return trimmed;
+
+  const parts = trimmed.split(/\s+/);
+  const last = parts[parts.length - 1];
+  if (!/I$/i.test(last) || last.length < 3) return trimmed;
+
+  const base = last.slice(0, -1);
+  if (base.length < 2) return trimmed;
+
+  const candidate = [...parts.slice(0, -1), base].join(' ');
+  const candidateNorm = normalizeSyntechName(candidate);
+  const peerHit = peers.find((peer) => normalizeSyntechName(peer) === candidateNorm);
+  return peerHit ?? trimmed;
+}
+
+/** Remove cores duplicadas com I fantasma (ex.: BRANCOI quando já existe BRANCO). */
+export function dedupePhantomIColors(colors: string[]): string[] {
+  const byNorm = new Map<string, string>();
+  for (const color of colors) {
+    byNorm.set(normalizeSyntechName(color), color);
+  }
+
+  return colors.filter((color) => {
+    const stripped = stripPhantomColorI(color, colors);
+    if (normalizeSyntechName(stripped) === normalizeSyntechName(color)) return true;
+    return !byNorm.has(normalizeSyntechName(stripped));
+  });
+}
+
 function nameTokens(value: string): string[] {
   return normalizeSyntechName(value).split(' ').filter(Boolean);
 }
@@ -125,11 +157,13 @@ export function colorNamesMatch(query: string, candidate: string): boolean {
 export function findBestColorMatch(query: string | null, candidates: string[]): string | null {
   if (!query?.trim()) return null;
 
-  const queryNorm = normalizeSyntechName(query);
-  const exact = candidates.find((candidate) => normalizeSyntechName(candidate) === queryNorm);
+  const catalog = dedupePhantomIColors(candidates);
+  const repairedQuery = stripPhantomColorI(query, catalog);
+  const queryNorm = normalizeSyntechName(repairedQuery);
+  const exact = catalog.find((candidate) => normalizeSyntechName(candidate) === queryNorm);
   if (exact) return exact;
 
-  const matches = candidates.filter((candidate) => colorNamesMatch(query, candidate));
+  const matches = catalog.filter((candidate) => colorNamesMatch(repairedQuery, candidate));
   if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0];
 

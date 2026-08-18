@@ -11,7 +11,7 @@ export type ParsedYarnComponent = ParsedYarnDescription & {
   raw: string;
 };
 
-const CABO_MARKER = /(\d+)\s+CABOS?\w*/i;
+const CABO_MARKER = /(\d+)\s+CABO(?:S(?:I)?)?\b/i;
 
 function stripSupplierCode(text: string) {
   const match = text.match(/^(\d{3})\s+(.+)$/);
@@ -47,7 +47,7 @@ function splitTipoCor(body: string, yarnTypes: string[]): { tipo: string; cor: s
 }
 
 function splitRepeatedCaboSegments(text: string): string[] {
-  const markers = [...text.matchAll(/(\d+)\s+CABOS?\w*/gi)];
+  const markers = [...text.matchAll(/(\d+)\s+CABO(?:S(?:I)?)?\b/gi)];
   if (markers.length <= 1) return [text];
 
   const segments: string[] = [];

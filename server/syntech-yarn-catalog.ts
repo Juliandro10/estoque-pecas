@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { findYarnTypeIndex, repairSyntechText } from '../shared/syntech-name-match';
+import { dedupePhantomIColors, findYarnTypeIndex, repairSyntechText, stripPhantomColorI } from '../shared/syntech-name-match';
 
 import { attachSyntechDb, detachDb, queryDb } from './syntech-db';
 
@@ -26,7 +26,7 @@ function normalizeName(value: string) {
 }
 
 function mergeColor(list: string[], cor: string) {
-  const text = cor.trim();
+  const text = stripPhantomColorI(repairSyntechText(cor.trim()), list);
   if (!text) return;
   const upper = normalizeName(text);
   if (list.some((item) => normalizeName(item) === upper)) return;
@@ -47,7 +47,7 @@ export function readSyntechYarnCatalog(filePath = syntechYarnCatalogPath): Synte
     types: raw.types.map((item) => ({
       ...item,
       tipo: repairSyntechText(item.tipo),
-      cores: item.cores.map((cor) => repairSyntechText(cor)),
+      cores: dedupePhantomIColors(item.cores.map((cor) => repairSyntechText(cor))),
     })),
   };
 }
@@ -120,6 +120,7 @@ export async function syncSyntechYarnCatalogFromDb(): Promise<SyntechYarnCatalog
     }
 
     for (const item of catalogTypes) {
+      item.cores = dedupePhantomIColors(item.cores);
       item.cores.sort((a, b) => a.localeCompare(b, 'pt-BR'));
     }
 
