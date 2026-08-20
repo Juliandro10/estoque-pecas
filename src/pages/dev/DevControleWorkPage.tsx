@@ -3,7 +3,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { exportProgrammingPdf } from '../../lib/programming-report-export';
 import { isLocalScannerAvailable, localProgramsApi } from '../../lib/local-programs-api';
 import { programmingClientsDb } from '../../lib/programming-clients-db';
-import { programmingDb } from '../../lib/programming-db';
+import { buildReportFromEntries, formatDayLabel, programmingDb, resolveReportTotalScope } from '../../lib/programming-db';
 import type { JobKind, ProgramEntry, ProgramMonthlyReport, ProgrammingClient, WorkType } from '../../types-programming';
 import {
   DEFAULT_PROGRAM_CLIENT_ID,
@@ -52,6 +52,45 @@ function formatMoney(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function weekStartMonday(date: Date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function toIsoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function currentWeekRange(reference = new Date()) {
+  const start = weekStartMonday(reference);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { start: toIsoDate(start), end: toIsoDate(end) };
+}
+
+function entryInDateRange(entry: ProgramEntry, start: string, end: string) {
+  return entry.start_date >= start && entry.start_date <= end;
+}
+
+function periodLabelFromRange(start: string, end: string) {
+  if (start === end) return formatBr(start);
+  return `${formatBr(start)} a ${formatBr(end)}`;
+}
+
+function pdfFileTagFromRange(start: string, end: string) {
+  if (start === end) return start;
+  return `${start}_a_${end}`;
+}
+
 export function DevControleWorkPage({ workType }: Props) {
   const isExtra = workType === 'extra';
   const [month, setMonth] = useState(currentMonth);
@@ -72,6 +111,10 @@ export function DevControleWorkPage({ workType }: Props) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [scannerOk, setScannerOk] = useState<boolean | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [customRangeStart, setCustomRangeStart] = useState(todayIso);
+  const [customRangeEnd, setCustomRangeEnd] = useState(todayIso);
+  const [pdfSelectionMode, setPdfSelectionMode] = useState<'manual' | 'day' | 'week' | 'custom'>('manual');
 
   const options = useMemo(() => monthOptions(), []);
   const selectedClient = useMemo(
@@ -84,6 +127,12 @@ export function DevControleWorkPage({ workType }: Props) {
   const paidCount = rows.filter((r) => r.paid).length;
   const localMode = isLocalScannerAvailable();
   const showClientColumn = isExtra && !clientFilter;
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedIds.has(row.id)),
+    [rows, selectedIds]
+  );
+  const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+  const someVisibleSelected = rows.some((row) => selectedIds.has(row.id));
 
   const loadClients = useCallback(async () => {
     if (!isExtra) return;
@@ -108,6 +157,7 @@ export function DevControleWorkPage({ workType }: Props) {
 
   useEffect(() => {
     void load();
+    setSelectedIds(new Set());
   }, [load]);
 
   useEffect(() => {
@@ -278,6 +328,88 @@ export function DevControleWorkPage({ workType }: Props) {
     }
   }
 
+  function toggleRowSelection(id: string, checked: boolean) {
+    setPdfSelectionMode('manual');
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisible(checked: boolean) {
+    setPdfSelectionMode('manual');
+    setSelectedIds(checked ? new Set(rows.map((row) => row.id)) : new Set());
+  }
+
+  function selectByDateRange(start: string, end: string, mode: 'day' | 'week' | 'custom' = 'custom') {
+    const rangeStart = start <= end ? start : end;
+    const rangeEnd = end >= start ? end : start;
+    setCustomRangeStart(rangeStart);
+    setCustomRangeEnd(rangeEnd);
+    setPdfSelectionMode(mode);
+    setSelectedIds(
+      new Set(rows.filter((row) => entryInDateRange(row, rangeStart, rangeEnd)).map((row) => row.id))
+    );
+  }
+
+  function selectToday() {
+    const today = todayIso();
+    selectByDateRange(today, today, 'day');
+  }
+
+  function selectCurrentWeek() {
+    const { start, end } = currentWeekRange();
+    selectByDateRange(start, end, 'week');
+  }
+
+  function clearSelection() {
+    setPdfSelectionMode('manual');
+    setSelectedIds(new Set());
+  }
+
+  async function exportSelectedPdf() {
+    if (selectedRows.length === 0) {
+      setError('Selecione ao menos um programa para gerar o PDF.');
+      return;
+    }
+
+    try {
+      const sorted = [...selectedRows].sort((a, b) => a.start_date.localeCompare(b.start_date));
+      const rangeStart = sorted[0].start_date;
+      const rangeEnd = sorted[sorted.length - 1].start_date;
+      let clientName: string | null = null;
+      if (clientFilter) {
+        const client = await programmingClientsDb.get(clientFilter);
+        clientName = client?.name ?? sorted[0]?.client_name ?? null;
+      }
+
+      const totalScope = resolveReportTotalScope(
+        rangeStart,
+        rangeEnd,
+        pdfSelectionMode === 'day' ? 'day' : pdfSelectionMode === 'week' ? 'week' : null
+      );
+
+      const report = buildReportFromEntries(
+        selectedRows,
+        workType,
+        clientFilter || null,
+        rangeStart === rangeEnd
+          ? formatDayLabel(rangeStart)
+          : periodLabelFromRange(rangeStart, rangeEnd),
+        clientName,
+        'day',
+        totalScope
+      );
+      exportProgrammingPdf(report, { fileTag: `selecao-${pdfFileTagFromRange(rangeStart, rangeEnd)}` });
+      setError('');
+      setInfo(`PDF gerado com ${selectedRows.length} programa(s).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao gerar PDF.');
+    }
+  }
+
   async function exportReport() {
     try {
       const report: ProgramMonthlyReport = await programmingDb.getMonthlyReport(
@@ -349,6 +481,61 @@ export function DevControleWorkPage({ workType }: Props) {
             {showClientManager ? 'Fechar clientes' : 'Clientes'}
           </button>
         ) : null}
+      </div>
+
+      <div className="pdf-selection-bar card">
+        <div className="pdf-selection-actions">
+          <span className="pdf-selection-label">Seleção para PDF</span>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={selectToday}>
+            Hoje
+          </button>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={selectCurrentWeek}>
+            Semana
+          </button>
+          <label className="pdf-range-field">
+            De
+            <input
+              type="date"
+              value={customRangeStart}
+              onChange={(e) => setCustomRangeStart(e.target.value)}
+            />
+          </label>
+          <label className="pdf-range-field">
+            Até
+            <input
+              type="date"
+              value={customRangeEnd}
+              min={customRangeStart}
+              onChange={(e) => setCustomRangeEnd(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={() => selectByDateRange(customRangeStart, customRangeEnd, 'custom')}
+          >
+            Personalizado
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={clearSelection}
+            disabled={selectedIds.size === 0}
+          >
+            Limpar
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => void exportSelectedPdf()}
+            disabled={selectedIds.size === 0}
+          >
+            Gerar PDF{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+          </button>
+        </div>
+        <p className="pdf-selection-hint">
+          Marque linhas na tabela ou use Hoje, Semana ou Personalizado. O PDF inclui só os selecionados.
+        </p>
       </div>
 
       {isExtra && showClientManager ? (
@@ -469,6 +656,17 @@ export function DevControleWorkPage({ workType }: Props) {
           <table>
             <thead>
               <tr>
+                <th className="select-col">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
+                    }}
+                    onChange={(e) => toggleSelectAllVisible(e.target.checked)}
+                    title="Selecionar todos visíveis"
+                  />
+                </th>
                 <th>Referência</th>
                 <th>Descrição</th>
                 {showClientColumn ? <th>Cliente</th> : null}
@@ -482,7 +680,19 @@ export function DevControleWorkPage({ workType }: Props) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className={row.paid ? 'row-paid' : undefined}>
+                <tr
+                  key={row.id}
+                  className={row.paid ? 'row-paid' : undefined}
+                  data-selected={selectedIds.has(row.id) || undefined}
+                >
+                  <td className="select-col">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(row.id)}
+                      onChange={(e) => toggleRowSelection(row.id, e.target.checked)}
+                      title={`Selecionar ${row.reference}`}
+                    />
+                  </td>
                   <td className="mono">{row.reference}</td>
                   <td>{row.name}</td>
                   {showClientColumn ? <td>{row.client_name}</td> : null}
@@ -549,7 +759,7 @@ export function DevControleWorkPage({ workType }: Props) {
             {isExtra ? (
               <tfoot>
                 <tr>
-                  <td colSpan={showClientColumn ? 6 : 5} style={{ textAlign: 'right', fontWeight: 700 }}>
+                  <td colSpan={showClientColumn ? 7 : 6} style={{ textAlign: 'right', fontWeight: 700 }}>
                     Total ({rows.length} programas)
                   </td>
                   <td style={{ fontWeight: 700 }}>{formatMoney(total)}</td>
@@ -557,7 +767,7 @@ export function DevControleWorkPage({ workType }: Props) {
                 </tr>
                 <tr>
                   <td
-                    colSpan={showClientColumn ? 6 : 5}
+                    colSpan={showClientColumn ? 7 : 6}
                     style={{ textAlign: 'right', fontWeight: 700, color: 'var(--danger, #dc2626)' }}
                   >
                     Pago ({paidCount})
@@ -566,7 +776,7 @@ export function DevControleWorkPage({ workType }: Props) {
                   <td colSpan={2}></td>
                 </tr>
                 <tr>
-                  <td colSpan={showClientColumn ? 6 : 5} style={{ textAlign: 'right', fontWeight: 700 }}>
+                  <td colSpan={showClientColumn ? 7 : 6} style={{ textAlign: 'right', fontWeight: 700 }}>
                     A pagar ({rows.length - paidCount})
                   </td>
                   <td style={{ fontWeight: 700 }}>{formatMoney(pendingTotal)}</td>
@@ -576,7 +786,7 @@ export function DevControleWorkPage({ workType }: Props) {
             ) : (
               <tfoot>
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'right', fontWeight: 700 }}>
+                  <td colSpan={7} style={{ textAlign: 'right', fontWeight: 700 }}>
                     Total: {rows.length} programas
                   </td>
                 </tr>
@@ -589,6 +799,55 @@ export function DevControleWorkPage({ workType }: Props) {
       <style>{`
         .section-desc { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
         .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+        .pdf-selection-bar {
+          padding: 14px 16px;
+          margin-bottom: 16px;
+        }
+        .pdf-selection-actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .pdf-selection-label {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--muted);
+          margin-right: 4px;
+        }
+        .pdf-range-field {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 13px;
+          color: var(--muted);
+        }
+        .pdf-range-field input {
+          width: 140px;
+          padding: 6px 8px;
+          border-radius: 8px;
+          border: 1px solid var(--border, rgba(255,255,255,0.12));
+          background: var(--bg-elevated, rgba(0,0,0,0.25));
+          color: inherit;
+          font: inherit;
+          font-size: 13px;
+        }
+        .pdf-selection-hint {
+          margin: 10px 0 0;
+          font-size: 12px;
+          color: var(--muted);
+        }
+        .select-col {
+          width: 36px;
+          text-align: center;
+        }
+        .select-col input {
+          width: auto;
+          cursor: pointer;
+        }
+        tr[data-selected] {
+          background: rgba(45, 212, 191, 0.08);
+        }
         .client-panel { padding: 16px; margin-bottom: 16px; }
         .client-panel h3 { margin: 0 0 6px; font-size: 15px; }
         .client-panel-desc { margin: 0 0 12px; color: var(--muted); font-size: 13px; }

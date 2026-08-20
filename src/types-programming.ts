@@ -164,7 +164,11 @@ export type ProgramMonthlyReport = {
   paid_value: number;
   pending_programs: number;
   pending_value: number;
+  /** Rótulo do total no rodapé do PDF. */
+  total_scope?: ProgramReportTotalScope;
 };
+
+export type ProgramReportTotalScope = 'month' | 'day' | 'week' | 'period';
 
 export type CadastroPart = {
   key: string;

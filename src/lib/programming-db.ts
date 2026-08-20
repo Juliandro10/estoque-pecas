@@ -16,6 +16,7 @@ import { db } from '../firebase';
 import type {
   ProgramEntry,
   ProgramMonthlyReport,
+  ProgramReportTotalScope,
   ProgramWeekGroup,
   WorkType,
   JobKind,
@@ -29,6 +30,30 @@ const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
+
+const WEEKDAY_NAMES = [
+  'Domingo',
+  'Segunda-feira',
+  'Terça-feira',
+  'Quarta-feira',
+  'Quinta-feira',
+  'Sexta-feira',
+  'Sábado',
+];
+
+function parseIsoDate(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function formatDayLabel(iso: string) {
+  const date = parseIsoDate(iso);
+  const weekday = WEEKDAY_NAMES[date.getDay()];
+  const day = date.getDate();
+  const monthName = MONTH_NAMES[date.getMonth()];
+  const year = date.getFullYear();
+  return `${weekday} ${day} de ${monthName} de ${year}`;
+}
 
 function mapProgram(id: string, data: Record<string, unknown>): ProgramEntry {
   const workType = (data.work_type as WorkType | undefined) ?? 'extra';
@@ -67,9 +92,32 @@ function monthKeyFromDate(isoDate: string) {
   return `${y}-${m}`;
 }
 
-function parseIsoDate(iso: string) {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d);
+function toIsoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function weekRangeForIso(iso: string) {
+  const start = weekStartMonday(parseIsoDate(iso));
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { start: toIsoDate(start), end: toIsoDate(end) };
+}
+
+export function isClosedWeekRange(start: string, end: string) {
+  if (!start || !end || end < start) return false;
+  const { start: weekStart, end: weekEnd } = weekRangeForIso(start);
+  return start === weekStart && end === weekEnd;
+}
+
+export function resolveReportTotalScope(
+  rangeStart: string,
+  rangeEnd: string,
+  hint?: ProgramReportTotalScope | null
+): ProgramReportTotalScope {
+  if (hint === 'month') return 'month';
+  if (rangeStart === rangeEnd || hint === 'day') return 'day';
+  if (hint === 'week' || isClosedWeekRange(rangeStart, rangeEnd)) return 'week';
+  return 'period';
 }
 
 function weekStartMonday(date: Date) {
@@ -126,6 +174,78 @@ function groupByWeek(entries: ProgramEntry[]): ProgramWeekGroup[] {
   }
 
   return [...groups.values()].sort((a, b) => a.start.localeCompare(b.start));
+}
+
+function groupByDay(entries: ProgramEntry[]): ProgramWeekGroup[] {
+  const sorted = [...entries].sort((a, b) => a.start_date.localeCompare(b.start_date));
+  const groups = new Map<string, ProgramWeekGroup>();
+
+  for (const entry of sorted) {
+    const key = entry.start_date;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        label: formatDayLabel(key),
+        start: key,
+        end: key,
+        entries: [],
+        subtotal: 0,
+        paid_subtotal: 0,
+        all_paid: false,
+      });
+    }
+    const group = groups.get(key)!;
+    group.entries.push(entry);
+    group.subtotal += entry.value;
+    if (entry.paid) group.paid_subtotal += entry.value;
+  }
+
+  for (const group of groups.values()) {
+    group.all_paid = group.entries.length > 0 && group.entries.every((entry) => entry.paid);
+  }
+
+  return [...groups.values()].sort((a, b) => a.start.localeCompare(b.start));
+}
+
+export type ProgramReportGroupBy = 'week' | 'day';
+
+export function buildReportFromEntries(
+  entries: ProgramEntry[],
+  workType: WorkType,
+  clientId?: string | null,
+  periodLabel?: string,
+  clientNameOverride?: string | null,
+  groupBy: ProgramReportGroupBy = 'week',
+  totalScope: ProgramReportTotalScope = 'month'
+): ProgramMonthlyReport {
+  const weeks = groupBy === 'day' ? groupByDay(entries) : groupByWeek(entries);
+  const month =
+    entries[0]?.month ??
+    monthKeyFromDate(entries[0]?.start_date ?? new Date().toISOString().slice(0, 10));
+  const [year, mon] = month.split('-').map(Number);
+  const paidEntries = entries.filter((entry) => entry.paid);
+  const paid_value = paidEntries.reduce((sum, entry) => sum + entry.value, 0);
+  const total_value = entries.reduce((sum, entry) => sum + entry.value, 0);
+  let clientName: string | null = clientNameOverride ?? null;
+  if (clientName === null && clientId) {
+    clientName = entries[0]?.client_name ?? null;
+  }
+
+  return {
+    month,
+    period_label: periodLabel ?? `${MONTH_NAMES[mon - 1]}/${year}`,
+    generated_at: new Date().toISOString(),
+    work_type: workType,
+    client_id: clientId ?? null,
+    client_name: clientName,
+    weeks,
+    total_programs: entries.length,
+    total_value,
+    paid_programs: paidEntries.length,
+    paid_value,
+    pending_programs: entries.length - paidEntries.length,
+    pending_value: total_value - paid_value,
+    total_scope: totalScope,
+  };
 }
 
 function docId(month: string, workType: WorkType, reference: string, clientId?: string) {
@@ -269,31 +389,21 @@ export const programmingDb = {
     clientId?: string | null
   ): Promise<ProgramMonthlyReport> => {
     const entries = await programmingDb.listByMonth(month, workType, clientId);
-    const weeks = groupByWeek(entries);
     const [year, mon] = month.split('-').map(Number);
-    const paidEntries = entries.filter((entry) => entry.paid);
-    const paid_value = paidEntries.reduce((sum, entry) => sum + entry.value, 0);
-    const total_value = entries.reduce((sum, entry) => sum + entry.value, 0);
     let clientName: string | null = null;
     if (clientId) {
       const client = await programmingClientsDb.get(clientId);
       clientName = client?.name ?? entries[0]?.client_name ?? null;
     }
 
-    return {
-      month,
-      period_label: `${MONTH_NAMES[mon - 1]}/${year}`,
-      generated_at: new Date().toISOString(),
-      work_type: workType,
-      client_id: clientId ?? null,
-      client_name: clientName,
-      weeks,
-      total_programs: entries.length,
-      total_value,
-      paid_programs: paidEntries.length,
-      paid_value,
-      pending_programs: entries.length - paidEntries.length,
-      pending_value: total_value - paid_value,
-    };
+    return buildReportFromEntries(
+      entries,
+      workType,
+      clientId,
+      `${MONTH_NAMES[mon - 1]}/${year}`,
+      clientName,
+      'week',
+      'month'
+    );
   },
 };

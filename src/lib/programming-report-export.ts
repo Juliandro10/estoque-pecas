@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-import type { ProgramMonthlyReport } from '../types-programming';
+import type { ProgramMonthlyReport, ProgramReportTotalScope } from '../types-programming';
 import { formatJobKindLabel } from '../types-programming';
 
 function formatBr(iso: string) {
@@ -15,6 +15,19 @@ function formatMoney(value: number) {
 
 function formatGenerated(iso: string) {
   return new Date(iso).toLocaleString('pt-BR');
+}
+
+function totalScopeLabel(scope: ProgramReportTotalScope = 'month') {
+  switch (scope) {
+    case 'day':
+      return 'Total do dia';
+    case 'week':
+      return 'Total da semana';
+    case 'period':
+      return 'Total do período';
+    default:
+      return 'Total do mês';
+  }
 }
 
 function drawPaidStamp(doc: jsPDF, x: number, y: number, w: number, h: number) {
@@ -38,7 +51,10 @@ function drawPaidStamp(doc: jsPDF, x: number, y: number, w: number, h: number) {
   doc.setFont('helvetica', 'normal');
 }
 
-export function exportProgrammingPdf(report: ProgramMonthlyReport) {
+export function exportProgrammingPdf(
+  report: ProgramMonthlyReport,
+  options?: { fileTag?: string }
+) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   let y = 16;
   const isExtra = report.work_type === 'extra';
@@ -138,11 +154,12 @@ export function exportProgrammingPdf(report: ProgramMonthlyReport) {
   }
 
   doc.setFontSize(12);
+  const totalLabel = totalScopeLabel(report.total_scope);
   if (isExtra) {
     y += 4;
     doc.setFont('helvetica', 'bold');
     doc.text(
-      `Total do mês: ${report.total_programs} programas — R$ ${formatMoney(report.total_value)}`,
+      `${totalLabel}: ${report.total_programs} programas — R$ ${formatMoney(report.total_value)}`,
       14,
       y
     );
@@ -162,10 +179,11 @@ export function exportProgrammingPdf(report: ProgramMonthlyReport) {
     );
     doc.setFont('helvetica', 'normal');
   } else {
-    doc.text(`Total do mês: ${report.total_programs} programas`, 14, y + 4);
+    doc.text(`${totalLabel}: ${report.total_programs} programas`, 14, y + 4);
   }
 
+  const fileTag = options?.fileTag ?? report.month;
   doc.save(
-    `${isExtra ? 'extra' : 'dia-normal'}${report.client_name ? `-${report.client_name.replace(/[^\w.-]+/g, '_')}` : ''}-${report.month}.pdf`
+    `${isExtra ? 'extra' : 'dia-normal'}${report.client_name ? `-${report.client_name.replace(/[^\w.-]+/g, '_')}` : ''}-${fileTag}.pdf`
   );
 }
