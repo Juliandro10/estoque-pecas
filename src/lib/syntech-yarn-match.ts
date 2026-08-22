@@ -1,6 +1,7 @@
 import type { ConsolidatedYarnRow, SyntechYarnCatalogFile } from '../types-programming';
 import {
   buildCorrectedYarnDescription,
+  formatYarnComponentDescription,
   parseYarnDescription as parseYarnDescriptionCore,
   parseYarnDescriptionComponents,
 } from '../../shared/yarn-description-parse';
@@ -130,7 +131,7 @@ export function resolveYarnRow(
   const parsed = parseYarnDescription(row.description, yarnTypes);
   const codeLead = parseSyntechCodeLead(row.description);
 
-  if (codeLead && catalog && (row.component_index ?? 0) === 0) {
+  if (codeLead && catalog) {
     const byCode = resolveBySyntechCode(row, catalog, codeLead);
     if (byCode) return byCode;
   }
@@ -215,7 +216,7 @@ export function resolveBlendedComponents(
     resolveYarnRow(
       {
         ...row,
-        description: `${component.tipo}${component.cor ? ` ${component.cor}` : ''}${component.cabo ? ` ${component.cabo} CABO` : ''}`.trim(),
+        description: component.raw || formatYarnComponentDescription(component),
         component_index: index,
       },
       catalog

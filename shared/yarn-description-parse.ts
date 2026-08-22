@@ -1,4 +1,5 @@
 import { findBestYarnTypeMatch } from './syntech-name-match';
+import { parseSyntechCodeLead } from './syntech-code-parse';
 
 export type ParsedYarnDescription = {
   tipo: string;
@@ -12,6 +13,13 @@ export type ParsedYarnComponent = ParsedYarnDescription & {
 };
 
 const CABO_MARKER = /(\d+)\s+CABO(?:S(?:I)?)?\b/i;
+
+/** "A - CODIGO B" / "A - 4 - B" → "A + ..." para misturas no mesmo guia. */
+function normalizeBlendSeparators(text: string) {
+  return text
+    .replace(/\s+-\s+(?=(?:CODIGO|CÓDIGO|COD\.?\s*\d)\b)/gi, ' + ')
+    .replace(/\s+-\s+(?=\d{1,3}\s*[-–—:])/g, ' + ');
+}
 
 function stripSupplierCode(text: string) {
   const match = text.match(/^(\d{3})\s+(.+)$/);
@@ -88,7 +96,7 @@ export function parseYarnDescriptionComponents(
   description: string,
   yarnTypes: string[] = []
 ): ParsedYarnComponent[] {
-  const text = description.trim();
+  const text = normalizeBlendSeparators(description.trim());
   if (!text) return [];
 
   const plusSegments = text
@@ -130,8 +138,16 @@ export function parseYarnDescription(
   description: string,
   yarnTypes: string[] = []
 ): ParsedYarnDescription {
-  const text = description.trim();
+  let text = description.trim();
   if (!text) return { tipo: '', cabo: null, cor: null };
+
+  const codeLead = parseSyntechCodeLead(text);
+  if (codeLead) {
+    if (!codeLead.rest) {
+      return { tipo: `CODIGO ${codeLead.codigo}`, cabo: null, cor: null };
+    }
+    text = codeLead.rest.trim();
+  }
 
   const caboMatch = text.match(CABO_MARKER);
   if (!caboMatch || caboMatch.index === undefined) {

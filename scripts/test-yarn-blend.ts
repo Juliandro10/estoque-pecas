@@ -17,6 +17,8 @@ const samples = [
   'CAPRICE OFF 1 CABO LINHA SNOW 1 CABO',
   'ELASTANO BRANCO 3 CABOS + LINHA SNOW 1 CABO',
   '013 LASTEX BRANCO 1 CABO',
+  'CODIGO 24 FIO LANTEJOULA OFF LANTEJOULA 1 CABO - CODIGO 4 POLISTER HB 2/28 BRANCO 2 CABO',
+  'FIO LANTEJOULA OFF LANTEJOULA 1 CABO + POLISTER HB 2/28 BRANCO 2 CABO',
 ];
 
 console.log('parseYarnDescriptionComponents');
@@ -31,6 +33,14 @@ const capriceLinha = parseYarnDescriptionComponents(
 );
 console.log('\nPeso relativo CAPRICE + LINHA (1+1 cabo, fator 2.5):');
 console.log(splitComponentWeightShares(capriceLinha).map((share) => `${Math.round(share * 1000) / 10}%`));
+
+console.log('\nPeso relativo PAETE + POLI (1+2 cabo, fator 2.5):');
+const paetePoli = parseYarnDescriptionComponents(
+  'CODIGO 24 FIO LANTEJOULA OFF LANTEJOULA 1 CABO - CODIGO 4 POLISTER HB 2/28 BRANCO 2 CABO',
+  yarnTypes
+);
+console.log(paetePoli);
+console.log(splitComponentWeightShares(paetePoli).map((share) => `${Math.round(share * 1000) / 10}%`));
 
 console.log('\nSlots — guias 1,2,3(mistura),6(mistura),7:');
 console.log(

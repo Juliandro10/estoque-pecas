@@ -1,9 +1,12 @@
 {
-  "updated_at": "2026-06-17",
-  "note": "Peso relativo por cabo: peso ∝ % simx × cabos × fator. ELASTANO: 1 cabo elast × 1 cabo linha (simx igual) = 8% / 92% peso.",
+  "updated_at": "2026-08-22",
+  "note": "Peso relativo por cabo: peso ∝ % simx × cabos × fator. PAETE/Lantejoula (cod.24) = 2,5× poliéster (cod.4) por cabo. ELASTANO: 8% / 92% com linha.",
   "default_factor": 1,
   "types": {
     "CAPRICE": 2.5,
+    "FIO LANTEJOULA": 2.5,
+    "LANTEJOULA": 2.5,
+    "PAETE": 2.5,
     "LINHA": 1,
     "ELASTANO": 0.08695652173913043,
     "LASTEX": 1

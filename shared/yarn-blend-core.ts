@@ -19,6 +19,9 @@ export const DEFAULT_YARN_WEIGHT_FACTORS: YarnWeightFactorsFile = {
   default_factor: 1,
   types: {
     CAPRICE: 2.5,
+    'FIO LANTEJOULA': 2.5,
+    LANTEJOULA: 2.5,
+    PAETE: 2.5,
     LINHA: 1,
     ELASTANO: ELASTANO_WEIGHT_FACTOR,
     LASTEX: 1,
@@ -301,7 +304,7 @@ export function expandProcessYarnComponents(
         guide: row.guide,
         slot,
         letter: row.letter,
-        description: formatYarnComponentDescription(component),
+        description: component.raw || formatYarnComponentDescription(component),
         tipo: component.tipo,
         cor: component.cor,
         cabo,
