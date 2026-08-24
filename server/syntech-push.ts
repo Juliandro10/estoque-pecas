@@ -10,6 +10,7 @@ import {
   queryTx,
   runInTransaction,
   tempoToTempom,
+  clipSyntechText,
   type SyntechTx,
 } from './syntech-db';
 import { resolveMaquinaForModel } from './sin-machine';
@@ -34,6 +35,29 @@ import { recalculateConsolidatedYarns } from './yarn-consolidate';
 
 const SLOT_COUNT = 8;
 const DEFAULT_TAMANHO = '*';
+const SYNTech_PRODUTO_MAX = 13;
+
+function syntechProductCodeCandidates(reference: string) {
+  const trimmed = reference.trim();
+  const candidates: string[] = [];
+  const clipped = clipSyntechText(trimmed, SYNTech_PRODUTO_MAX);
+  if (clipped) candidates.push(clipped);
+
+  const numeric = trimmed.match(/^(\d{3,5})\b/);
+  if (numeric?.[1] && !candidates.includes(numeric[1])) {
+    candidates.push(numeric[1]);
+  }
+
+  return candidates;
+}
+
+async function resolveSyntechProduct(tx: SyntechTx, reference: string) {
+  for (const codigo of syntechProductCodeCandidates(reference)) {
+    const product = await productExists(tx, codigo);
+    if (product) return product;
+  }
+  return null;
+}
 
 function loadWeightFactorsFromDisk() {
   try {
@@ -85,10 +109,12 @@ export type SyntechPushResult = {
 };
 
 async function productExists(tx: SyntechTx, reference: string) {
+  const codigo = clipSyntechText(reference.trim(), SYNTech_PRODUTO_MAX);
+  if (!codigo) return null;
   const rows = await queryTx<{ CODIGO: string; NOME: string }>(
     tx,
     'SELECT CODIGO, NOME FROM PRODUTOS WHERE CODIGO = ?',
-    [reference.trim()]
+    [codigo]
   );
   return rows[0] ?? null;
 }
@@ -495,14 +521,19 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
 
   try {
     const result = await runInTransaction(db, async (tx) => {
-      const product = await productExists(tx, reference);
+      const product = await resolveSyntechProduct(tx, reference);
       if (!product) {
         throw new Error(`Produto ${reference} não existe no Syntech (PRODUTOS). Cadastre o produto antes.`);
       }
 
+      const syntechCode = clipSyntechText(product.CODIGO.trim(), SYNTech_PRODUTO_MAX);
+      if (reference.trim() !== syntechCode) {
+        warnings.push(`Referência ${reference} gravada no Syntech como ${syntechCode}`);
+      }
+
       let tempoRows = 0;
       for (let numero = 1; numero <= SLOT_COUNT; numero++) {
-        const updated = await upsertTempoPesoRow(tx, reference, numero, pushParts[numero - 1]);
+        const updated = await upsertTempoPesoRow(tx, syntechCode, numero, pushParts[numero - 1]);
         if (updated) tempoRows += 1;
       }
 
@@ -522,7 +553,7 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
 
       const matPrimaRows = await pushMatPrima(
         tx,
-        reference,
+        syntechCode,
         consolidated,
         guiaRows,
         warnings,
@@ -533,12 +564,12 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
         reference,
         folderName: input.model_folder ? path.basename(input.model_folder) : undefined,
       });
-      partes_prod_rows = await pushPartesProd(tx, reference, partesProd);
+      partes_prod_rows = await pushPartesProd(tx, syntechCode, partesProd);
       if (partes_prod_rows === 0) {
         warnings.push('Nenhuma parte para PARTES_PROD');
       }
 
-      await pushPesoBrutoProduto(tx, reference, pushParts, partWeightKg);
+      await pushPesoBrutoProduto(tx, syntechCode, pushParts, partWeightKg);
 
       if (input.model_folder) {
         const sinFiles = [...new Set(mdvParts.map((part) => part.file_name))];
@@ -547,12 +578,12 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
 
         programa = resolvePrograma(input.model_folder, firstSinText) ?? undefined;
         if (programa) {
-          await pushPrograma(tx, reference, programa);
+          await pushPrograma(tx, syntechCode, programa);
         } else {
           warnings.push('Programa não identificado no .sin — PRODUTOS.PROGRAMA não alterado');
         }
 
-        guia_fio_rows = await pushGuiaFio(tx, reference, guiaRows);
+        guia_fio_rows = await pushGuiaFio(tx, syntechCode, guiaRows);
         if (guia_fio_rows === 0) {
           warnings.push('Nenhum guia-fio encontrado no .sin — GUIA_FIO não alterada');
         }
@@ -565,7 +596,7 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
         warnings,
         partWeightKg
       );
-      bicos_maquina_rows = await pushBicosMaquina(tx, reference, bicoRows);
+      bicos_maquina_rows = await pushBicosMaquina(tx, syntechCode, bicoRows);
       if (consolidated.length > 0 && bicos_maquina_rows === 0) {
         warnings.push('Nenhum bico gravado em matéria-prima para máquina');
       }
@@ -585,7 +616,7 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
       }
 
       if (maquina !== undefined) {
-        await pushMaquina(tx, reference, maquina);
+        await pushMaquina(tx, syntechCode, maquina);
       }
 
       return {

@@ -12,6 +12,7 @@ import {
   mergeYarnPartsFromSin,
   prunePartsToFolder,
   pruneYarnPartsToFolder,
+  ensureFolderPartsInCadastro,
   syncSavedPartsWithFolder,
   parseTimeInput,
   partKindToken,
@@ -361,7 +362,6 @@ export function DesenvCadastroPage() {
       const saved = await cadastroDb.get(ref);
       if (saved) {
         let savedParts = programPartsOnly(saved.parts);
-        setName(saved.name);
         setObservations(saved.observations);
 
         if (localMode && scannerOk) {
@@ -374,8 +374,17 @@ export function DesenvCadastroPage() {
               file_name: p.file_name,
             })) ?? [];
           setFolderParts(folderPartsRows);
+
+          const folderName = found?.name?.trim() ?? '';
+          if (folderName) {
+            setName(folderName);
+          } else {
+            setName(saved.name);
+          }
+
           const synced = syncSavedPartsWithFolder(savedParts, folderPartsRows);
-          savedParts = synced.parts;
+          const ensured = ensureFolderPartsInCadastro(synced.parts, folderPartsRows);
+          savedParts = ensured.parts;
 
           const [timesResult, yarnsResult] = await Promise.all([
             refreshSintralTimes(ref, savedParts),
@@ -385,11 +394,17 @@ export function DesenvCadastroPage() {
           setYarnParts(yarnsResult.yarnParts);
           setMachineLabel(yarnsResult.machineLabel ?? '');
           const bits = [
+            folderName && saved.name.trim() && folderName.toUpperCase() !== saved.name.trim().toUpperCase()
+              ? `Descrição da pasta: ${folderName} (cadastro salvo: ${saved.name.trim()})`
+              : null,
             synced.updated && synced.removed.length > 0
               ? `Partes removidas (não estão na pasta): ${synced.removed.join(', ')}`
               : synced.updated
                 ? 'Arquivos sincronizados com a pasta'
                 : null,
+            ensured.added.length > 0
+              ? `Partes incluídas da pasta: ${ensured.added.join(', ')}`
+              : null,
             timesResult.message,
             yarnsResult.message,
           ].filter(Boolean);

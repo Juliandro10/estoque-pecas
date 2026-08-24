@@ -455,6 +455,31 @@ export function syncSavedPartsWithFolder(saved: CadastroPart[], folder: FolderPa
   };
 }
 
+/** Inclui partes da pasta que ainda não estão no cadastro (ex.: ref. reutilizada). */
+export function ensureFolderPartsInCadastro(parts: CadastroPart[], folder: FolderPartRow[]) {
+  if (folder.length === 0) return { parts, added: [] as string[] };
+
+  const byFile = new Set(parts.map((part) => part.file_name.trim().toLowerCase()).filter(Boolean));
+  const next = [...parts];
+  const added: string[] = [];
+
+  for (const row of folder) {
+    const file = row.file_name.trim().toLowerCase();
+    if (!file || byFile.has(file)) continue;
+    next.push({
+      key: row.key,
+      label: row.label,
+      file_name: row.file_name,
+      time_mmss: '',
+      weight_kg: '',
+    });
+    byFile.add(file);
+    added.push(row.label.trim() || row.file_name);
+  }
+
+  return { parts: next, added };
+}
+
 /** Remove fios de partes cujo .mdv não está na pasta. */
 export function pruneYarnPartsToFolder(yarnParts: CadastroYarnPart[], folder: FolderPartRow[]) {
   if (folder.length === 0) return { yarnParts, removed: [] as string[] };
