@@ -201,6 +201,8 @@ export type ConsolidatedYarnRow = {
   pct: number;
   consumption: string;
   parts: string[];
+  /** Lado do guia na máquina (esquerda/direita). Undefined = ambos ou desconhecido. */
+  side?: 'left' | 'right';
   tipo_fio_codigo?: number | null;
   tipo_fio_nome?: string | null;
   cor?: string | null;

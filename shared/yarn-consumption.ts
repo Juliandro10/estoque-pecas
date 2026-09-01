@@ -4,6 +4,7 @@ import {
   fabricGuideWeightShare,
   fabricWeightShareSum,
 } from './yarn-blend-core';
+import { mergeYarnSides } from './guia-fio-text';
 
 export type YarnGuideRow = {
   guide: number;
@@ -34,6 +35,7 @@ export type ConsolidatedYarnOutput = {
   pct: number;
   consumption: string;
   parts: string[];
+  side?: 'left' | 'right';
 };
 
 const CONSUMPTION_SCALE = 1000;
@@ -98,7 +100,7 @@ function partBaseFromFileName(fileName: string) {
 
 function partKindToken(value: string) {
   const base = partBaseFromFileName(value) || value.trim().toUpperCase();
-  const match = base.match(/-(CT|FT|MG|COSTAS|FRENTE|MANGA|C|F|M)$/i);
+  const match = base.match(/-(CT|FT|MG|COSTAS|FRENTE|MANGA|CORPO|GOLA|ACAB|C|F|M)$/i);
   if (!match) return '';
   const token = match[1].toUpperCase();
   if (token === 'C') return 'CT';
@@ -283,6 +285,7 @@ export function normalizeYarnDescriptionKey(description: string) {
   if (!text) return '';
 
   text = text.replace(/\b(DE|DO|DA|DOS|DAS)\b/g, ' ');
+  text = text.replace(/\b([A-Z]{3,})I\b/g, '$1');
   text = text.replace(/\s+/g, ' ').trim();
   return text;
 }
@@ -294,12 +297,16 @@ export function yarnFioIdentityKey(description: string): string {
 
   const caboMatch = text.match(/(\d+)\s+CABOS?\w*/i);
   const cabo = caboMatch?.[1] ?? '';
-  const body =
+  const tipo =
     caboMatch && caboMatch.index !== undefined
       ? text.slice(0, caboMatch.index).trim()
       : text;
+  const cor =
+    caboMatch && caboMatch.index !== undefined
+      ? text.slice(caboMatch.index + caboMatch[0].length).trim()
+      : '';
 
-  return `${normalizeYarnDescriptionKey(body)}|${cabo}`;
+  return `${normalizeYarnDescriptionKey(tipo)}|${cabo}|${normalizeYarnDescriptionKey(cor)}`;
 }
 
 /** Mesmo bico + mesmo fio e mesma cor = uma linha — letra M1 pode variar entre partes. */
@@ -341,6 +348,7 @@ export function consolidateYarnParts(
         existing.letter = primaryYarnLetter(existing.letters);
         existing.consumption = formatConsumption(existing.sum);
         existing.description = pickRicherYarnDescription(existing.description, guide.description);
+        existing.side = mergeYarnSides(existing.side, guide.side);
         if (!existing.parts.includes(partLabel)) existing.parts.push(partLabel);
         continue;
       }
@@ -352,6 +360,7 @@ export function consolidateYarnParts(
         pct: 0,
         consumption: formatConsumption(add),
         parts: [partLabel],
+        side: guide.side,
         sum: add,
         letters: new Set([guide.letter.toUpperCase()]),
       });

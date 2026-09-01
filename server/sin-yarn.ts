@@ -75,7 +75,7 @@ function extractSinColumns(rest: string): { left: string; right: string } {
     return { left: '', right: body.replace(/^I\s*/i, '').trim() };
   }
 
-  const parts = body.split(/\sI\s/i).map((part) => part.trim());
+  const parts = body.split(/\sI(?:\s+|(?=\d+=))/i).map((part) => part.trim());
   return { left: parts[0] ?? '', right: parts[1] ?? '' };
 }
 
@@ -94,15 +94,39 @@ function parseGuideCell(cell: string, side: 'left' | 'right'): SinYarnGuide | nu
   const trimmed = cell.trim();
   if (!trimmed || /^-+$/.test(trimmed)) return null;
 
-  const match = trimmed.match(/^(\d+)=(\S)(?:\s+(.*))?$/);
+  const match = trimmed.match(/^(\d+)=([A-Za-z])(?:\s+(.*))?$/);
   if (!match) return null;
 
   return {
     guide: Number(match[1]),
-    letter: match[2],
+    letter: match[2].toUpperCase(),
     description: repairSinGuideDescription(match[3] ?? ''),
     side,
   };
+}
+
+/** Um I colado na cor (TERRAI 3=D) junta dois guias da mesma barra numa célula. */
+function parseGuideCells(cell: string, defaultSide: 'left' | 'right'): SinYarnGuide[] {
+  const trimmed = cell.trim();
+  if (!trimmed || /^-+$/.test(trimmed)) return [];
+
+  const matches = [...trimmed.matchAll(/(\d+)=([A-Za-z])/g)];
+  if (matches.length <= 1) {
+    const one = parseGuideCell(trimmed, defaultSide);
+    return one ? [one] : [];
+  }
+
+  const guides: SinYarnGuide[] = [];
+  for (let index = 0; index < matches.length; index++) {
+    const match = matches[index];
+    if (match.index === undefined) continue;
+    const end = index + 1 < matches.length ? matches[index + 1].index ?? trimmed.length : trimmed.length;
+    const chunk = trimmed.slice(match.index, end).trim();
+    const side = index === 0 ? defaultSide : defaultSide === 'left' ? 'right' : 'left';
+    const parsed = parseGuideCell(chunk, side);
+    if (parsed) guides.push(parsed);
+  }
+  return guides;
 }
 
 export function parseYarnGuidesFromSin(text: string): SinYarnParseResult {
@@ -140,11 +164,8 @@ export function parseYarnGuidesFromSin(text: string): SinYarnParseResult {
     const row = parseTableLine(line);
     if (!row) continue;
 
-    const left = parseGuideCell(row.left, 'left');
-    if (left) guides.push(left);
-
-    const right = parseGuideCell(row.right, 'right');
-    if (right) guides.push(right);
+    guides.push(...parseGuideCells(row.left, 'left'));
+    guides.push(...parseGuideCells(row.right, 'right'));
   }
 
   return { ygc, ydf, guides };

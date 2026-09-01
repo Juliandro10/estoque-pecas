@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-08-24T17:54:04.665Z",
+  "updated_at": "2026-09-01T14:03:05.535Z",
   "source": "C:\\Textil\\Empresas\\FABRICA.MDB",
   "types": [
     {
@@ -161,6 +161,7 @@
         "MILK(IMPORTADO)",
         "MILK(S NA GOLA)",
         "MILK+PRATA",
+        "NATURAL",
         "NAVAL",
         "NEVE",
         "NINIVE",
@@ -672,15 +673,12 @@
         "MARAVILHA",
         "MARSALA",
         "MILK",
-        "MILK / NEVE",
         "ORQUIDEA RADIANTE",
         "PINK CITRUS",
         "PINK DLIA",
         "PRETO",
         "PRIMAVERA",
-        "PRIMAVERA / VIOLETA",
         "PURPURA",
-        "PURPURA / MA VERDE",
         "ROSA CITRUS",
         "ROSA FLUORESCENTE",
         "ROSA LIGHT",

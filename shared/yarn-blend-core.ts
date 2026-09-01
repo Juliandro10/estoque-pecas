@@ -3,9 +3,10 @@ import {
   parseYarnDescriptionComponents,
   type ParsedYarnComponent,
 } from './yarn-description-parse';
+import { nativeBicoSlotPriority, type YarnSide } from './guia-fio-text';
 
-const OVERFLOW_SLOTS = [9, 10];
-const MAX_BICO_SLOT = 10;
+const PHYSICAL_BARS = 8;
+const OVERFLOW_SLOTS = [9, 10, 11, 12, 13, 14, 15, 16];
 
 export type YarnWeightFactorsFile = {
   default_factor: number;
@@ -47,6 +48,8 @@ export type ProcessYarnInput = {
   consumption: string;
   pct?: number;
   tipo_fio_codigo?: number;
+  side?: YarnSide;
+  parts?: string[];
 };
 
 export type ProcessYarnComponent = {
@@ -63,6 +66,10 @@ export type ProcessYarnComponent = {
   componentIndex: number;
   isPrimary: boolean;
   tipo_fio_codigo?: number;
+  side?: YarnSide;
+  parts?: string[];
+  /** Descrição consolidada do guia (mistura completa, se houver). */
+  consolidatedDescription: string;
 };
 
 export type GuiaCaboHint = {
@@ -166,13 +173,24 @@ export function splitComponentWeightShares(
   return weights.map((value) => value / total);
 }
 
-function consolidatedRowKey(row: Pick<ProcessYarnInput, 'guide' | 'letter'>) {
+function descriptionSlotKey(description: string) {
+  return description.trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+function consolidatedRowKey(row: Pick<ProcessYarnInput, 'guide' | 'letter' | 'description'>) {
   const letter = (row.letter ?? 'A').trim().toUpperCase() || 'A';
-  return `${row.guide}:${letter}`;
+  return `${row.guide}:${letter}:${descriptionSlotKey(row.description ?? '')}`;
 }
 
 export function allocateBicoSlots(
-  entries: { guide: number; letter?: string; count: number }[]
+  entries: {
+    guide: number;
+    letter?: string;
+    count: number;
+    side?: YarnSide;
+    parts?: string[];
+    description?: string;
+  }[]
 ) {
   const activeGuides = new Set(
     entries.filter((item) => item.count > 0).map((item) => item.guide)
@@ -185,17 +203,23 @@ export function allocateBicoSlots(
     .sort(
       (a, b) =>
         a.guide - b.guide ||
-        (a.letter ?? 'A').localeCompare(b.letter ?? 'A', 'pt-BR')
+        nativeBicoSlotPriority(a) - nativeBicoSlotPriority(b) ||
+        (a.letter ?? 'A').localeCompare(b.letter ?? 'A', 'pt-BR') ||
+        descriptionSlotKey(a.description ?? '').localeCompare(descriptionSlotKey(b.description ?? ''), 'pt-BR')
     );
 
   for (const entry of sorted) {
-    const rowKey = consolidatedRowKey(entry);
+    const rowKey = consolidatedRowKey({
+      guide: entry.guide,
+      letter: entry.letter,
+      description: entry.description ?? '',
+    });
     for (let index = 0; index < entry.count; index++) {
       let slot: number | null = null;
       if (
         index === 0 &&
         entry.guide >= 1 &&
-        entry.guide <= MAX_BICO_SLOT &&
+        entry.guide <= PHYSICAL_BARS &&
         !usedSlots.has(entry.guide)
       ) {
         slot = entry.guide;
@@ -216,7 +240,7 @@ export function allocateBicoSlots(
 }
 
 function findExtraSlot(guide: number, activeGuides: Set<number>, usedSlots: Set<number>) {
-  for (let slot = guide + 1; slot <= 8; slot++) {
+  for (let slot = guide + 1; slot <= PHYSICAL_BARS; slot++) {
     if (activeGuides.has(slot)) continue;
     if (usedSlots.has(slot)) continue;
     return slot;
@@ -267,7 +291,10 @@ export function expandProcessYarnComponents(
     rowEntries.map(({ row, count }) => ({
       guide: row.guide,
       letter: row.letter,
+      description: row.description,
       count,
+      side: row.side,
+      parts: row.parts,
     }))
   );
   const totalPeso = activeRows.reduce((sum, row) => sum + parseConsumptionKg(row.consumption), 0);
@@ -314,6 +341,9 @@ export function expandProcessYarnComponents(
         componentIndex: index,
         isPrimary: index === 0,
         tipo_fio_codigo: index === 0 ? row.tipo_fio_codigo : undefined,
+        side: row.side,
+        parts: row.parts,
+        consolidatedDescription: row.description,
       });
     }
   }

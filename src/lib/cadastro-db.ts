@@ -11,6 +11,7 @@ import {
   fabricGuideWeightShare,
   fabricWeightShareSum,
 } from '../../shared/yarn-blend-core';
+import { mergeYarnSides } from '../../shared/guia-fio-text';
 
 export { consolidatedYarnIdentityKey, normalizeYarnDescriptionKey, yarnFioIdentityKey };
 
@@ -319,6 +320,7 @@ export function consolidateYarnParts(
         existing.letter = primaryYarnLetter(existing.letters);
         existing.consumption = formatConsumption(existing.sum);
         existing.description = pickRicherYarnDescription(existing.description, guide.description);
+        existing.side = mergeYarnSides(existing.side, guide.side);
         if (!existing.parts.includes(partLabel)) existing.parts.push(partLabel);
         continue;
       }
@@ -330,6 +332,7 @@ export function consolidateYarnParts(
         pct: 0,
         consumption: formatConsumption(add),
         parts: [partLabel],
+        side: guide.side,
         sum: add,
         letters: new Set([guide.letter.toUpperCase()]),
       });
@@ -362,14 +365,14 @@ function normalizeKindToken(token: string) {
 /** CT, FT, MG… — reconhece também ...-CT-P-4 e label CT-P-4. */
 export function partKindToken(value: string) {
   const base = partBaseFromFileName(value) || value.trim().toUpperCase();
-  const tail = base.match(/-(CT|FT|MG|COSTAS|FRENTE|MANGA|CORPO|GOLA|C|F|M)$/i);
+  const tail = base.match(/-(CT|FT|MG|COSTAS|FRENTE|MANGA|CORPO|GOLA|ACAB|C|F|M)$/i);
   if (tail) return normalizeKindToken(tail[1]);
 
   const segments = base.split('-').filter(Boolean);
   for (let i = segments.length - 1; i >= 0; i--) {
     const normalized = normalizeKindToken(segments[i]);
     if (
-      ['CT', 'FT', 'MG', 'MN', 'CORPO', 'GOLA', 'MANGA', 'FRENTE', 'COSTAS'].includes(normalized)
+      ['CT', 'FT', 'MG', 'MN', 'CORPO', 'GOLA', 'ACAB', 'MANGA', 'FRENTE', 'COSTAS'].includes(normalized)
     ) {
       return normalized;
     }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { dedupePhantomIColors, findYarnTypeIndex, repairSyntechText, stripPhantomColorI } from '../shared/syntech-name-match';
+import { isCompactGuiaNote } from '../shared/guia-fio-text';
 
 import { attachSyntechDb, detachDb, queryDb } from './syntech-db';
 
@@ -114,7 +115,9 @@ export async function syncSyntechYarnCatalogFromDb(): Promise<SyntechYarnCatalog
     );
 
     for (const row of guiaRows) {
-      const index = findTypeIndex(catalogTypes, repairSyntechText(row.TIPO));
+      const tipo = repairSyntechText(row.TIPO);
+      if (isCompactGuiaNote(tipo)) continue;
+      const index = findTypeIndex(catalogTypes, tipo);
       if (index < 0) continue;
       mergeColor(catalogTypes[index].cores, repairSyntechText(row.COR));
     }

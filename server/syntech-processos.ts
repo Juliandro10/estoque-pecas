@@ -2,8 +2,9 @@ import { parseWeightKg, queryTx, clipSyntechText, type SyntechTx } from './synte
 import type { GuiaFioRow } from './syntech-guia-fio';
 import { expandProcessYarnComponents, type ProcessYarnInput } from './yarn-blend';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
+import { bicoProcessoLabel } from '../shared/guia-fio-text';
 
-const BICO_SLOTS = 10;
+const BICO_SLOTS = 16;
 const PARTE_NAME_MAX = 15;
 
 type PushPart = {
@@ -51,6 +52,7 @@ const PART_SUFFIX_HEADS = new Set([
   'MANGA',
   'PUNHO',
   'GOLA',
+  'ACAB',
 ]);
 
 /**
@@ -236,10 +238,29 @@ export function buildBicoMaquinaRows(
     partWeightKg
   );
 
+  const siblings = expanded.map((row) => ({
+    guide: row.guide,
+    slot: row.slot,
+    letter: row.letter,
+    side: row.side,
+    parts: row.parts,
+    componentIndex: row.componentIndex,
+  }));
+
   return expanded.map((row) => ({
     bico: row.slot,
     guide: row.guide,
-    parte: `BICO ${row.guide}`,
+    parte: bicoProcessoLabel(
+      {
+        guide: row.guide,
+        slot: row.slot,
+        letter: row.letter,
+        side: row.side,
+        parts: row.parts,
+        componentIndex: row.componentIndex,
+      },
+      siblings
+    ),
     perc: row.pct,
     cabo: row.cabo,
     peso: row.consumptionKg,

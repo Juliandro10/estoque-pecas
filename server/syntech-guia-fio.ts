@@ -1,13 +1,16 @@
 import type { SinYarnGuide } from './sin-yarn';
 import { parseYarnGuidesFromSin } from './sin-yarn';
 import { readSinTextsForModel } from './sin-read';
-import { resolveCaboForBico } from './syntech-bico-rules';
+import { GUIA_COR_BICO_8, resolveCaboForBico } from './syntech-bico-rules';
 import { clipSyntechText } from './syntech-db';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
+import { parseYarnDescription } from './yarn-description-parse';
+import { yarnFioIdentityKey } from '../shared/yarn-consumption';
 import {
-  parseYarnDescription,
-  parseYarnDescriptionComponents,
-} from './yarn-description-parse';
+  compactGuiaSideNote,
+  shortPartKind,
+  type GuiaSideYarnNote,
+} from '../shared/guia-fio-text';
 
 const GUIA_SLOT_COUNT = 8;
 
@@ -20,9 +23,12 @@ export type GuiaFioRow = {
   cor_do_fio: string | null;
 };
 
-function parseGuideDescription(description: string) {
-  return parseYarnDescription(description, yarnTypesFromCatalog());
-}
+type SideNotes = Map<string, GuiaSideYarnNote>;
+
+type GuideNotes = {
+  left: SideNotes;
+  right: SideNotes;
+};
 
 function clipGuiaText(value: string | null) {
   if (!value) return null;
@@ -30,64 +36,60 @@ function clipGuiaText(value: string | null) {
   return text || null;
 }
 
-function guideToGuiaFields(guide: SinYarnGuide): Omit<GuiaFioRow, 'numero'> {
-  const components = parseYarnDescriptionComponents(guide.description, yarnTypesFromCatalog());
-
-  if (components.length >= 2) {
-    const [first, second] = components;
-    const firstTipo = clipGuiaText(first.tipo) ?? '';
-    const secondTipo = clipGuiaText(second.tipo) ?? '';
-    const firstCor = clipGuiaText(first.cor);
-    const secondCor = clipGuiaText(second.cor);
-
-    return {
-      esquerda: secondTipo,
-      cabo: second.cabo,
-      direita: firstTipo,
-      cabod: first.cabo,
-      cor_do_fio: firstCor ?? secondCor,
-    };
-  }
-
-  const { tipo, cabo, cor } = parseGuideDescription(guide.description);
-  const tipoText = clipGuiaText(tipo) ?? '';
-  const corText = clipGuiaText(cor);
-
-  if (guide.side === 'left') {
-    return {
-      esquerda: tipoText,
-      cabo: cabo,
-      direita: null,
-      cabod: null,
-      cor_do_fio: corText,
-    };
-  }
-
-  return {
-    esquerda: null,
-    cabo: null,
-    direita: tipoText,
-    cabod: cabo,
-    cor_do_fio: corText,
-  };
+function emptyNotes(): GuideNotes {
+  return { left: new Map(), right: new Map() };
 }
 
-function mergeSide(existing: string | null, incoming: string | null) {
-  if (!incoming) return existing;
-  if (!existing) return incoming;
-  if (existing.toUpperCase() === incoming.toUpperCase()) return existing;
-  return incoming;
+function addSideNote(bucket: SideNotes, description: string, partKind: string) {
+  const key = yarnFioIdentityKey(description) || description.toUpperCase();
+  const existing = bucket.get(key);
+  if (existing) {
+    if (partKind && !existing.parts.includes(partKind)) existing.parts.push(partKind);
+    return;
+  }
+  bucket.set(key, { description, parts: partKind ? [partKind] : [] });
 }
 
-function mergeGuiaRow(existing: GuiaFioRow, incoming: GuiaFioRow) {
-  return {
-    numero: existing.numero,
-    esquerda: mergeSide(existing.esquerda, incoming.esquerda),
-    cabo: existing.cabo ?? incoming.cabo,
-    direita: mergeSide(existing.direita, incoming.direita),
-    cabod: existing.cabod ?? incoming.cabod,
-    cor_do_fio: mergeSide(existing.cor_do_fio, incoming.cor_do_fio),
-  };
+function uniqueColors(notes: GuiaSideYarnNote[]) {
+  const types = yarnTypesFromCatalog();
+  const colors: string[] = [];
+  const seen = new Set<string>();
+  for (const note of notes) {
+    const parsed = parseYarnDescription(note.description, types);
+    const cor = parsed.cor?.trim();
+    if (!cor) continue;
+    const key = cor.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    colors.push(cor);
+  }
+  return colors;
+}
+
+function caboFromNotes(notes: GuiaSideYarnNote[]) {
+  const types = yarnTypesFromCatalog();
+  for (const note of notes) {
+    if (note.parts.length > 0 && note.parts.every((part) => part === 'ACAB' || part === 'GOLA')) {
+      continue;
+    }
+    const parsed = parseYarnDescription(note.description, types);
+    if (parsed.cabo) return parsed.cabo;
+  }
+  for (const note of notes) {
+    const parsed = parseYarnDescription(note.description, types);
+    if (parsed.cabo) return parsed.cabo;
+  }
+  return null;
+}
+
+function sideFields(notes: GuiaSideYarnNote[]): { text: string | null; cabo: string | null; cor: string | null } {
+  if (notes.length === 0) return { text: null, cabo: null, cor: null };
+  const text = clipGuiaText(compactGuiaSideNote(notes));
+  const cabo = caboFromNotes(notes);
+  const colors = uniqueColors(notes);
+  const cor =
+    colors.length === 0 ? null : colors.length === 1 ? clipGuiaText(colors[0]) : GUIA_COR_BICO_8;
+  return { text, cabo, cor };
 }
 
 function emptyGuiaRow(numero: number): GuiaFioRow {
@@ -105,12 +107,9 @@ function guiaRowFilled(row: GuiaFioRow) {
   return Boolean(row.esquerda || row.direita || row.cabo || row.cabod || row.cor_do_fio);
 }
 
-function applyGuiaFioRules(
-  rows: GuiaFioRow[],
-  descriptionsByGuide: Map<number, string>
-): GuiaFioRow[] {
+function applyGuiaFioRules(rows: GuiaFioRow[]): GuiaFioRow[] {
   return rows.map((row) => {
-    const description = descriptionsByGuide.get(row.numero) ?? row.direita ?? '';
+    const description = row.direita ?? row.esquerda ?? '';
     const cabo = resolveCaboForBico(row.numero, description, row.cabod ?? row.cabo);
 
     if (row.numero === 1 || row.numero === 2) {
@@ -126,31 +125,43 @@ function applyGuiaFioRules(
   });
 }
 
+function collectGuide(guide: SinYarnGuide, partKind: string, notes: GuideNotes) {
+  addSideNote(notes[guide.side], guide.description, partKind);
+}
+
 export function buildGuiaFioRows(modelFolder: string, partFileNames: string[]): GuiaFioRow[] {
-  const byGuide = new Map<number, GuiaFioRow>();
-  const descriptionsByGuide = new Map<number, string>();
+  const byGuide = new Map<number, GuideNotes>();
 
   for (const sin of readSinTextsForModel(modelFolder, partFileNames)) {
+    const partKind = shortPartKind(sin.part_base);
     const parsed = parseYarnGuidesFromSin(sin.text);
     for (const guide of parsed.guides) {
-      const fields = guideToGuiaFields(guide);
-      const row: GuiaFioRow = { numero: guide.guide, ...fields };
-      const existing = byGuide.get(guide.guide);
-      byGuide.set(guide.guide, existing ? mergeGuiaRow(existing, row) : row);
-
-      const prev = descriptionsByGuide.get(guide.guide);
-      if (!prev || guide.description.length > prev.length) {
-        descriptionsByGuide.set(guide.guide, guide.description);
-      }
+      const notes = byGuide.get(guide.guide) ?? emptyNotes();
+      collectGuide(guide, partKind, notes);
+      byGuide.set(guide.guide, notes);
     }
   }
 
   const rows: GuiaFioRow[] = [];
   for (let numero = 1; numero <= GUIA_SLOT_COUNT; numero++) {
-    rows.push(byGuide.get(numero) ?? emptyGuiaRow(numero));
+    const notes = byGuide.get(numero);
+    if (!notes) {
+      rows.push(emptyGuiaRow(numero));
+      continue;
+    }
+    const left = sideFields([...notes.left.values()]);
+    const right = sideFields([...notes.right.values()]);
+    rows.push({
+      numero,
+      esquerda: left.text,
+      cabo: left.cabo,
+      direita: right.text,
+      cabod: right.cabo,
+      cor_do_fio: right.cor ?? left.cor,
+    });
   }
 
-  return applyGuiaFioRules(rows, descriptionsByGuide);
+  return applyGuiaFioRules(rows);
 }
 
 export function countFilledGuiaFioRows(rows: GuiaFioRow[]) {

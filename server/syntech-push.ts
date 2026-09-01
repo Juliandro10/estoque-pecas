@@ -32,6 +32,7 @@ import { FIXED_BICO_TIPO_FIO } from './syntech-bico-rules';
 import { expandProcessYarnComponents, setYarnWeightFactors, type ProcessYarnComponent } from './yarn-blend';
 import { yarnTypesFromCatalog, resolveTipoFioCodigoFromCatalog } from './syntech-yarn-types';
 import { recalculateConsolidatedYarns } from './yarn-consolidate';
+import { isCompactGuiaNote } from '../shared/guia-fio-text';
 
 const SLOT_COUNT = 8;
 const DEFAULT_TAMANHO = '*';
@@ -82,6 +83,8 @@ export type SyntechPushYarn = {
   consumption: string;
   pct?: number;
   tipo_fio_codigo?: number;
+  side?: 'left' | 'right';
+  parts?: string[];
 };
 
 export type SyntechPushInput = {
@@ -255,14 +258,13 @@ async function findTipoFioForBico(
     return getTipoFioByCodigo(tx, fixedCodigo);
   }
 
-  const tipoHint = guia?.direita?.trim() || guia?.esquerda?.trim();
-  if (tipoHint) {
-    const fromGuia = await findTipoFioCodigo(tx, tipoHint);
-    if (fromGuia) return fromGuia;
-  }
-
   const fromDescription = await findTipoFioCodigo(tx, description);
   if (fromDescription) return fromDescription;
+
+  const tipoHint = guia?.direita?.trim() || guia?.esquerda?.trim();
+  if (tipoHint && !isCompactGuiaNote(tipoHint)) {
+    return findTipoFioCodigo(tx, tipoHint);
+  }
 
   return null;
 }
@@ -508,6 +510,8 @@ export async function pushCadastroToSyntech(input: SyntechPushInput): Promise<Sy
           consumption: row.consumption,
           pct: row.pct,
           tipo_fio_codigo: saved?.tipo_fio_codigo,
+          side: row.side ?? saved?.side,
+          parts: row.parts,
         };
       });
     }

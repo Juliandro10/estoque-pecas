@@ -217,12 +217,10 @@ export function DesenvCadastroPage() {
   const fixedWasteKg = programFixedWasteYarnTotalKg();
 
   function consolidatedRowForResolved(row: (typeof consolidatedYarnsResolved)[number]) {
+    const identity = yarnFioIdentityKey(row.blend_source ?? row.description);
     return consolidatedYarns.find(
       (item) =>
-        item.guide === row.guide &&
-        item.letter.toUpperCase() === row.letter.toUpperCase() &&
-        item.parts.length === row.parts.length &&
-        item.parts.every((part, index) => part === row.parts[index])
+        item.guide === row.guide && yarnFioIdentityKey(item.description) === identity
     );
   }
 
@@ -671,6 +669,8 @@ export function DesenvCadastroPage() {
           consumption: row.consumption,
           pct: row.pct,
           tipo_fio_codigo: row.tipo_fio_codigo ?? undefined,
+          side: row.side,
+          parts: row.parts,
         })),
       });
 
@@ -878,7 +878,7 @@ export function DesenvCadastroPage() {
                                 <td className="yarn-col-pct mono">{formatPct(row.pct)}</td>
                                 <td className="yarn-col-consumo mono">{row.consumption || '—'}</td>
                                 <td className="yarn-col-slot mono">{row.syntech_slot}</td>
-                                <td className="yarn-col-bico mono">BICO {row.guide}</td>
+                                <td className="yarn-col-bico mono">{row.processo_label ?? `BICO ${row.guide}`}</td>
                                 <td className="yarn-col-cod mono">
                                   {row.tipo_fio_codigo ?? '—'}
                                 </td>

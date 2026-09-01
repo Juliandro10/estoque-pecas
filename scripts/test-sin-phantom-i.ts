@@ -59,5 +59,21 @@ const resolved3 = resolveYarnRow(
 );
 expect('resolve CABOSI cor', resolved3.cor ?? '', 'OFF WHITE');
 
+const gluedCarrierSnippet = `
+1 YGC: test
+1 C  LEFT I RIGHT
+1 C  3=C POWER BRIGHT 1 CABO MARRON TERRAI 3=D POWER BRIGHT 1 CABO NATURAL
+`;
+
+const gluedGuides = parseYarnGuidesFromSin(gluedCarrierSnippet).guides;
+const gluedC = gluedGuides.find((item) => item.guide === 3 && item.letter === 'C');
+const gluedD = gluedGuides.find((item) => item.guide === 3 && item.letter === 'D');
+expect('glued 3=C tipo', gluedC?.description ?? '', 'POWER BRIGHT 1 CABO MARRON TERRA');
+expect('glued 3=D tipo', gluedD?.description ?? '', 'POWER BRIGHT 1 CABO NATURAL');
+if (gluedGuides.length !== 2) {
+  console.error(`FAIL glued carrier count: got ${gluedGuides.length} expected 2`);
+  failed++;
+}
+
 console.log(failed === 0 ? 'OK' : `${failed} failure(s)`);
 process.exit(failed === 0 ? 0 : 1);

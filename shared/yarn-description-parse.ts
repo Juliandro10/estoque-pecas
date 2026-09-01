@@ -18,7 +18,8 @@ const CABO_MARKER = /(\d+)\s+CABO(?:S(?:I)?)?\b/i;
 function normalizeBlendSeparators(text: string) {
   return text
     .replace(/\s+-\s+(?=(?:CODIGO|CÓDIGO|COD\.?\s*\d)\b)/gi, ' + ')
-    .replace(/\s+-\s+(?=\d{1,3}\s*[-–—:])/g, ' + ');
+    .replace(/\s+-\s+(?=\d{1,3}\s*[-–—:])/g, ' + ')
+    .replace(/\s+\d+=[A-Za-z]\s+/g, ' + ');
 }
 
 function stripSupplierCode(text: string) {
