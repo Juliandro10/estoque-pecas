@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pctByLetterFromSimx } from './simx-yarn';
 import { sintralPartDir } from './sintral-capture';
 import { dedupePhantomIColors, stripPhantomColorI } from '../shared/syntech-name-match';
+import { normalizeYarnCaboSpelling } from '../shared/yarn-description-parse';
 import { readSyntechYarnCatalog } from './syntech-yarn-catalog';
 
 let cachedCatalogColors: string[] | null = null;
@@ -36,7 +37,18 @@ function repairSinGuideDescription(description: string): string {
     }
   }
 
-  return text;
+  const tokens = text.split(/\s+/);
+  const last = tokens[tokens.length - 1] ?? '';
+  if (last) {
+    const fixedLast = stripPhantomColorI(last, catalogColorsForRepair());
+    const lastToken = fixedLast.trim().split(/\s+/).pop();
+    if (lastToken && lastToken.toUpperCase() !== last.toUpperCase()) {
+      tokens[tokens.length - 1] = lastToken;
+      text = tokens.join(' ');
+    }
+  }
+
+  return normalizeYarnCaboSpelling(text);
 }
 
 export type SinYarnGuide = {

@@ -16,6 +16,12 @@ export type YarnWeightFactorsFile = {
 /** 1 cabo elastano × 1 cabo linha (mesmo % simx) → 8% / 92% do peso. */
 export const ELASTANO_WEIGHT_FACTOR = 8 / 92;
 
+/**
+ * 1 cabo lurex × 1 cabo poliéster — 5604 (2 cabos lurex / 3 cabos poli):
+ * 0,044 kg lurex e 0,296 kg poli no pano.
+ */
+export const LUREX_WEIGHT_FACTOR = 0.044 / 2 / (0.296 / 3);
+
 export const DEFAULT_YARN_WEIGHT_FACTORS: YarnWeightFactorsFile = {
   default_factor: 1,
   types: {
@@ -26,6 +32,8 @@ export const DEFAULT_YARN_WEIGHT_FACTORS: YarnWeightFactorsFile = {
     LINHA: 1,
     ELASTANO: ELASTANO_WEIGHT_FACTOR,
     LASTEX: 1,
+    LUREX: LUREX_WEIGHT_FACTOR,
+    'FIO METALIZADO': LUREX_WEIGHT_FACTOR,
   },
 };
 
@@ -143,6 +151,17 @@ export function fabricGuideWeightShare(
 ) {
   const pct = guide.pct ?? 0;
   if (pct <= 0) return 0;
+  const components = parseYarnDescriptionComponents(guide.description);
+  if (components.length > 0) {
+    const share = components.reduce((sum, component) => {
+      const cabos =
+        Number(component.cabo) > 0
+          ? Number(component.cabo)
+          : parseCabosForWeightShare(guide.guide, component.raw);
+      return sum + cabos * yarnWeightFactor(component.tipo, factors);
+    }, 0);
+    if (share > 0) return pct * share;
+  }
   const cabos = parseCabosForWeightShare(guide.guide, guide.description);
   const factor = yarnWeightFactorFromDescription(guide.description, factors);
   return pct * cabos * factor;

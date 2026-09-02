@@ -75,5 +75,33 @@ if (gluedGuides.length !== 2) {
   failed++;
 }
 
+const lurexBlendSnippet = `
+1 YGC: test
+1 C  LEFT I RIGHT
+1 C                                    I 3=C POLIESTER HB 2/28 3 CABOS BRANCO + LUREX FIO METALIZADO 2 CABOS PRATAI
+`;
+const lurexGuides = parseYarnGuidesFromSin(lurexBlendSnippet).guides;
+const lurexGuide = lurexGuides[0];
+if (lurexGuide?.description.includes('PRATAI')) {
+  console.error(`FAIL blend still has PRATAI: ${lurexGuide.description}`);
+  failed++;
+}
+const resolvedLurex = resolveYarnRow(
+  {
+    guide: 3,
+    letter: 'C',
+    description: 'LUREX FIO METALIZADO 2 CABOS PRATA',
+    pct: 10,
+    consumption: '0.04',
+    parts: ['FT'],
+  },
+  catalog
+);
+expect('lurex prata cor', resolvedLurex.cor ?? '', 'FIO LUREX PRATA');
+if (!resolvedLurex.cor_ok) {
+  console.error('FAIL lurex PRATA should match catalog color');
+  failed++;
+}
+
 console.log(failed === 0 ? 'OK' : `${failed} failure(s)`);
 process.exit(failed === 0 ? 0 : 1);

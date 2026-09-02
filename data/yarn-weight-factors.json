@@ -1,6 +1,6 @@
 {
   "updated_at": "2026-08-22",
-  "note": "Peso relativo por cabo: peso ∝ % simx × cabos × fator. PAETE/Lantejoula (cod.24) = 2,5× poliéster (cod.4) por cabo. ELASTANO: 8% / 92% com linha.",
+  "note": "Peso relativo por cabo: peso ∝ % simx × cabos × fator. PAETE/Lantejoula (cod.24) = 2,5× poliéster (cod.4) por cabo. ELASTANO: 8% / 92% com linha. LUREX (5604): 0,044 kg / 0,296 kg com 2 cabos lurex × 3 cabos poli.",
   "default_factor": 1,
   "types": {
     "CAPRICE": 2.5,
@@ -9,6 +9,8 @@
     "PAETE": 2.5,
     "LINHA": 1,
     "ELASTANO": 0.08695652173913043,
-    "LASTEX": 1
+    "LASTEX": 1,
+    "LUREX": 0.22297297297297297,
+    "FIO METALIZADO": 0.22297297297297297
   }
 }

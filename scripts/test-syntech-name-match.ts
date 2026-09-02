@@ -6,7 +6,7 @@ import {
   stripPhantomColorI,
   yarnTypeNamesMatch,
 } from '../shared/syntech-name-match.ts';
-import { buildCorrectedYarnDescription, parseYarnDescription } from '../shared/yarn-description-parse.ts';
+import { buildCorrectedYarnDescription, formatYarnComponentDescription, normalizeYarnCaboSpelling, parseYarnDescription } from '../shared/yarn-description-parse.ts';
 
 const shouldMatch: Array<[string, string]> = [
   ['SACHÉ PINK', 'SACHET PINK'],
@@ -80,6 +80,19 @@ if (corrected !== 'MODAL AREZZO SACHET PINK 1 CABO') {
   failed++;
 }
 
+if (normalizeYarnCaboSpelling('POLISTER HB 2/28 BRANCO 3 CABO') !== 'POLISTER HB 2/28 BRANCO 3 CABOS') {
+  console.error('FAIL 3 CABO should become 3 CABOS');
+  failed++;
+}
+if (normalizeYarnCaboSpelling('LASTEX PRETO 1 CABOS') !== 'LASTEX PRETO 1 CABO') {
+  console.error('FAIL 1 CABOS should become 1 CABO');
+  failed++;
+}
+if (formatYarnComponentDescription({ tipo: 'POLISTER HB 2/28', cor: 'BRANCO', cabo: '3' }) !== 'POLISTER HB 2/28 BRANCO 3 CABOS') {
+  console.error('FAIL formatted 3 cabo should be plural');
+  failed++;
+}
+
 const polisterColors = ['BRANCO', 'BRANCOI', 'PRETO', 'PRETOI'];
 const dedupedPolister = dedupePhantomIColors(polisterColors);
 if (dedupedPolister.includes('BRANCOI') || dedupedPolister.includes('PRETOI')) {
@@ -92,6 +105,20 @@ if (findBestColorMatch('BRANCOI', dedupedPolister) !== 'BRANCO') {
 }
 if (stripPhantomColorI('PEACH PINKI', ['PEACH PINK', 'PINK']) !== 'PEACH PINK') {
   console.error(`FAIL stripPhantomColorI PEACH PINKI -> ${stripPhantomColorI('PEACH PINKI', ['PEACH PINK', 'PINK'])}`);
+  failed++;
+}
+
+const lurexColors = ['COBRE', 'DOURADO', 'FIO LUREX PRATA', 'PRETO', 'ROSE'];
+if (findBestColorMatch('PRATA', lurexColors) !== 'FIO LUREX PRATA') {
+  console.error(
+    `FAIL PRATA should resolve to FIO LUREX PRATA, got ${findBestColorMatch('PRATA', lurexColors)}`
+  );
+  failed++;
+}
+if (findBestColorMatch('PRATAI', lurexColors) !== 'FIO LUREX PRATA') {
+  console.error(
+    `FAIL PRATAI should resolve to FIO LUREX PRATA, got ${findBestColorMatch('PRATAI', lurexColors)}`
+  );
   failed++;
 }
 

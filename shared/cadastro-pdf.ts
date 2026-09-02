@@ -6,10 +6,13 @@ import {
   consolidateYarnParts,
   formatConsumption,
   formatPct,
+  normalizeYarnDescriptionKey,
   parseConsumptionInput,
   type PartWeightRow,
   type YarnPartRow,
 } from './yarn-consumption';
+import { expandProcessYarnComponents, type ProcessYarnComponent } from './yarn-blend-core';
+import { bicoProcessoLabel } from './guia-fio-text';
 
 export type CadastroPdfInput = {
   reference: string;
@@ -88,6 +91,61 @@ export function formatMachinePdfLine(input: Pick<CadastroPdfInput, 'machine_cms'
   return `Máquina: ${label}`;
 }
 
+export type YarnWeightSummaryRow = {
+  tipo: string;
+  cor: string;
+  consumptionKg: number;
+  pct: number;
+};
+
+function summaryTipoKey(tipo: string) {
+  return normalizeYarnDescriptionKey(tipo.replace(/\bPOLISTER\b/gi, 'POLIESTER'));
+}
+
+function summaryCorKey(cor: string | null) {
+  return normalizeYarnDescriptionKey(cor ?? '');
+}
+
+function isPricingWasteYarn(row: { guide?: number; tipo: string; description?: string }) {
+  if (row.guide === 1 || row.guide === 2) return true;
+  const text = `${row.tipo} ${row.description ?? ''}`.toUpperCase();
+  if (/\bSEPARACAO\b|\bRESTO DE FIO\b/.test(text)) return true;
+  if (/ELASTICO(?:\s+(?:DE\s+|DO\s+))?PENTE/.test(text)) return true;
+  return false;
+}
+
+export function summarizeYarnWeightByTypeAndColor(
+  rows: Pick<ProcessYarnComponent, 'tipo' | 'cor' | 'consumptionKg'> &
+    Partial<Pick<ProcessYarnComponent, 'guide' | 'description'>>[],
+  _partWeightKg = 0
+): YarnWeightSummaryRow[] {
+  const groups = new Map<string, YarnWeightSummaryRow>();
+
+  for (const row of rows) {
+    if (row.consumptionKg <= 0) continue;
+    if (isPricingWasteYarn(row)) continue;
+    const tipo = row.tipo.trim() || '—';
+    const cor = row.cor?.trim() || '—';
+    const key = `${summaryTipoKey(tipo)}|${summaryCorKey(cor === '—' ? '' : cor)}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.consumptionKg += row.consumptionKg;
+      continue;
+    }
+    groups.set(key, { tipo, cor, consumptionKg: row.consumptionKg, pct: 0 });
+  }
+
+  const basis = [...groups.values()].reduce((sum, row) => sum + row.consumptionKg, 0);
+
+  return [...groups.values()]
+    .map((row) => ({
+      ...row,
+      consumptionKg: Math.round(row.consumptionKg * 1000) / 1000,
+      pct: basis > 0 ? (row.consumptionKg / basis) * 100 : 0,
+    }))
+    .sort((a, b) => b.consumptionKg - a.consumptionKg || a.tipo.localeCompare(b.tipo, 'pt-BR'));
+}
+
 export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -123,20 +181,52 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
 
   const yarnParts = applyAutoYarnConsumption(cadastro.yarn_parts, cadastro.parts);
   const consolidated = consolidateYarnParts(yarnParts, cadastro.parts);
-  if (consolidated.length > 0) {
+  const partWeightKg = cadastro.parts.reduce((sum, part) => sum + parseConsumptionInput(part.weight_kg), 0);
+  const expanded = expandProcessYarnComponents(
+    consolidated.map((row) => ({
+      guide: row.guide,
+      letter: row.letter,
+      description: row.description,
+      consumption: row.consumption,
+      pct: row.pct,
+      side: row.side,
+      parts: row.parts,
+    })),
+    partWeightKg > 0 ? { partWeightKg } : {}
+  ).filter((row) => row.consumptionKg > 0);
+
+  if (expanded.length > 0) {
+    const siblings = expanded.map((row) => ({
+      guide: row.guide,
+      slot: row.slot,
+      letter: row.letter,
+      side: row.side,
+      parts: row.parts,
+      componentIndex: row.componentIndex,
+    }));
     doc.setFontSize(11);
     doc.text('Fios consolidados (programa)', 14, yAfterParts);
     yAfterParts += 4;
     autoTable(doc, {
       startY: yAfterParts + 2,
       head: [['%', 'Consumo total', 'Bico', 'Fio', 'Descrição', 'Partes']],
-      body: consolidated.map((row) => [
+      body: expanded.map((row) => [
         formatPct(row.pct),
-        row.consumption || '—',
-        String(row.guide),
-        row.letter,
+        formatConsumption(row.consumptionKg),
+        bicoProcessoLabel(
+          {
+            guide: row.guide,
+            slot: row.slot,
+            letter: row.letter,
+            side: row.side,
+            parts: row.parts,
+            componentIndex: row.componentIndex,
+          },
+          siblings
+        ),
+        row.letter ?? '',
         row.description || '—',
-        row.parts.join(', '),
+        (row.parts ?? []).join(', '),
       ]),
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [18, 28, 46] },
@@ -144,6 +234,42 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
     });
     yAfterParts = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? yAfterParts;
     yAfterParts += 8;
+
+    const summary = summarizeYarnWeightByTypeAndColor(expanded, partWeightKg);
+    if (summary.length > 0) {
+      const summaryTotal = summary.reduce((sum, row) => sum + row.consumptionKg, 0);
+      doc.setFontSize(11);
+      doc.text('Resumo para preço — peso por fio e cor', 14, yAfterParts);
+      yAfterParts += 4;
+      autoTable(doc, {
+        startY: yAfterParts + 2,
+        head: [['Fio', 'Cor', 'Peso (kg)', '%']],
+        body: summary.map((row) => [
+          row.tipo,
+          row.cor,
+          formatConsumption(row.consumptionKg),
+          formatPct(row.pct),
+        ]),
+        foot: [
+          [
+            'Total',
+            '',
+            formatConsumption(summaryTotal),
+            formatPct(summary.reduce((sum, row) => sum + row.pct, 0) || 100),
+          ],
+        ],
+        styles: { fontSize: 9, cellPadding: 2.5 },
+        headStyles: { fillColor: [18, 28, 46] },
+        footStyles: { fillColor: [235, 238, 243], fontStyle: 'bold', textColor: [0, 0, 0] },
+        columnStyles: {
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+        },
+        theme: 'grid',
+      });
+      yAfterParts = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? yAfterParts;
+      yAfterParts += 8;
+    }
   }
 
   doc.setFontSize(10);

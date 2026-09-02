@@ -5,6 +5,7 @@ import {
   fabricWeightShareSum,
 } from './yarn-blend-core';
 import { mergeYarnSides } from './guia-fio-text';
+import { parseYarnDescriptionComponents } from './yarn-description-parse';
 
 export type YarnGuideRow = {
   guide: number;
@@ -307,6 +308,28 @@ export function yarnFioIdentityKey(description: string): string {
       : '';
 
   return `${normalizeYarnDescriptionKey(tipo)}|${cabo}|${normalizeYarnDescriptionKey(cor)}`;
+}
+
+/** Troca a descrição inteira ou só o componente da mistura com a mesma identidade. */
+export function replaceYarnGuideDescription(
+  current: string,
+  previousDescription: string,
+  nextDescription: string
+) {
+  const identity = yarnFioIdentityKey(previousDescription);
+  if (!identity) return current;
+  if (yarnFioIdentityKey(current) === identity) return nextDescription;
+
+  const components = parseYarnDescriptionComponents(current);
+  if (components.length <= 1) return current;
+
+  let changed = false;
+  const next = components.map((component) => {
+    if (yarnFioIdentityKey(component.raw) !== identity) return component.raw;
+    changed = true;
+    return nextDescription;
+  });
+  return changed ? next.join(' + ') : current;
 }
 
 /** Mesmo bico + mesmo fio e mesma cor = uma linha — letra M1 pode variar entre partes. */

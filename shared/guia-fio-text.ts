@@ -8,6 +8,7 @@ const TIPO_ABBR: [RegExp, string][] = [
   [/ELASTANO(?:\s*20\s*\/\s*20)?/i, 'ELAST'],
   [/POLISTE?R(?:\s*HB(?:\s*2\/28)?)?/i, 'POLI'],
   [/FIO\s*LANTEJOULA|LANTEJOULA|PAETE/i, 'PAETE'],
+  [/LUREX|FIO\s*METALIZADO/i, 'LUREX'],
   [/SEPARACAO/i, 'SEP'],
   [/ELASTICO(?:\s+(?:DE\s+)?PENTE)?/i, 'EL.PENTE'],
   [/LASTEX/i, 'LASTEX'],

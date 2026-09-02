@@ -25,6 +25,7 @@ import {
   totalPartsWeight,
   totalYarnConsumption,
 } from '../../lib/cadastro-db';
+import { normalizeYarnCaboSpelling } from '../../../shared/yarn-description-parse';
 import { exportCadastroPdf } from '../../lib/cadastro-report-export';
 import {
   expandConsolidatedForProcessos,
@@ -123,7 +124,7 @@ function YarnDescInput({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
         editingRef.current = false;
-        if (draft !== value) onCommit(draft);
+        if (draft !== value) onCommit(normalizeYarnCaboSpelling(draft));
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
@@ -884,26 +885,22 @@ export function DesenvCadastroPage() {
                                 </td>
                                 <td className="yarn-col-fio mono">{row.letter}</td>
                                 <td className="yarn-col-desc">
+                                  <YarnDescInput
+                                    className="cell-input yarn-desc-input"
+                                    value={row.blend_source ? row.description : editableDescription}
+                                    title="Editar nome do fio para bater com o Syntech"
+                                    onCommit={(next) =>
+                                      patchYarnDescriptionForConsolidatedRow(
+                                        row.guide,
+                                        row.letter,
+                                        row.blend_source ? row.description : editableDescription,
+                                        next
+                                      )
+                                    }
+                                  />
                                   {row.blend_source ? (
-                                    <>
-                                      {row.description || '—'}
-                                      <span className="yarn-blend-note"> · mistura</span>
-                                    </>
-                                  ) : (
-                                    <YarnDescInput
-                                      className="cell-input yarn-desc-input"
-                                      value={editableDescription}
-                                      title="Editar nome do fio para bater com o Syntech"
-                                      onCommit={(next) =>
-                                        patchYarnDescriptionForConsolidatedRow(
-                                          row.guide,
-                                          row.letter,
-                                          editableDescription,
-                                          next
-                                        )
-                                      }
-                                    />
-                                  )}
+                                    <span className="yarn-blend-note"> · mistura</span>
+                                  ) : null}
                                 </td>
                                 <td className="yarn-col-parts">
                                   <div className="yarn-part-tags">

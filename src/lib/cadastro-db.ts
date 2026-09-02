@@ -5,6 +5,7 @@ import type { CadastroPart, CadastroYarnGuide, CadastroYarnPart, ConsolidatedYar
 import {
   consolidatedYarnIdentityKey,
   normalizeYarnDescriptionKey,
+  replaceYarnGuideDescription,
   yarnFioIdentityKey,
 } from '../../shared/yarn-consumption';
 import {
@@ -664,13 +665,11 @@ export function setYarnDescriptionForConsolidatedRow(
   description: string
 ): CadastroYarnPart[] {
   const letterUp = letter.toUpperCase();
-  const identity = yarnFioIdentityKey(previousDescription);
   return yarnParts.map((part) => ({
     ...part,
     guides: part.guides.map((g) => {
       if (g.guide !== guide || g.letter.toUpperCase() !== letterUp) return g;
-      if (yarnFioIdentityKey(g.description) !== identity) return g;
-      return { ...g, description };
+      return { ...g, description: replaceYarnGuideDescription(g.description, previousDescription, description) };
     }),
   }));
 }

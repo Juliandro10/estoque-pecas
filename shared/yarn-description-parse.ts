@@ -14,6 +14,17 @@ export type ParsedYarnComponent = ParsedYarnDescription & {
 
 const CABO_MARKER = /(\d+)\s+CABO(?:S(?:I)?)?\b/i;
 
+export function caboWord(count: string | number | null | undefined) {
+  const value = Number(count);
+  if (Number.isFinite(value) && value !== 1) return 'CABOS';
+  return 'CABO';
+}
+
+/** 1 cabo → CABO; 2+ cabo(s) → CABOS. */
+export function normalizeYarnCaboSpelling(text: string) {
+  return text.replace(/(\d+)\s+CABOS?(?:I)?\b/gi, (_, count: string) => `${count} ${caboWord(count)}`);
+}
+
 /** "A - CODIGO B" / "A - 4 - B" → "A + ..." para misturas no mesmo guia. */
 function normalizeBlendSeparators(text: string) {
   return text
@@ -83,12 +94,12 @@ function parseSingleYarnSegment(
 ): ParsedYarnComponent | null {
   const parsed = parseYarnDescription(text, yarnTypes);
   if (!parsed.tipo && !parsed.cabo) return null;
-  return { ...parsed, raw: text.trim() };
+  return { ...parsed, raw: normalizeYarnCaboSpelling(text.trim()) };
 }
 
 function componentLabel(component: ParsedYarnDescription) {
   const cor = component.cor ? ` ${component.cor}` : '';
-  const cabo = component.cabo ? ` ${component.cabo} CABO` : '';
+  const cabo = component.cabo ? ` ${component.cabo} ${caboWord(component.cabo)}` : '';
   return `${component.tipo}${cor}${cabo}`.trim();
 }
 

@@ -54,7 +54,16 @@ export function stripPhantomColorI(value: string, peers: string[] = []): string 
   const candidate = [...parts.slice(0, -1), base].join(' ');
   const candidateNorm = normalizeSyntechName(candidate);
   const peerHit = peers.find((peer) => normalizeSyntechName(peer) === candidateNorm);
-  return peerHit ?? trimmed;
+  if (peerHit) return peerHit;
+
+  const lastNorm = normalizeSyntechName(base);
+  const suffixHits = peers.filter((peer) => {
+    const tokens = normalizeSyntechName(peer).split(' ').filter(Boolean);
+    return tokens[tokens.length - 1] === lastNorm;
+  });
+  if (suffixHits.length === 1) return suffixHits[0];
+
+  return trimmed;
 }
 
 /** Remove cores duplicadas com I fantasma (ex.: BRANCOI quando já existe BRANCO). */
@@ -164,29 +173,44 @@ export function findBestColorMatch(query: string | null, candidates: string[]): 
   if (exact) return exact;
 
   const matches = catalog.filter((candidate) => colorNamesMatch(repairedQuery, candidate));
-  if (matches.length === 0) return null;
   if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    const aliases = matches.every((left) =>
+      matches.every((right) => colorNamesMatch(left, right))
+    );
+    if (aliases) return matches[0];
 
-  const aliases = matches.every((left) =>
-    matches.every((right) => colorNamesMatch(left, right))
-  );
-  if (aliases) return matches[0];
-
-  let best = matches[0];
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const candidate of matches) {
-    const candidateNorm = normalizeSyntechName(candidate);
-    const distance = editDistance(queryNorm.replace(/ /g, ''), candidateNorm.replace(/ /g, ''));
-    if (distance < bestDistance) {
-      best = candidate;
-      bestDistance = distance;
+    let best = matches[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const candidate of matches) {
+      const candidateNorm = normalizeSyntechName(candidate);
+      const distance = editDistance(queryNorm.replace(/ /g, ''), candidateNorm.replace(/ /g, ''));
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
     }
+    const runnersUp = matches.filter((candidate) => {
+      const candidateNorm = normalizeSyntechName(candidate);
+      return editDistance(queryNorm.replace(/ /g, ''), candidateNorm.replace(/ /g, '')) === bestDistance;
+    });
+    if (runnersUp.length === 1) return best;
   }
-  const runnersUp = matches.filter((candidate) => {
-    const candidateNorm = normalizeSyntechName(candidate);
-    return editDistance(queryNorm.replace(/ /g, ''), candidateNorm.replace(/ /g, '')) === bestDistance;
+
+  return uniqueLastTokenColorMatch(queryNorm, catalog);
+}
+
+/** "PRATA" → "FIO LUREX PRATA" quando só um candidato termina com esse token. */
+function uniqueLastTokenColorMatch(queryNorm: string, candidates: string[]): string | null {
+  const queryLast = queryNorm.split(' ').filter(Boolean).pop() ?? '';
+  if (!queryLast || queryLast.length < 4) return null;
+  if (AMBIGUOUS_COLOR_TOKENS.has(queryLast)) return null;
+
+  const hits = candidates.filter((candidate) => {
+    const tokens = normalizeSyntechName(candidate).split(' ').filter(Boolean);
+    return tokens[tokens.length - 1] === queryLast;
   });
-  return runnersUp.length === 1 ? best : null;
+  return hits.length === 1 ? hits[0] : null;
 }
 
 export function yarnTypeNamesMatch(query: string, candidate: string): boolean {
