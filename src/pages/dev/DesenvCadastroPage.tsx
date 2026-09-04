@@ -16,6 +16,7 @@ import {
   syncSavedPartsWithFolder,
   parseTimeInput,
   partKindToken,
+  partMatchesYarnPart,
   programPartsOnly,
   programFixedWasteYarnTotalKg,
   setYarnDescriptionForConsolidatedRow,
@@ -49,7 +50,11 @@ import type {
   SyntechYarnCatalogFile,
 } from '../../types-programming';
 
-function applySintralTimes(currentParts: CadastroPart[], times: SintralTimesResult) {
+function applySintralTimes(
+  currentParts: CadastroPart[],
+  times: SintralTimesResult,
+  folderFileNames?: ReadonlySet<string>
+) {
   const byLabel = new Map(times.parts.map((p) => [p.label.toUpperCase(), p]));
   const byFile = new Map(times.parts.map((p) => [p.file_name.toLowerCase(), p]));
   const byKind = new Map<string, typeof times.parts>();
@@ -63,17 +68,23 @@ function applySintralTimes(currentParts: CadastroPart[], times: SintralTimesResu
   const kindUsedIndex = new Map<string, number>();
 
   const updated = currentParts.map((part) => {
+    const fileKey = part.file_name?.trim().toLowerCase() ?? '';
+    const inFolder =
+      !folderFileNames || folderFileNames.size === 0 || !fileKey || folderFileNames.has(fileKey);
+
     const hit =
-      byLabel.get(part.label.toUpperCase()) ??
+      (inFolder ? byLabel.get(part.label.toUpperCase()) : undefined) ??
       (part.file_name ? byFile.get(part.file_name.toLowerCase()) : undefined) ??
-      (() => {
-        const kind = partKindToken(part.file_name || part.label);
-        if (!kind) return undefined;
-        const list = byKind.get(kind) ?? [];
-        const idx = kindUsedIndex.get(kind) ?? 0;
-        kindUsedIndex.set(kind, idx + 1);
-        return list[idx];
-      })();
+      (inFolder
+        ? (() => {
+            const kind = partKindToken(part.file_name || part.label);
+            if (!kind) return undefined;
+            const list = byKind.get(kind) ?? [];
+            const idx = kindUsedIndex.get(kind) ?? 0;
+            kindUsedIndex.set(kind, idx + 1);
+            return list[idx];
+          })()
+        : undefined);
     if (hit?.ok && hit.time_mmss) {
       return { ...part, time_mmss: hit.time_mmss };
     }
@@ -324,7 +335,11 @@ export function DesenvCadastroPage() {
     }
   }
 
-  async function refreshSintralTimes(ref: string, currentParts: CadastroPart[]) {
+  async function refreshSintralTimes(
+    ref: string,
+    currentParts: CadastroPart[],
+    folder: Pick<CadastroPart, 'file_name'>[] = folderParts
+  ) {
     if (!localMode || !scannerOk || currentParts.length === 0) {
       return { parts: currentParts, message: null as string | null };
     }
@@ -332,7 +347,8 @@ export function DesenvCadastroPage() {
     setReadingTimes(true);
     try {
       const times = await localProgramsApi.sintralTimes(ref, fullSearch);
-      const applied = applySintralTimes(currentParts, times);
+      const folderFiles = new Set(folder.map((part) => part.file_name.toLowerCase()));
+      const applied = applySintralTimes(currentParts, times, folderFiles);
       if (applied.message && times.filled > 0) setError('');
       if (times.filled === 0 && times.total > 0) {
         setError('Sem tempo ainda. Rode o Controle Sintral e deixe a janela aberta.');
@@ -386,7 +402,7 @@ export function DesenvCadastroPage() {
           savedParts = ensured.parts;
 
           const [timesResult, yarnsResult] = await Promise.all([
-            refreshSintralTimes(ref, savedParts),
+            refreshSintralTimes(ref, savedParts, folderPartsRows),
             refreshYarnParts(ref, [], folderPartsRows),
           ]);
           setParts(timesResult.parts);
@@ -451,7 +467,8 @@ export function DesenvCadastroPage() {
       if (yarnsResult.machineLabel) setMachineLabel(yarnsResult.machineLabel);
 
       if (found.times) {
-        const applied = applySintralTimes(fromFolder, found.times);
+        const folderFiles = new Set(folderPartsRows.map((part) => part.file_name.toLowerCase()));
+        const applied = applySintralTimes(fromFolder, found.times, folderFiles);
         setParts(applied.parts);
         const bits = [applied.message, yarnsResult.message].filter(Boolean);
         if (bits.length) {
@@ -501,17 +518,17 @@ export function DesenvCadastroPage() {
     setInfo(`${parts[index]?.label} duplicada.`);
   }
 
-  function canRemovePart(index: number) {
-    const file = parts[index]?.file_name?.trim().toLowerCase();
-    if (!file) return false;
-    return parts.filter((part) => part.file_name.trim().toLowerCase() === file).length > 1;
-  }
-
   function removePart(index: number) {
-    if (!canRemovePart(index)) return;
-    const label = parts[index]?.label;
+    const part = parts[index];
+    if (!part) return;
+    const label = part.label?.trim() || part.file_name || part.key;
+    if (!confirm(`Apagar a parte ${label}?`)) return;
+
     setParts((prev) => prev.filter((_, i) => i !== index));
-    setInfo(label ? `${label} — linha removida.` : 'Linha removida.');
+    setYarnParts((prev) => prev.filter((yarnPart) => !partMatchesYarnPart(part, yarnPart)));
+    setInfo(
+      `${label} removida. Salve o cadastro; para trazer de volta, busque a referência de novo (só entra se o .mdv estiver na pasta).`
+    );
   }
 
   function pasteTime(index: number) {
@@ -1084,12 +1101,7 @@ export function DesenvCadastroPage() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
-                        disabled={!canRemovePart(index)}
-                        title={
-                          canRemovePart(index)
-                            ? 'Remover linha duplicada'
-                            : 'Mantém ao menos uma linha por arquivo'
-                        }
+                        title="Remove do cadastro; volta só ao buscar a referência se o .mdv existir na pasta"
                         onClick={() => removePart(index)}
                       >
                         Apagar
