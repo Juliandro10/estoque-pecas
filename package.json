@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:scanner": "tsx watch server/programs-scanner.ts",
     "painel": "tsx painel-tecelagem/server.ts",
+    "painel:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-painel-installer.ps1",
     "dev:local": "concurrently -n web,scan -c magenta,cyan \"npm run dev\" \"npm run dev:scanner\"",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
@@ -15,8 +16,9 @@
     "backup:local": "tsx scripts/backup.ts -- --local-only",
     "restore:backup": "tsx scripts/restore-backup.ts",
     "deploy:rules": "firebase deploy --only firestore:rules",
-    "deploy:hosting": "npm run build && firebase deploy --only hosting",
-    "deploy": "npm run build && firebase deploy --only firestore:rules,hosting"
+    "deploy:hosting": "npm run build && node scripts/copy-painel-hosting.mjs && firebase deploy --only hosting",
+    "deploy": "npm run build && node scripts/copy-painel-hosting.mjs && firebase deploy --only firestore:rules,hosting",
+    "painel:cloud-user": "tsx scripts/ensure-painel-firebase-user.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",

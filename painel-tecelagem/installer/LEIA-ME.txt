@@ -1,0 +1,14 @@
+Painel Tecelagem
+================
+
+No PC da tecelagem:
+
+1. Copie o arquivo Painel-Tecelagem-Setup.exe (pen drive ou pasta da rede).
+2. De dois cliques.
+3. Clique em Proximo ate Instalar.
+4. Se o Windows perguntar, permita o aplicativo.
+
+Pronto. Abre sozinho e tambem quando o PC ligar.
+
+Nao feche a janelinha "Painel da tecelagem ligado".
+A TV abre no Chrome: o endereco aparece nessa janelinha (porta 3850).

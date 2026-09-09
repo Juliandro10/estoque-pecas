@@ -15,13 +15,25 @@ export const SYNTech_FB_CONFIG = {
 export type FirebirdDb = Firebird.Database;
 export type SyntechTx = Firebird.Transaction;
 
-export function attachSyntechDb(): Promise<FirebirdDb> {
+function attachWithHost(host: string): Promise<FirebirdDb> {
   return new Promise((resolve, reject) => {
-    Firebird.attach(SYNTech_FB_CONFIG, (err, db) => {
+    Firebird.attach({ ...SYNTech_FB_CONFIG, host }, (err, db) => {
       if (err) reject(err);
       else resolve(db);
     });
   });
+}
+
+export async function attachSyntechDb(): Promise<FirebirdDb> {
+  const host = SYNTech_FB_CONFIG.host;
+  try {
+    return await attachWithHost(host);
+  } catch (err) {
+    if (host.toUpperCase() === 'RENATA') {
+      return attachWithHost('192.168.1.69');
+    }
+    throw err;
+  }
 }
 
 export function detachDb(db: FirebirdDb): Promise<void> {

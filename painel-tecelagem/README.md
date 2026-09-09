@@ -1,22 +1,21 @@
 # Painel Tecelagem
 
-Leitor + tela só de produção. Roda no **PC da tecelagem** (24 h). Não abre o Estoque de Peças.
+Programa da TV da tecelagem. Não é o Estoque de Peças.
 
-## No PC da tecelagem
+## Celular (patrão / patroa)
 
-1. Node.js instalado  
-2. Esta pasta do projeto (não precisa usar `Iniciar.bat` da raiz)  
-3. Rede até a **RENATA** (Syntech)  
-4. Clique em `Iniciar-Painel-Tecelagem.bat` (na raiz) ou `painel-tecelagem\Iniciar.bat`
+Com o Painel ligado no PC da tecelagem, abra no Safari ou Chrome:
 
-A TV e os outros PCs abrem no Chrome:
+https://controle-tricot-e-cia.web.app/tecelagem/
 
-`http://IP-DO-PC-DA-TECELAGEM:3850`
+Não precisa entrar no Estoque de Peças.
 
-Deixe a janela preta aberta.
+## Instalar no PC da tecelagem
 
-Se o Windows perguntar o firewall, permita o Node na porta **3850** (rede privada). Sem isso a TV não abre.
+Use o instalador Windows (`dist\Painel-Tecelagem-Setup.exe`): dois cliques → Próximo → Instalar.
 
-A tela atualiza sozinha a cada 1 minuto. Peças da ordem aberta só mudam na **troca de turno**.
+A TV usa o endereço que aparece na janelinha. O celular usa o link da nuvem acima.
 
-Não use o `Iniciar.bat` da raiz neste PC — aquele abre o Estoque de Peças.
+Para gerar o instalador neste PC:
+
+`npm run painel:installer`

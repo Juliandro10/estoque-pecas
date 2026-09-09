@@ -15,7 +15,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", Tahoma, sans-serif;
-  padding: 20px 28px 32px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 
 .top {
@@ -88,6 +88,10 @@ h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
 }
 @media (max-width: 900px) {
   .maquinas, .espera-list { grid-template-columns: 1fr; }
-  h1 { font-size: 32px; }
+  h1 { font-size: 28px; }
+  .sub { font-size: 15px; }
+  .clock { font-size: 22px; }
   .peca { font-size: 18px; }
+  .num { font-size: 28px; }
+  .maq { min-height: 0; padding: 12px; }
 }

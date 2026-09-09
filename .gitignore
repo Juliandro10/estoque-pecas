@@ -8,3 +8,6 @@ data/estoque.json
 service-account.json
 logs/
 backups/
+painel-tecelagem/installer/.cache/
+painel-tecelagem/installer/payload/
+painel-tecelagem/.publish-auth.json

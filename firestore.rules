@@ -1,9 +1,50 @@
 rules_version = '2';
 
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: tecelagem_publico / document: quadro
+//   json: string (JSON do quadro slim, sem cliente/operador)
+//   updated_at: string ISO
+//
+// Demais coleções (parts, withdrawals, programs, program_clients,
+// model_cadastro, …): qualquer usuário logado no Estoque de Peças,
+// como já era. A conta do painel da tecelagem NÃO acessa essas coleções.
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    function isPainelAccount() {
+      return isLoggedIn()
+        && request.auth.token.email == 'tecelagem@controle-tricot-e-cia.web.app';
+    }
+
+    function isValidTecelagemQuadro() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['json', 'updated_at'])
+        && data.json is string
+        && data.json.size() > 2
+        && data.json.size() < 200000
+        && data.updated_at is string
+        && data.updated_at.size() >= 10
+        && data.updated_at.size() < 80;
+    }
+
+    // Leitura pública: pedido explícito para iPhone/Android do patrão,
+    // sem login do Estoque de Peças.
+    match /tecelagem_publico/{document} {
+      allow read: if true;
+      allow create, update: if isLoggedIn() && isValidTecelagemQuadro();
+      allow delete: if isLoggedIn() && !isPainelAccount();
+    }
+
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isLoggedIn() && !isPainelAccount();
     }
   }
 }

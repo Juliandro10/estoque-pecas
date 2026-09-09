@@ -1,0 +1,114 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+import {
+  PAINEL_FIRESTORE_COLLECTION,
+  PAINEL_FIRESTORE_DOCUMENT,
+  PAINEL_PUBLISH_EMAIL,
+  type PainelPublico,
+} from './public-board.ts';
+
+type PublishAuth = { email: string; password: string };
+
+function readJson(file: string) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
+function loadDotEnv(root: string) {
+  try {
+    const raw = fs.readFileSync(path.join(root, '.env'), 'utf8');
+    for (const line of raw.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq === -1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const value = trimmed.slice(eq + 1).trim();
+      if (!(key in process.env)) process.env[key] = value;
+    }
+  } catch {
+    // .env opcional
+  }
+}
+
+function candidateRoots() {
+  const roots = [process.env.PAINEL_ROOT, process.cwd()];
+  return [...new Set(roots.filter((value): value is string => Boolean(value)))];
+}
+
+export function loadFirebaseWebConfig() {
+  for (const root of candidateRoots()) {
+    loadDotEnv(root);
+    const file = readJson(path.join(root, 'firebase-web.json'));
+    if (file?.apiKey && file?.projectId) {
+      return { projectId: file.projectId, apiKey: file.apiKey };
+    }
+  }
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID ?? 'controle-tricot-e-cia';
+  const apiKey = process.env.VITE_FIREBASE_API_KEY ?? '';
+  return { projectId, apiKey };
+}
+
+function loadPublishAuth(): PublishAuth | null {
+  for (const root of candidateRoots()) loadDotEnv(root);
+  const email = process.env.PAINEL_FIREBASE_EMAIL ?? PAINEL_PUBLISH_EMAIL;
+  const password = process.env.PAINEL_FIREBASE_PASSWORD;
+  if (email && password) return { email, password };
+
+  for (const root of candidateRoots()) {
+    for (const name of ['painel-publish.json', path.join('painel-tecelagem', '.publish-auth.json')]) {
+      const data = readJson(path.join(root, name));
+      if (data?.email && data?.password) return { email: data.email, password: data.password };
+    }
+  }
+  return null;
+}
+
+async function signIn(apiKey: string, auth: PublishAuth) {
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...auth, returnSecureToken: true }),
+    }
+  );
+  const body = (await res.json()) as { idToken?: string; error?: { message?: string } };
+  if (!res.ok || !body.idToken) {
+    throw new Error(body.error?.message ?? 'Falha ao autenticar o envio do painel.');
+  }
+  return body.idToken;
+}
+
+export async function publishPainelToFirebase(board: PainelPublico) {
+  const { projectId, apiKey } = loadFirebaseWebConfig();
+  const auth = loadPublishAuth();
+  if (!apiKey || !auth) {
+    console.warn('Nuvem: sem login do painel. TV local funciona; celular nao atualiza.');
+    return;
+  }
+
+  const idToken = await signIn(apiKey, auth);
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${PAINEL_FIRESTORE_COLLECTION}/${PAINEL_FIRESTORE_DOCUMENT}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fields: {
+        json: { stringValue: JSON.stringify(board) },
+        updated_at: { stringValue: board.updated_at },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firestore ${res.status}: ${text.slice(0, 240)}`);
+  }
+}

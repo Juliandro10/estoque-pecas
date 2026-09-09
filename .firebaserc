@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "controle-tricot-e-cia"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }
