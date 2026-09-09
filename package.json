@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:scanner": "tsx watch server/programs-scanner.ts",
+    "painel": "tsx painel-tecelagem/server.ts",
     "dev:local": "concurrently -n web,scan -c magenta,cyan \"npm run dev\" \"npm run dev:scanner\"",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

@@ -1,0 +1,93 @@
+:root {
+  --bg: #0e1218;
+  --card: #171d27;
+  --line: #2a3344;
+  --text: #f4f1ea;
+  --muted: #9aa6b8;
+  --ok: #3dba7a;
+  --wait: #d6a34a;
+  --late: #e07a5f;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  padding: 20px 28px 32px;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
+.sub { margin: 6px 0 0; color: var(--muted); font-size: 18px; }
+.clock { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.aviso {
+  background: #3a241c;
+  color: #ffd4c8;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.maquinas {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.maq {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-height: 108px;
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+.maq.idle { opacity: 0.72; }
+.num {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.maq.live .num { color: var(--ok); }
+.maq.idle .num { color: var(--wait); }
+.peca { font-size: 22px; font-weight: 700; line-height: 1.15; }
+.meta { margin-top: 4px; color: var(--muted); font-size: 16px; }
+.depois { margin-top: 6px; font-size: 15px; color: #c9d4e4; }
+
+.espera { margin-top: 22px; }
+.espera h2 { margin: 0 0 4px; font-size: 22px; }
+.nota { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+.espera-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.fila {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 16px;
+}
+.fila.late { border-color: var(--late); }
+.fila strong { display: block; font-size: 18px; margin-bottom: 2px; }
+
+@media (max-width: 1600px) {
+  .maquinas { grid-template-columns: 1fr 1fr; }
+  .espera-list { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 900px) {
+  .maquinas, .espera-list { grid-template-columns: 1fr; }
+  h1 { font-size: 32px; }
+  .peca { font-size: 18px; }
+}
