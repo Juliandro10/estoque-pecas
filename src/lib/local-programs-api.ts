@@ -16,6 +16,7 @@ import type {
   SinYarnsResult,
   SyntechPushResult,
   SyntechYarnCatalogFile,
+  ProducaoBoard,
 } from '../types-programming';
 import type { ClientFirestoreBackup } from './backup-export';
 
@@ -99,6 +100,7 @@ export const localProgramsApi = {
   syntechFios: () => localRequest<SyntechYarnCatalogFile>('/api/programs/syntech-fios'),
   syncSyntechFios: () =>
     localRequest<SyntechYarnCatalogFile>('/api/programs/syntech-fios/sync', { method: 'POST' }),
+  syntechProducao: () => localRequest<ProducaoBoard>('/api/programs/syntech-producao'),
   saveCadastroPdf: (payload: {
     reference: string;
     full_search?: boolean;
@@ -235,6 +237,10 @@ export function scannerSupportsSyntechPush(health: { version?: number; features?
 
 export function scannerSupportsSyntechFios(health: { version?: number; features?: string[] }) {
   return (health.version ?? 0) >= 22 || health.features?.includes('syntech-fios') === true;
+}
+
+export function scannerSupportsSyntechProducao(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 31 || health.features?.includes('syntech-producao') === true;
 }
 
 export function scannerSupportsM1Density(health: { version?: number; features?: string[] }) {

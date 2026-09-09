@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { MaquinasPage } from './pages/MaquinasPage';
 import { MonthlyReportsPage } from './pages/MonthlyReportsPage';
 import { PartsPage } from './pages/PartsPage';
+import { ProducaoPage } from './pages/ProducaoPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WithdrawalsPage } from './pages/WithdrawalsPage';
 import { DesenvControleLayout } from './pages/dev/DesenvControleLayout';
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="pecas" element={<PartsPage />} />
           <Route path="retiradas" element={<WithdrawalsPage />} />
           <Route path="maquinas" element={<MaquinasPage />} />
+          <Route path="producao" element={<ProducaoPage />} />
           <Route path="relatorios" element={<ReportsPage />} />
           <Route path="relatorios-mensais" element={<MonthlyReportsPage />} />
           <Route path="desenv-controle" element={<DesenvControleLayout />}>

@@ -34,6 +34,7 @@ import {
   readSyntechYarnCatalog,
   syncSyntechYarnCatalogFromDb,
 } from './syntech-yarn-catalog';
+import { readSyntechProducaoBoard } from './syntech-producao';
 import {
   addM1Measurement,
   computeDensity,
@@ -795,6 +796,17 @@ app.post('/api/programs/syntech-fios/sync', async (_req, res) => {
   }
 });
 
+app.get('/api/programs/syntech-producao', async (_req, res) => {
+  try {
+    const board = await readSyntechProducaoBoard();
+    res.json(board);
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao ler produção do Syntech.',
+    });
+  }
+});
+
 app.post('/api/programs/cadastro-pdf', async (req, res) => {
   try {
     const reference = String(req.body?.reference ?? '').trim();
@@ -918,7 +930,7 @@ app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 30,
+    version: 31,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -937,6 +949,7 @@ app.get('/api/programs/health', (_req, res) => {
       'sintral-yarns',
       'syntech-push',
       'syntech-fios',
+      'syntech-producao',
       'cadastro-pdf',
       'm1-density',
       'm1-knowledge',

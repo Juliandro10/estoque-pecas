@@ -482,3 +482,93 @@ export type M1MeshResult = {
   filled?: number;
   total?: number;
 };
+
+export type SyntechGauge = '7.2' | '6.2' | '3.5';
+
+export type ProducaoOpSize = {
+  tam: string;
+  cor: string;
+  quantidade: number;
+  produzida: number;
+  restante: number;
+};
+
+export type ProducaoOp = {
+  op: number;
+  pedido: number | null;
+  cliente: string;
+  referencia: string;
+  programa: string;
+  produto: string;
+  maquina: number;
+  maquina_nome: string;
+  galga: SyntechGauge | null;
+  status: number;
+  status_nome: string;
+  situacao: 'maquina' | 'produzindo' | 'espera';
+  data: string | null;
+  prazo: string | null;
+  quantidade: number;
+  produzida: number;
+  restante: number;
+  horas_restantes: number | null;
+  previsao: string | null;
+  previsao_pedido: string | null;
+  ultima_baixa: string | null;
+  ops_no_pedido: number;
+  maquinas_pedido: number[];
+  tamanhos: ProducaoOpSize[];
+};
+
+export type ProducaoAgora = {
+  maquina: number;
+  item_op: number;
+  op: number;
+  pedido: number | null;
+  cliente: string;
+  programa: string;
+  tam: string;
+  cor: string;
+  quantidade: number;
+  restante: number;
+  inicio: string | null;
+  operador: string;
+  processo: string;
+  previsao_pedido: string | null;
+  ops_no_pedido: number;
+  maquinas_pedido: number[];
+};
+
+export type ProducaoPedido = {
+  pedido: number | null;
+  cliente: string;
+  prazo: string | null;
+  previsao: string | null;
+  maquinas_livres_em: string | null;
+  ops: number;
+  quantidade: number;
+  produzida: number;
+  restante: number;
+  horas_restantes: number | null;
+  atrasado: boolean;
+  referencias: string[];
+  maquinas: number[];
+};
+
+export type ProducaoMaquina = {
+  numero: number;
+  nome: string;
+  galga: SyntechGauge | null;
+  grupo: boolean;
+  agora: ProducaoAgora | null;
+  ops: ProducaoOp[];
+};
+
+export type ProducaoBoard = {
+  updated_at: string;
+  stale_days: number;
+  machines: ProducaoMaquina[];
+  agora: ProducaoAgora[];
+  ops: ProducaoOp[];
+  pedidos: ProducaoPedido[];
+};

@@ -28,6 +28,9 @@ export function Layout() {
           <NavLink to="/maquinas" className={({ isActive }) => (isActive ? 'active' : '')}>
             Máquinas
           </NavLink>
+          <NavLink to="/producao" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Produção
+          </NavLink>
           <NavLink to="/relatorios" className={({ isActive }) => (isActive ? 'active' : '')}>
             Estoque
           </NavLink>
