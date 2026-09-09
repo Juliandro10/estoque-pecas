@@ -52,12 +52,16 @@ export function exportProducaoPatraoPdf(board: ProducaoBoard) {
   doc.setFontSize(11);
   doc.setTextColor(80);
   doc.text(`Atualizado em ${hoje}`, 14, 24);
-  doc.text('Uma linha = um pedido. Se o pedido está em duas máquinas, as duas ficam livres na mesma data.', 14, 30);
+  doc.text(
+    'Nas máquinas: turno fechado, 20h/dia, sem fim de semana. Em espera: só sugestão de programação, por prazo.',
+    14,
+    30
+  );
   doc.setTextColor(0);
 
   autoTable(doc, {
     startY: 36,
-    head: [['Máquina', 'Está tecendo agora', 'Pedido', 'Cliente', 'Falta no pedido', 'Pedido acaba em']],
+    head: [['Máquina', 'Está tecendo agora', 'Pedido', 'Ordem', 'Ainda por tecer', 'Pedido acaba em']],
     body: live.map((machine) => {
       const agora = machine.agora;
       if (!agora) return [`Máq. ${machine.numero}`, 'Parada / à espera', '—', '—', '—', '—'];
@@ -65,8 +69,8 @@ export function exportProducaoPatraoPdf(board: ProducaoBoard) {
         `Máq. ${machine.numero}`,
         agora.programa,
         agora.pedido != null ? String(agora.pedido) : '—',
-        agora.cliente || '—',
-        `${agora.ops_no_pedido} ordem(ns)`,
+        String(agora.item_op).padStart(6, '0'),
+        `${agora.restante} nesta + ${agora.fila_pecas} na fila`,
         formatDate(agora.previsao_pedido),
       ];
     }),
@@ -82,23 +86,44 @@ export function exportProducaoPatraoPdf(board: ProducaoBoard) {
   const afterMachines = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 36;
 
   doc.setFontSize(14);
-  doc.text('Quando cada pedido termina', 14, afterMachines + 12);
+  doc.text('Pedidos nas máquinas', 14, afterMachines + 12);
 
   autoTable(doc, {
     startY: afterMachines + 16,
-    head: [['Pedido', 'Cliente', 'Peça', 'Ordens', 'Peças que faltam', 'Nas máquinas', 'Acaba em', 'Máquinas livres em']],
-    body: (pedidosNaMaquina.length ? pedidosNaMaquina : board.pedidos.slice(0, 25)).map((pedido) => [
+    head: [['Pedido', 'Cliente', 'Peça', 'Ainda por tecer', 'Nas máquinas', 'Acaba em']],
+    body: pedidosNaMaquina.map((pedido) => [
       pedido.pedido != null ? String(pedido.pedido) : '—',
       pedido.cliente || '—',
       pedido.referencias.join(', ') || '—',
-      String(pedido.ops),
       String(pedido.restante),
       maquinasTexto(pedido.maquinas),
       formatDate(pedido.previsao),
-      formatDate(pedido.maquinas_livres_em),
     ]),
     styles: { fontSize: 9, cellPadding: 2.2 },
     headStyles: { fillColor: [18, 28, 46], fontSize: 9 },
+  });
+
+  const afterLive = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? afterMachines;
+  const espera = board.pedidos.filter((pedido) => pedido.maquinas.length === 0 && pedido.restante > 0);
+
+  doc.setFontSize(14);
+  doc.text('Em espera (sugestão — não está lançado nessa máquina)', 14, afterLive + 12);
+
+  autoTable(doc, {
+    startY: afterLive + 16,
+    head: [['Pedido', 'Prazo', 'Peça', 'Galga', 'Por tecer', 'Sugestão', 'Entra em', 'Acabaria em']],
+    body: espera.map((pedido) => [
+      pedido.pedido != null ? String(pedido.pedido) : '—',
+      formatDate(pedido.prazo),
+      pedido.referencias.join(', ') || '—',
+      pedido.galga ?? '—',
+      String(pedido.restante),
+      pedido.sugestao_maquina != null ? `Máq. ${pedido.sugestao_maquina}` : '—',
+      formatDate(pedido.sugestao_entra_em),
+      formatDate(pedido.previsao),
+    ]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [80, 90, 110], fontSize: 8 },
   });
 
   doc.save(`producao-${fileStamp()}.pdf`);
@@ -108,10 +133,10 @@ export function exportProducaoPatraoCsv(board: ProducaoBoard) {
   const linhas = [
     ['PRODUÇÃO DA FÁBRICA', stamp()],
     [],
-    ['Como ler: pedido pode ter várias ordens. Se estiver em 2 máquinas, as duas terminam juntas.'],
+    ['Como ler: nas máquinas é o que está tecendo. Em espera é só sugestão, por prazo de entrega, mesma galga.'],
     [],
     ['O QUE CADA MÁQUINA ESTÁ FAZENDO'],
-    ['Máquina', 'Está tecendo agora', 'Pedido', 'Cliente', 'Quantas ordens no pedido', 'Pedido acaba em'],
+    ['Máquina', 'Está tecendo agora', 'Pedido', 'Ordem', 'Ainda por tecer', 'Pedido acaba em'],
     ...board.machines
       .filter((machine) => !machine.grupo)
       .map((machine) => {
@@ -121,24 +146,39 @@ export function exportProducaoPatraoCsv(board: ProducaoBoard) {
           String(machine.numero),
           agora.programa,
           agora.pedido ?? '',
-          agora.cliente,
-          String(agora.ops_no_pedido),
+          String(agora.item_op).padStart(6, '0'),
+          `${agora.restante} nesta + ${agora.fila_pecas} na fila`,
           formatDate(agora.previsao_pedido),
         ];
       }),
     [],
-    ['QUANDO CADA PEDIDO TERMINA'],
-    ['Pedido', 'Cliente', 'Peça', 'Ordens', 'Peças que faltam', 'Nas máquinas', 'Acaba em', 'Máquinas livres em'],
-    ...board.pedidos.map((pedido) => [
-      pedido.pedido ?? '',
-      pedido.cliente,
-      pedido.referencias.join(', '),
-      pedido.ops,
-      pedido.restante,
-      maquinasTexto(pedido.maquinas),
-      formatDate(pedido.previsao),
-      formatDate(pedido.maquinas_livres_em),
-    ]),
+    ['PEDIDOS NAS MÁQUINAS'],
+    ['Pedido', 'Cliente', 'Peça', 'Ainda por tecer', 'Nas máquinas', 'Acaba em'],
+    ...board.pedidos
+      .filter((pedido) => pedido.maquinas.length > 0)
+      .map((pedido) => [
+        pedido.pedido ?? '',
+        pedido.cliente,
+        pedido.referencias.join(', '),
+        pedido.restante,
+        maquinasTexto(pedido.maquinas),
+        formatDate(pedido.previsao),
+      ]),
+    [],
+    ['EM ESPERA — SUGESTÃO DE PROGRAMAÇÃO (não está lançado nessa máquina)'],
+    ['Pedido', 'Prazo', 'Peça', 'Galga', 'Ainda por tecer', 'Sugestão de máquina', 'Pode entrar em', 'Acabaria em'],
+    ...board.pedidos
+      .filter((pedido) => pedido.maquinas.length === 0 && pedido.restante > 0)
+      .map((pedido) => [
+        pedido.pedido ?? '',
+        formatDate(pedido.prazo),
+        pedido.referencias.join(', '),
+        pedido.galga ?? '',
+        pedido.restante,
+        pedido.sugestao_maquina != null ? `Máq. ${pedido.sugestao_maquina}` : '',
+        formatDate(pedido.sugestao_entra_em),
+        formatDate(pedido.previsao),
+      ]),
   ];
 
   const csv = `\uFEFF${linhas.map((row) => row.map(csvCell).join(';')).join('\r\n')}`;

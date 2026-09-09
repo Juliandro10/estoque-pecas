@@ -52,6 +52,8 @@ export type ProducaoAgora = {
   cor: string;
   quantidade: number;
   restante: number;
+  fila_ordens: number;
+  fila_pecas: number;
   inicio: string | null;
   operador: string;
   processo: string;
@@ -74,6 +76,17 @@ export type ProducaoPedido = {
   atrasado: boolean;
   referencias: string[];
   maquinas: number[];
+  galga: SyntechGauge | null;
+  sugestao_maquina: number | null;
+  sugestao_entra_em: string | null;
+};
+
+export type ProducaoSugestao = {
+  pedido: number | null;
+  programa: string;
+  prazo: string | null;
+  entra_em: string | null;
+  previsao: string | null;
 };
 
 export type ProducaoMaquina = {
@@ -83,6 +96,7 @@ export type ProducaoMaquina = {
   grupo: boolean;
   agora: ProducaoAgora | null;
   ops: ProducaoOp[];
+  sugestao: ProducaoSugestao | null;
 };
 
 export type ProducaoBoard = {
@@ -186,24 +200,32 @@ function tempoForSize(tempos: Map<string, Map<string, number>>, referencia: stri
   return bySize.get(tam) ?? bySize.get('*') ?? null;
 }
 
-function hoursForSizes(
-  tempos: Map<string, Map<string, number>>,
+function secondsForPiece(
+  temposMaq: Map<string, Map<string, number>>,
+  fichaSegundos: Map<string, number>,
   referencia: string,
-  tamanhos: ProducaoOpSize[]
+  tam: string
 ) {
-  let hours = 0;
-  let missing = tamanhos.length === 0;
-  for (const size of tamanhos) {
-    if (size.restante <= 0) continue;
-    const seconds = tempoForSize(tempos, referencia, size.tam);
-    if (seconds == null) {
-      missing = true;
-      continue;
-    }
-    hours += (size.restante * seconds) / 3600;
-  }
-  if (missing && hours === 0) return null;
-  return hours;
+  return tempoForSize(temposMaq, referencia, tam) ?? (fichaSegundos.get(referencia) || null);
+}
+
+function hoursForPieces(
+  temposMaq: Map<string, Map<string, number>>,
+  fichaSegundos: Map<string, number>,
+  referencia: string,
+  tam: string,
+  restante: number
+) {
+  if (restante <= 0) return 0;
+  const seconds = secondsForPiece(temposMaq, fichaSegundos, referencia, tam);
+  if (seconds == null) return null;
+  return (restante * seconds) / 3600;
+}
+
+function knitDoneForItem(produced: Map<number, Map<number, number>>, item: number) {
+  const byProc = produced.get(item);
+  if (!byProc || byProc.size === 0) return 0;
+  return Math.min(...byProc.values());
 }
 
 function compareOps(a: ProducaoOp, b: ProducaoOp) {
@@ -218,6 +240,12 @@ function compareOps(a: ProducaoOp, b: ProducaoOp) {
 function listMaquinas(values: number[]) {
   return [...new Set(values.filter((n) => n >= 1 && n <= 15))].sort((a, b) => a - b);
 }
+
+const MAQUINAS_DA_GALGA: Record<SyntechGauge, number[]> = {
+  '7.2': [1, 2, 3, 4],
+  '6.2': [5, 6, 7, 8, 9],
+  '3.5': [10, 11, 12, 13, 14, 15],
+};
 
 export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
   const db = await attachSyntechDb();
@@ -415,6 +443,38 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
        ORDER BY NUMERO`
     );
 
+    const allItemIds = [...new Set(itemRows.map((row) => fbNum(row.NUM_ITEM)).filter(Boolean))];
+
+    const osmAllRows =
+      allItemIds.length === 0
+        ? []
+        : await queryInChunks<{ NUM_ITEM: number; PROCESSO: number; MAQUINA: number }>(
+            db,
+            (placeholders) =>
+              `SELECT M.NUM_ITEM, M.PROCESSO, M.MAQUINA
+               FROM ORDEM_SERVICO_MAQ M
+               JOIN PROCESSOS PR ON PR.NUMERO = M.PROCESSO
+               WHERE PR.TECIMENTO = 'S'
+                 AND M.NUM_ITEM IN (${placeholders})`,
+            allItemIds
+          );
+
+    const knitQtyRows =
+      allItemIds.length === 0
+        ? []
+        : await queryInChunks<{ NUM_LOTE: number; PROCESSO: number; Q: number }>(
+            db,
+            (placeholders) =>
+              `SELECT T.NUM_LOTE, T.PROCESSO, SUM(T.QUANT) AS Q
+               FROM TEMPOS T
+               JOIN PROCESSOS PR ON PR.NUMERO = T.PROCESSO
+               WHERE PR.TECIMENTO = 'S'
+                 AND T.DATA_TERMINO IS NOT NULL
+                 AND T.NUM_LOTE IN (${placeholders})
+               GROUP BY T.NUM_LOTE, T.PROCESSO`,
+            allItemIds
+          );
+
     const tempoRows = await queryDb<{
       COD_PROD: string | null;
       TAMANHO: string | null;
@@ -425,6 +485,16 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
               CAST(TAMANHO AS VARCHAR(3)) AS TAMANHO,
               CAST(TEMPO AS VARCHAR(8)) AS TEMPO
        FROM TEMPO_MAQ_PROD`
+    );
+
+    const fichaRows = await queryDb<{
+      PRODUTO: string | null;
+      TEMPOM: number | null;
+    }>(
+      db,
+      `SELECT CAST(PRODUTO AS VARCHAR(13)) AS PRODUTO, TEMPOM
+       FROM TEMPO_PESO_PROD
+       WHERE TEMPOM IS NOT NULL AND TEMPOM > 0`
     );
 
     const baixaRows = await queryDb<{ NUMERO_OS: number; ULTIMA: Date | string | null }>(
@@ -489,10 +559,37 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
       tempos.set(ref, bySize);
     }
 
+    const fichaSegundos = new Map<string, number>();
+    for (const row of fichaRows) {
+      const ref = fbStr(row.PRODUTO);
+      const seconds = fbNum(row.TEMPOM);
+      if (!ref || seconds <= 0) continue;
+      fichaSegundos.set(ref, (fichaSegundos.get(ref) ?? 0) + seconds);
+    }
+
+    const knitProduced = new Map<number, Map<number, number>>();
+    for (const row of knitQtyRows) {
+      const item = fbNum(row.NUM_LOTE);
+      const processo = fbNum(row.PROCESSO);
+      const qty = fbNum(row.Q);
+      const byProc = knitProduced.get(item) ?? new Map<number, number>();
+      byProc.set(processo, qty);
+      knitProduced.set(item, byProc);
+    }
+
+    for (const row of osmAllRows) {
+      const maquina = fbNum(row.MAQUINA);
+      if (maquina < 1 || maquina > 15) continue;
+      const item = fbNum(row.NUM_ITEM);
+      if (!itemToMachine.has(item)) itemToMachine.set(item, maquina);
+    }
+
     const ultimaBaixa = new Map<number, string | null>();
     for (const row of baixaRows) {
       ultimaBaixa.set(fbNum(row.NUMERO_OS), fbDate(row.ULTIMA));
     }
+
+    type DraftItem = ProducaoOpSize & { item: number };
 
     type Draft = {
       op: number;
@@ -507,7 +604,7 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
       data: string | null;
       prazo: string | null;
       tamanhos: ProducaoOpSize[];
-      items: Map<number, ProducaoOpSize & { item: number }>;
+      items: Map<number, DraftItem>;
     };
 
     const grouped = new Map<number, Draft>();
@@ -538,45 +635,86 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
       const current = grouped.get(fbNum(row.NUMERO_OS));
       if (!current) continue;
       const quantidade = fbNum(row.QUANT);
-      const produzida = fbNum(row.PRODUZIDA);
+      const item = fbNum(row.NUM_ITEM);
+      const tecida = Math.min(quantidade, knitDoneForItem(knitProduced, item));
+      const restante = Math.max(0, quantidade - tecida);
       const tam = fbStr(row.TAM) || '—';
       const cor = colors.get(fbNum(row.COR)) ?? '';
-      const item = fbNum(row.NUM_ITEM);
       current.items.set(item, {
         item,
         tam,
         cor,
         quantidade,
-        produzida,
-        restante: Math.max(0, quantidade - produzida),
+        produzida: tecida,
+        restante,
       });
       const existing = current.tamanhos.find((size) => size.tam === tam && size.cor === cor);
       if (existing) {
         existing.quantidade += quantidade;
-        existing.produzida += produzida;
-        existing.restante = Math.max(0, existing.quantidade - existing.produzida);
+        existing.produzida += tecida;
+        existing.restante += restante;
       } else {
         current.tamanhos.push({
           tam,
           cor,
           quantidade,
-          produzida,
-          restante: Math.max(0, quantidade - produzida),
+          produzida: tecida,
+          restante,
         });
       }
     }
 
     const ops: ProducaoOp[] = [];
-    for (const current of grouped.values()) {
-      const quantidade = current.tamanhos.reduce((sum, item) => sum + item.quantidade, 0);
-      const produzida = current.tamanhos.reduce((sum, item) => sum + item.produzida, 0);
-      const restante = Math.max(0, quantidade - produzida);
-      if (restante <= 0 && ![...current.items.keys()].some((item) => itemToMachine.has(item))) continue;
+    const itemHoursByMachine = new Map<number, number>();
+    const pedidoHoursByMachine = new Map<number, Map<number, number>>();
+    const pedidoItemCount = new Map<number | string, { total: number; restantes: number }>();
 
-      const liveMachines = listMaquinas(
+    for (const current of grouped.values()) {
+      const quantidade = [...current.items.values()].reduce((sum, item) => sum + item.quantidade, 0);
+      const produzida = [...current.items.values()].reduce((sum, item) => sum + item.produzida, 0);
+      const restante = [...current.items.values()].reduce((sum, item) => sum + item.restante, 0);
+      const liveNow = [...current.items.keys()].some((item) => liveLots.includes(item));
+      if (restante <= 0 && !liveNow) continue;
+
+      const assignedMachines = listMaquinas(
         [...current.items.keys()].map((item) => itemToMachine.get(item) ?? 0)
       );
-      const maquina = liveMachines[0] ?? current.maquina;
+      const maquina = assignedMachines[0] ?? current.maquina;
+
+      let hours: number | null = 0;
+      let missingTempo = false;
+      for (const item of current.items.values()) {
+        if (item.restante <= 0) continue;
+        const pieceHours = hoursForPieces(
+          tempos,
+          fichaSegundos,
+          current.referencia,
+          item.tam,
+          item.restante
+        );
+        if (pieceHours == null) {
+          missingTempo = true;
+          continue;
+        }
+        hours += pieceHours;
+        const itemMachine = itemToMachine.get(item.item);
+        if (itemMachine) {
+          itemHoursByMachine.set(itemMachine, (itemHoursByMachine.get(itemMachine) ?? 0) + pieceHours);
+          if (current.pedido != null) {
+            const byMaq = pedidoHoursByMachine.get(current.pedido) ?? new Map<number, number>();
+            byMaq.set(itemMachine, (byMaq.get(itemMachine) ?? 0) + pieceHours);
+            pedidoHoursByMachine.set(current.pedido, byMaq);
+          }
+        }
+      }
+      if (missingTempo && hours === 0) hours = null;
+
+      const pedidoKey = current.pedido ?? `op-${current.op}`;
+      const counts = pedidoItemCount.get(pedidoKey) ?? { total: 0, restantes: 0 };
+      counts.total += current.items.size;
+      counts.restantes += [...current.items.values()].filter((item) => item.restante > 0).length;
+      pedidoItemCount.set(pedidoKey, counts);
+
       ops.push({
         op: current.op,
         pedido: current.pedido,
@@ -589,13 +727,13 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
         galga: gaugeFromMachine(maquina),
         status: current.status,
         status_nome: STATUS_NOME[current.status] ?? `Status ${current.status}`,
-        situacao: liveMachines.length ? 'maquina' : current.status >= 2 ? 'produzindo' : 'espera',
+        situacao: liveNow ? 'maquina' : restante > 0 ? 'espera' : 'produzindo',
         data: current.data,
         prazo: current.prazo,
         quantidade,
         produzida,
         restante,
-        horas_restantes: hoursForSizes(tempos, current.referencia, current.tamanhos),
+        horas_restantes: hours,
         previsao: null,
         previsao_pedido: null,
         ultima_baixa: ultimaBaixa.get(current.op) ?? null,
@@ -608,11 +746,13 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
     const today = todayIso();
     const pedidoMaquinas = new Map<number, number[]>();
     for (const [item, maquina] of itemToMachine) {
-      const opNum = [...grouped.values()].find((draft) => draft.items.has(item))?.pedido;
-      if (opNum == null) continue;
-      const list = pedidoMaquinas.get(opNum) ?? [];
+      const draft = [...grouped.values()].find((row) => row.items.has(item));
+      if (draft?.pedido == null) continue;
+      const size = draft.items.get(item);
+      if (!size || (size.restante <= 0 && !liveLots.includes(item))) continue;
+      const list = pedidoMaquinas.get(draft.pedido) ?? [];
       if (!list.includes(maquina)) list.push(maquina);
-      pedidoMaquinas.set(opNum, list);
+      pedidoMaquinas.set(draft.pedido, list);
     }
 
     const pedidoMap = new Map<number | string, ProducaoPedido>();
@@ -632,8 +772,10 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
         atrasado: false,
         referencias: [],
         maquinas: [],
+        galga: op.galga,
+        sugestao_maquina: null,
+        sugestao_entra_em: null,
       };
-      current.ops += 1;
       current.quantidade += op.quantidade;
       current.produzida += op.produzida;
       current.restante += op.restante;
@@ -648,20 +790,84 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
       if (op.pedido != null) {
         current.maquinas = listMaquinas([...(pedidoMaquinas.get(op.pedido) ?? []), ...current.maquinas]);
       }
+      if (op.galga && !current.galga) current.galga = op.galga;
+      current.ops = pedidoItemCount.get(key)?.restantes ?? current.ops;
       pedidoMap.set(key, current);
     }
 
+    const machineFreeOn = new Map<number, string>();
+    for (const [maquina, hours] of itemHoursByMachine) {
+      machineFreeOn.set(maquina, addWorkingHours(today, hours, PRODUCAO_HOURS_PER_DAY));
+    }
+
     for (const pedido of pedidoMap.values()) {
-      const machines = pedido.maquinas;
-      const hours = pedido.horas_restantes;
-      if (hours == null) continue;
-      if (machines.length >= 1) {
-        pedido.previsao = addWorkingHours(today, hours / machines.length, PRODUCAO_HOURS_PER_DAY);
-        pedido.maquinas_livres_em = pedido.previsao;
-      } else {
-        pedido.previsao = addWorkingHours(today, hours, PRODUCAO_HOURS_PER_DAY);
+      const byMaq =
+        pedido.pedido != null ? pedidoHoursByMachine.get(pedido.pedido) : undefined;
+      if (byMaq && byMaq.size > 0) {
+        const dates = [...byMaq.entries()].map(([maquina, hours]) =>
+          addWorkingHours(today, hours, PRODUCAO_HOURS_PER_DAY)
+        );
+        dates.sort();
+        pedido.previsao = dates[dates.length - 1] ?? null;
+        const livres = pedido.maquinas
+          .map((maquina) => machineFreeOn.get(maquina))
+          .filter((value): value is string => Boolean(value))
+          .sort();
+        pedido.maquinas_livres_em = livres[livres.length - 1] ?? pedido.previsao;
       }
       pedido.atrasado = Boolean(pedido.prazo && pedido.prazo < today);
+    }
+
+    const cargaMaquina = new Map<number, number>();
+    for (let n = 1; n <= 15; n += 1) {
+      cargaMaquina.set(n, itemHoursByMachine.get(n) ?? 0);
+    }
+    const primeiraSugestao = new Map<number, ProducaoSugestao>();
+    const espera = [...pedidoMap.values()]
+      .filter(
+        (pedido) =>
+          pedido.maquinas.length === 0 &&
+          (pedido.restante ?? 0) > 0 &&
+          pedido.horas_restantes != null &&
+          pedido.horas_restantes > 0 &&
+          pedido.galga != null
+      )
+      .sort((a, b) => {
+        const prazoA = a.prazo ?? '9999-12-31';
+        const prazoB = b.prazo ?? '9999-12-31';
+        if (prazoA !== prazoB) return prazoA.localeCompare(prazoB);
+        return (a.pedido ?? 0) - (b.pedido ?? 0);
+      });
+
+    for (const pedido of espera) {
+      const galga = pedido.galga;
+      if (!galga || pedido.horas_restantes == null) continue;
+      const candidatas = MAQUINAS_DA_GALGA[galga];
+      let escolhida = candidatas[0];
+      let menorCarga = cargaMaquina.get(escolhida) ?? 0;
+      for (const numero of candidatas) {
+        const carga = cargaMaquina.get(numero) ?? 0;
+        if (carga < menorCarga) {
+          escolhida = numero;
+          menorCarga = carga;
+        }
+      }
+      const horasAntes = menorCarga;
+      const horasDepois = horasAntes + pedido.horas_restantes;
+      pedido.sugestao_maquina = escolhida;
+      pedido.sugestao_entra_em =
+        horasAntes <= 0 ? today : addWorkingHours(today, horasAntes, PRODUCAO_HOURS_PER_DAY);
+      pedido.previsao = addWorkingHours(today, horasDepois, PRODUCAO_HOURS_PER_DAY);
+      cargaMaquina.set(escolhida, horasDepois);
+      if (!primeiraSugestao.has(escolhida)) {
+        primeiraSugestao.set(escolhida, {
+          pedido: pedido.pedido,
+          programa: pedido.referencias[0] ?? '',
+          prazo: pedido.prazo,
+          entra_em: pedido.sugestao_entra_em,
+          previsao: pedido.previsao,
+        });
+      }
     }
 
     for (const op of ops) {
@@ -681,6 +887,12 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
       const pedido = draft?.pedido != null ? pedidoMap.get(draft.pedido) : undefined;
       const meta = liveItemMeta.get(item);
       if (!draft || !size) continue;
+      const pedidoItems = draft.pedido != null
+        ? [...grouped.values()].filter((row) => row.pedido === draft.pedido).flatMap((row) => [...row.items.values()])
+        : [...draft.items.values()];
+      const fila = pedidoItems.filter(
+        (row) => row.item !== item && row.restante > 0 && itemToMachine.get(row.item) === maquina
+      );
       agora.push({
         maquina,
         item_op: item,
@@ -692,6 +904,8 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
         cor: size.cor,
         quantidade: size.quantidade,
         restante: size.restante,
+        fila_ordens: fila.length,
+        fila_pecas: fila.reduce((sum, row) => sum + row.restante, 0),
         inicio: meta?.inicio != null ? secondsToClock(meta.inicio) : null,
         operador: meta?.operador ?? '',
         processo: meta?.processo ?? '',
@@ -722,6 +936,7 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
         grupo: numero >= 50,
         agora: agoraByMachine.get(numero) ?? null,
         ops: (byMachine.get(numero) ?? []).sort(compareOps),
+        sugestao: primeiraSugestao.get(numero) ?? null,
       };
     });
 

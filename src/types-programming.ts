@@ -531,6 +531,8 @@ export type ProducaoAgora = {
   cor: string;
   quantidade: number;
   restante: number;
+  fila_ordens: number;
+  fila_pecas: number;
   inicio: string | null;
   operador: string;
   processo: string;
@@ -553,6 +555,17 @@ export type ProducaoPedido = {
   atrasado: boolean;
   referencias: string[];
   maquinas: number[];
+  galga: SyntechGauge | null;
+  sugestao_maquina: number | null;
+  sugestao_entra_em: string | null;
+};
+
+export type ProducaoSugestao = {
+  pedido: number | null;
+  programa: string;
+  prazo: string | null;
+  entra_em: string | null;
+  previsao: string | null;
 };
 
 export type ProducaoMaquina = {
@@ -562,6 +575,7 @@ export type ProducaoMaquina = {
   grupo: boolean;
   agora: ProducaoAgora | null;
   ops: ProducaoOp[];
+  sugestao: ProducaoSugestao | null;
 };
 
 export type ProducaoBoard = {

@@ -87,6 +87,14 @@ export function ProducaoPage() {
   }, [board, normalizedQuery]);
 
   const emMaquina = physical.filter((machine) => machine.agora).length;
+  const naMaquinaPedidos = useMemo(
+    () => pedidos.filter((pedido) => pedido.maquinas.length > 0),
+    [pedidos]
+  );
+  const esperaPedidos = useMemo(
+    () => pedidos.filter((pedido) => pedido.maquinas.length === 0 && pedido.restante > 0),
+    [pedidos]
+  );
   const updatedLabel = board?.updated_at ? new Date(board.updated_at).toLocaleString('pt-BR') : '—';
 
   return (
@@ -133,15 +141,15 @@ export function ProducaoPage() {
             <strong>{board.pedidos.filter((pedido) => pedido.maquinas.length > 0).length}</strong>
           </div>
           <div className="card stat-card warn">
-            <span>Peças que ainda faltam</span>
-            <strong>{pedidos.reduce((sum, pedido) => sum + pedido.restante, 0)}</strong>
+            <span>Pedidos em espera</span>
+            <strong>{board.pedidos.filter((pedido) => pedido.maquinas.length === 0 && pedido.restante > 0).length}</strong>
           </div>
         </div>
       ) : null}
 
       <div className="muted tiny" style={{ marginBottom: 14 }}>
         {board
-          ? `Atualizado ${updatedLabel}. Pedido pode ter várias ordens. Se estiver em duas máquinas, as duas ficam livres na mesma data.`
+          ? `Atualizado ${updatedLabel}. Falta tecer = turno já fechado. 20h/dia, sem fim de semana. Fila em espera é só sugestão de programação, por prazo de entrega.`
           : localMode
             ? 'Lendo o Syntech…'
             : 'Precisa do Iniciar.bat na rede da fábrica'}
@@ -167,49 +175,102 @@ export function ProducaoPage() {
       ) : null}
 
       {!loading && board && tab === 'pedidos' ? (
-        <div className="card table-wrap">
-          {pedidos.length === 0 ? (
-            <div className="empty">Nenhum pedido encontrado.</div>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Pedido</th>
-                  <th>Cliente</th>
-                  <th>Peça</th>
-                  <th>Ordens</th>
-                  <th>Falta</th>
-                  <th>Nas máquinas</th>
-                  <th>Pedido acaba em</th>
-                  <th>Máquinas livres em</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pedidos.map((pedido) => (
-                  <tr
-                    key={pedido.pedido ?? pedido.referencias.join('-')}
-                    className={pedido.atrasado ? 'row-late' : ''}
-                  >
-                    <td className="mono">{pedido.pedido ?? '—'}</td>
-                    <td>{pedido.cliente || '—'}</td>
-                    <td>{pedido.referencias.join(', ') || '—'}</td>
-                    <td>{pedido.ops}</td>
-                    <td>
-                      <strong>{pedido.restante}</strong>
-                    </td>
-                    <td>{maquinasTexto(pedido.maquinas)}</td>
-                    <td>{formatDate(pedido.previsao)}</td>
-                    <td>{formatDate(pedido.maquinas_livres_em)}</td>
+        <div>
+          <h2 className="sec-title">Nas máquinas agora</h2>
+          <div className="card table-wrap">
+            {naMaquinaPedidos.length === 0 ? (
+              <div className="empty">Nenhum pedido em máquina.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th>Peça</th>
+                    <th>Ordens na tecelagem</th>
+                    <th>Ainda por tecer</th>
+                    <th>Nas máquinas</th>
+                    <th>Pedido acaba em</th>
+                    <th>Máquinas livres em</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {naMaquinaPedidos.map((pedido) => (
+                    <tr
+                      key={pedido.pedido ?? pedido.referencias.join('-')}
+                      className={pedido.atrasado ? 'row-late' : ''}
+                    >
+                      <td className="mono">{pedido.pedido ?? '—'}</td>
+                      <td>{pedido.cliente || '—'}</td>
+                      <td>{pedido.referencias.join(', ') || '—'}</td>
+                      <td>{pedido.ops}</td>
+                      <td>
+                        <strong>{pedido.restante}</strong>
+                      </td>
+                      <td>{maquinasTexto(pedido.maquinas)}</td>
+                      <td>{formatDate(pedido.previsao)}</td>
+                      <td>{formatDate(pedido.maquinas_livres_em)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <h2 className="sec-title">Em espera — sugestão de programação</h2>
+          <p className="muted tiny" style={{ margin: '-8px 0 12px' }}>
+            Ordenado pelo prazo de entrega. A máquina indicada é a que fica livre primeiro na mesma galga — não está
+            lançado nela.
+          </p>
+          <div className="card table-wrap">
+            {esperaPedidos.length === 0 ? (
+              <div className="empty">Nenhum pedido em espera.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pedido</th>
+                    <th>Prazo</th>
+                    <th>Peça</th>
+                    <th>Galga</th>
+                    <th>Ainda por tecer</th>
+                    <th>Sugestão de máquina</th>
+                    <th>Pode entrar em</th>
+                    <th>Acabaria em</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {esperaPedidos.map((pedido) => (
+                    <tr
+                      key={pedido.pedido ?? pedido.referencias.join('-')}
+                      className={pedido.atrasado ? 'row-late' : ''}
+                    >
+                      <td className="mono">{pedido.pedido ?? '—'}</td>
+                      <td>{formatDate(pedido.prazo)}</td>
+                      <td>{pedido.referencias.join(', ') || '—'}</td>
+                      <td>{pedido.galga ?? '—'}</td>
+                      <td>
+                        <strong>{pedido.restante}</strong>
+                      </td>
+                      <td>
+                        {pedido.sugestao_maquina
+                          ? `Máq. ${pedido.sugestao_maquina}`
+                          : 'sem máquina da galga'}
+                      </td>
+                      <td>{formatDate(pedido.sugestao_entra_em)}</td>
+                      <td>{formatDate(pedido.previsao)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       ) : null}
 
       <style>{`
         .producao-page { max-width: 1280px; }
+        .sec-title { font-size: 16px; margin: 8px 0 12px; }
         .tiny { font-size: 12px; }
         .muted { color: var(--muted); }
         .sub-nav { display: flex; gap: 8px; margin-bottom: 20px; }
@@ -264,17 +325,33 @@ function MachineCard({ machine, query }: { machine: ProducaoMaquina; query: stri
             <strong>{agora.programa}</strong>
           </div>
           <div className="muted tiny">
-            Pedido {agora.pedido ?? '—'} · {agora.ops_no_pedido} ordem(ns)
+            Pedido {agora.pedido ?? '—'} · ordem {String(agora.item_op).padStart(6, '0')}
             {agora.maquinas_pedido.length > 1 ? ` · também na ${maquinasTexto(agora.maquinas_pedido.filter((n) => n !== machine.numero))}` : ''}
           </div>
           <div className="muted tiny">
             {agora.tam}
-            {agora.cor ? ` ${agora.cor}` : ''} · falta {agora.restante}
+            {agora.cor ? ` ${agora.cor}` : ''} · faltam {agora.restante} nesta ordem
+            {agora.fila_ordens > 0 ? ` · ${agora.fila_ordens} na fila (${agora.fila_pecas} pç)` : ''}
           </div>
+          <div className="muted tiny">{agora.ops_no_pedido} ordem(ns) ainda na tecelagem</div>
           <div className="muted tiny">Pedido acaba em {formatDate(agora.previsao_pedido)}</div>
+          {machine.sugestao ? (
+            <div className="muted tiny">
+              Sugestão depois: pedido {machine.sugestao.pedido ?? '—'} · prazo {formatDate(machine.sugestao.prazo)} ·
+              entra {formatDate(machine.sugestao.entra_em)}
+            </div>
+          ) : null}
         </div>
       ) : (
-        <div className="muted tiny">Nada aberto nesta máquina</div>
+        <div>
+          <div className="muted tiny">Nada aberto nesta máquina</div>
+          {machine.sugestao ? (
+            <div className="muted tiny">
+              Sugestão: pedido {machine.sugestao.pedido ?? '—'} · prazo {formatDate(machine.sugestao.prazo)} · entra{' '}
+              {formatDate(machine.sugestao.entra_em)}
+            </div>
+          ) : null}
+        </div>
       )}
     </div>
   );
