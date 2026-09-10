@@ -58,6 +58,7 @@ export type ProducaoAgora = {
   operador: string;
   processo: string;
   previsao_pedido: string | null;
+  livre_em: string | null;
   ops_no_pedido: number;
   maquinas_pedido: number[];
 };
@@ -97,6 +98,7 @@ export type ProducaoMaquina = {
   agora: ProducaoAgora | null;
   ops: ProducaoOp[];
   sugestao: ProducaoSugestao | null;
+  parada: { motivo: string; familia: 'mecanica' | 'processo' } | null;
 };
 
 export type ProducaoBoard = {
@@ -163,24 +165,99 @@ function secondsToClock(seconds: number) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function addWorkingHours(startDate: string, hours: number, hoursPerDay: number) {
-  const [year, month, day] = startDate.split('-').map(Number);
-  const cursor = new Date(Date.UTC(year, month - 1, day));
-  let remaining = Math.max(0, hours);
-  if (remaining === 0) return startDate;
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
 
+type SpWall = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+};
+
+function readSpWall(date = new Date()): SpWall {
+  const s = date.toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  const [ymd, hms] = s.split(' ');
+  const [year, month, day] = ymd.split('-').map(Number);
+  const [hour, minute] = hms.split(':').map(Number);
+  return { year, month, day, hour, minute };
+}
+
+function wallYmd(w: SpWall) {
+  return `${w.year}-${pad2(w.month)}-${pad2(w.day)}`;
+}
+
+function wallIso(w: SpWall) {
+  return `${wallYmd(w)}T${pad2(w.hour)}:${pad2(w.minute)}`;
+}
+
+function weekdayOf(w: SpWall) {
+  return new Date(`${wallYmd(w)}T12:00:00.000-03:00`).getUTCDay();
+}
+
+function addDaysWall(w: SpWall, days: number): SpWall {
+  const dt = new Date(`${wallYmd(w)}T12:00:00.000-03:00`);
+  dt.setUTCDate(dt.getUTCDate() + days);
+  const ymd = dt.toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).slice(0, 10);
+  const [year, month, day] = ymd.split('-').map(Number);
+  return { ...w, year, month, day };
+}
+
+function addWorkingHours(startDate: string, hours: number, hoursPerDay: number) {
+  const workStart = 6;
+  const remainingStart = Number.isFinite(hours) ? Math.max(0, hours) : 0;
+  const now = readSpWall();
+  if (remainingStart <= 0) {
+    return `${startDate}T${pad2(now.hour)}:${pad2(now.minute)}`;
+  }
+
+  const snapToShift = (w: SpWall): SpWall => {
+    let cur = { ...w };
+    while (weekdayOf(cur) === 0 || weekdayOf(cur) === 6) {
+      cur = addDaysWall(cur, 1);
+      cur.hour = workStart;
+      cur.minute = 0;
+    }
+    if (cur.hour * 60 + cur.minute < workStart * 60) {
+      cur.hour = workStart;
+      cur.minute = 0;
+    }
+    return cur;
+  };
+
+  let remaining = remainingStart;
+  let wall = snapToShift(now);
   let guard = 0;
-  while (remaining > 0 && guard < 800) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-    const weekday = cursor.getUTCDay();
-    if (weekday === 0 || weekday === 6) {
+  while (remaining > 1 / 60 && guard < 800) {
+    wall = snapToShift(wall);
+    const nowMin = wall.hour * 60 + wall.minute;
+    const endMin = workStart * 60 + hoursPerDay * 60;
+    const leftToday = (endMin - nowMin) / 60;
+    if (leftToday <= 0) {
+      wall = addDaysWall(wall, 1);
+      wall.hour = workStart;
+      wall.minute = 0;
       guard += 1;
       continue;
     }
-    remaining -= hoursPerDay;
+    if (remaining <= leftToday) {
+      const total = nowMin + Math.round(remaining * 60);
+      wall.hour = Math.floor(total / 60) % 24;
+      wall.minute = total % 60;
+      const extraDays = Math.floor(total / (24 * 60));
+      if (extraDays) wall = addDaysWall(wall, extraDays);
+      remaining = 0;
+    } else {
+      remaining -= leftToday;
+      wall = addDaysWall(wall, 1);
+      wall.hour = workStart;
+      wall.minute = 0;
+    }
     guard += 1;
   }
-  return cursor.toISOString().slice(0, 10);
+  return wallIso(wall);
 }
 
 function todayIso() {
@@ -239,6 +316,85 @@ function compareOps(a: ProducaoOp, b: ProducaoOp) {
 
 function listMaquinas(values: number[]) {
   return [...new Set(values.filter((n) => n >= 1 && n <= 15))].sort((a, b) => a - b);
+}
+
+function foldText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const MOTIVO_LABEL: Record<string, string> = {
+  'AJUSTE MECANICO': 'Ajuste mecânico',
+  'LIMPEZA COMPLETA': 'Limpeza completa',
+  'LIMPEZA PARCIAL': 'Limpeza parcial',
+  'MANUTENCAO': 'Manutenção',
+  'ABORTO DE MODELO': 'Aborto de modelo',
+  'APROVACAO DE MODELO': 'Aprovação de modelo',
+  'FALTA DE FIO': 'Falta de fio',
+  'PARADA POR MAU TEMPO': 'Parada por mau tempo',
+  'QUEDA DE ENERGIA': 'Queda de energia',
+  'REPOSICAO': 'Reposição',
+  'TESTE DE PROGRAMA': 'Teste de programa',
+  'TROCA DE PROGRAMA': 'Troca de programa',
+  'TROCA DE MAQUINA': 'Troca de máquina',
+  'DESENVOLVIMENTO': 'Desenvolvimento',
+  'ERRO DE TECIMENTO': 'Erro de tecimento',
+};
+
+function prettyMotivo(motivo: string) {
+  const folded = foldText(motivo);
+  if (MOTIVO_LABEL[folded]) return MOTIVO_LABEL[folded];
+  if (folded.startsWith('MANUTEN')) return 'Manutenção';
+  const text = motivo.trim();
+  if (!text) return 'Parada';
+  return text.toLocaleLowerCase('pt-BR').replace(/(^|\s)\S/g, (ch) => ch.toLocaleUpperCase('pt-BR'));
+}
+
+function familiaDeMotivo(motivo: string, tipoPorNome: Map<string, number>): 'mecanica' | 'processo' {
+  const folded = foldText(motivo);
+  const tipo = tipoPorNome.get(folded);
+  if (tipo === 1) return 'mecanica';
+  if (tipo === 2) return 'processo';
+  if (/(MANUTEN|AJUSTE|LIMPEZA)/.test(folded)) return 'mecanica';
+  return 'processo';
+}
+
+async function readParadasAbertas(db: FirebirdDb) {
+  const tipos = await queryDb<{ TIPO: number; NOME: string | null }>(
+    db,
+    `SELECT TIPO, CAST(DESCRICAO AS VARCHAR(40)) AS NOME FROM TIPO_PARADA`
+  );
+  const tipoPorNome = new Map<string, number>();
+  for (const row of tipos) {
+    const nome = foldText(fbStr(row.NOME));
+    if (nome) tipoPorNome.set(nome, fbNum(row.TIPO));
+  }
+
+  const abertas = await queryDb<{ MAQUINA: number; MOTIVO: string | null }>(
+    db,
+    `SELECT MAQUINA, CAST(MOTIVO AS VARCHAR(40)) AS MOTIVO
+     FROM MANUTENCAO
+     WHERE DATA_TERMINO IS NULL
+       AND FINAL IS NULL
+     ORDER BY AUTOINC`
+  );
+
+  const byMachine = new Map<number, { motivo: string; familia: 'mecanica' | 'processo' }>();
+  for (const row of abertas) {
+    const maquina = fbNum(row.MAQUINA);
+    if (maquina < 1 || maquina > 15) continue;
+    const raw = fbStr(row.MOTIVO);
+    const motivo = prettyMotivo(raw);
+    byMachine.set(maquina, {
+      motivo,
+      familia: familiaDeMotivo(raw, tipoPorNome),
+    });
+  }
+  return byMachine;
 }
 
 const MAQUINAS_DA_GALGA: Record<SyntechGauge, number[]> = {
@@ -442,6 +598,7 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
        WHERE NUMERO BETWEEN 1 AND 15 OR NUMERO IN (50, 51, 52)
        ORDER BY NUMERO`
     );
+    const paradasAbertas = await readParadasAbertas(db);
 
     const allItemIds = [...new Set(itemRows.map((row) => fbNum(row.NUM_ITEM)).filter(Boolean))];
 
@@ -910,6 +1067,7 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
         operador: meta?.operador ?? '',
         processo: meta?.processo ?? '',
         previsao_pedido: pedido?.previsao ?? null,
+        livre_em: machineFreeOn.get(maquina) ?? pedido?.previsao ?? null,
         ops_no_pedido: pedido?.ops ?? 1,
         maquinas_pedido: pedido?.maquinas ?? [maquina],
       });
@@ -937,6 +1095,7 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
         agora: agoraByMachine.get(numero) ?? null,
         ops: (byMachine.get(numero) ?? []).sort(compareOps),
         sugestao: primeiraSugestao.get(numero) ?? null,
+        parada: paradasAbertas.get(numero) ?? null,
       };
     });
 

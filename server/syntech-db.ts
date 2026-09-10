@@ -1,5 +1,6 @@
 import './setup-firebird-client';
 
+import net from 'node:net';
 import Firebird from 'node-firebird';
 
 export const SYNTech_FB_CONFIG = {
@@ -15,6 +16,32 @@ export const SYNTech_FB_CONFIG = {
 export type FirebirdDb = Firebird.Database;
 export type SyntechTx = Firebird.Transaction;
 
+function isIp(host: string) {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+}
+
+function probeTcp(host: string, port: number, ms = 2500): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(ms);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+    try {
+      socket.connect(port, host);
+    } catch {
+      finish(false);
+    }
+  });
+}
+
 function attachWithHost(host: string): Promise<FirebirdDb> {
   return new Promise((resolve, reject) => {
     Firebird.attach({ ...SYNTech_FB_CONFIG, host }, (err, db) => {
@@ -25,15 +52,34 @@ function attachWithHost(host: string): Promise<FirebirdDb> {
 }
 
 export async function attachSyntechDb(): Promise<FirebirdDb> {
-  const host = SYNTech_FB_CONFIG.host;
-  try {
-    return await attachWithHost(host);
-  } catch (err) {
-    if (host.toUpperCase() === 'RENATA') {
-      return attachWithHost('192.168.1.69');
+  const configured = SYNTech_FB_CONFIG.host;
+  const hosts = [
+    ...new Set([
+      ...(isIp(configured) ? [configured] : []),
+      '192.168.1.52',
+      '192.168.1.69',
+      configured,
+      'RENATA',
+    ]),
+  ];
+  let lastErr: unknown;
+  for (const host of hosts) {
+    const reachable = await probeTcp(host, SYNTech_FB_CONFIG.port);
+    if (!reachable) {
+      console.warn(`Syntech porta 3050 fechada em ${host}`);
+      lastErr = new Error(`Porta 3050 fechada em ${host}`);
+      continue;
     }
-    throw err;
+    try {
+      const db = await attachWithHost(host);
+      if (host !== configured) console.warn(`Syntech conectou em ${host}`);
+      return db;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`Syntech falhou em ${host}:`, err instanceof Error ? err.message : err);
+    }
   }
+  throw lastErr instanceof Error ? lastErr : new Error('Nao conectou no Syntech.');
 }
 
 export function detachDb(db: FirebirdDb): Promise<void> {

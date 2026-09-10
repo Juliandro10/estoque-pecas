@@ -537,6 +537,7 @@ export type ProducaoAgora = {
   operador: string;
   processo: string;
   previsao_pedido: string | null;
+  livre_em: string | null;
   ops_no_pedido: number;
   maquinas_pedido: number[];
 };
@@ -568,6 +569,11 @@ export type ProducaoSugestao = {
   previsao: string | null;
 };
 
+export type ProducaoParada = {
+  motivo: string;
+  familia: 'mecanica' | 'processo';
+};
+
 export type ProducaoMaquina = {
   numero: number;
   nome: string;
@@ -576,6 +582,7 @@ export type ProducaoMaquina = {
   agora: ProducaoAgora | null;
   ops: ProducaoOp[];
   sugestao: ProducaoSugestao | null;
+  parada: ProducaoParada | null;
 };
 
 export type ProducaoBoard = {

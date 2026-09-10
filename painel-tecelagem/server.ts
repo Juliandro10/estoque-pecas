@@ -10,7 +10,6 @@ import { toPainelPublico } from './public-board.ts';
 import { publishPainelToFirebase } from './publish-firebase.ts';
 
 const PORT = Number(process.env.PAINEL_PORT ?? 3850);
-const HOST = process.env.PAINEL_HOST ?? '0.0.0.0';
 
 function resolveRoot() {
   if (process.env.PAINEL_ROOT) return process.env.PAINEL_ROOT;
@@ -21,6 +20,10 @@ function resolveRoot() {
 
 const ROOT = resolveRoot();
 const PUBLIC = path.join(ROOT, 'public');
+console.log(`Pasta do painel: ${ROOT}`);
+if (!fs.existsSync(path.join(PUBLIC, 'index.html'))) {
+  console.error(`Nao achei public/index.html em ${PUBLIC}`);
+}
 
 const app = express();
 app.use(cors());
@@ -54,14 +57,19 @@ function lanAddresses() {
   return found;
 }
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Painel Tecelagem em http://127.0.0.1:${PORT}`);
   for (const ip of lanAddresses()) {
     console.log(`Outros PCs / TV:     http://${ip}:${PORT}`);
   }
-  console.log('Deixe esta janela aberta. Ctrl+C para parar.');
-  void publishTick();
-  setInterval(() => void publishTick(), 60_000);
+  setTimeout(() => {
+    void publishTick();
+    setInterval(() => void publishTick(), 60_000);
+  }, 1500);
+});
+server.on('error', (err) => {
+  console.error('Nao abriu a porta', PORT, err instanceof Error ? err.message : err);
+  process.exit(1);
 });
 
 let publishing = false;

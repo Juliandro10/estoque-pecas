@@ -25,16 +25,28 @@ loadDotEnv();
 
 const projectId = process.env.VITE_FIREBASE_PROJECT_ID ?? 'controle-tricot-e-cia';
 const apiKey = process.env.VITE_FIREBASE_API_KEY ?? '';
-if (!apiKey) {
-  console.warn('Sem VITE_FIREBASE_API_KEY: o celular nao vai ler o quadro.');
+const dest = path.join(root, 'dist', 'tecelagem');
+let previousCfg = '';
+try {
+  previousCfg = fs.readFileSync(path.join(dest, 'firebase-config.js'), 'utf8');
+} catch {
+  previousCfg = '';
 }
 
-const dest = path.join(root, 'dist', 'tecelagem');
 fs.rmSync(dest, { recursive: true, force: true });
 fs.mkdirSync(dest, { recursive: true });
 fs.cpSync(path.join(root, 'painel-tecelagem', 'public'), dest, { recursive: true });
-fs.writeFileSync(
-  path.join(dest, 'firebase-config.js'),
-  `window.PAINEL_FIREBASE = ${JSON.stringify({ projectId, apiKey })};\n`
-);
+
+if (apiKey) {
+  fs.writeFileSync(
+    path.join(dest, 'firebase-config.js'),
+    `window.PAINEL_FIREBASE = ${JSON.stringify({ projectId, apiKey })};\n`
+  );
+} else if (previousCfg.includes('apiKey') && !previousCfg.includes('""')) {
+  fs.writeFileSync(path.join(dest, 'firebase-config.js'), previousCfg);
+  console.warn('Mantive a chave da nuvem que ja estava no dist.');
+} else {
+  console.warn('Sem VITE_FIREBASE_API_KEY: o celular nao vai ler o quadro.');
+}
+
 console.log(`Painel copiado para ${dest}`);

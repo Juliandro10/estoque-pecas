@@ -14,10 +14,17 @@ export type PainelPublico = {
       item_op: number;
       restante: number;
       fila_ordens: number;
+      ops_no_pedido: number;
       previsao_pedido: string | null;
+      livre_em: string | null;
+    } | null;
+    parada: {
+      motivo: string;
+      familia: 'mecanica' | 'processo';
     } | null;
     sugestao: {
       pedido: number | null;
+      programa: string;
       prazo: string | null;
       entra_em: string | null;
     } | null;
@@ -47,12 +54,18 @@ export function toPainelPublico(board: ProducaoBoard): PainelPublico {
               item_op: machine.agora.item_op,
               restante: machine.agora.restante,
               fila_ordens: machine.agora.fila_ordens,
+              ops_no_pedido: machine.agora.ops_no_pedido,
               previsao_pedido: machine.agora.previsao_pedido,
+              livre_em: machine.agora.livre_em,
             }
+          : null,
+        parada: machine.parada
+          ? { motivo: machine.parada.motivo, familia: machine.parada.familia }
           : null,
         sugestao: machine.sugestao
           ? {
               pedido: machine.sugestao.pedido,
+              programa: machine.sugestao.programa,
               prazo: machine.sugestao.prazo,
               entra_em: machine.sugestao.entra_em,
             }

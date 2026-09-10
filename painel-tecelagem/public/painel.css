@@ -50,19 +50,55 @@ h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
   display: grid;
   grid-template-columns: 64px 1fr;
   gap: 12px;
-  align-items: center;
+  align-items: start;
 }
 .maq.idle { opacity: 0.72; }
+.maq.live .num { color: var(--ok); }
+.maq.idle .num { color: var(--wait); }
+.maq.stop-mecanica,
+.maq.stop-processo { opacity: 1; }
+.maq.stop-mecanica {
+  box-shadow: inset 5px 0 0 var(--late);
+  border-color: #6b3a32;
+}
+.maq.stop-processo {
+  box-shadow: inset 5px 0 0 var(--wait);
+  border-color: #6b5420;
+}
+.maq.stop-mecanica .num { color: var(--late); }
+.maq.stop-processo .num { color: var(--wait); }
+.selo {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.stop-mecanica .selo { background: #4a241e; color: #ffc8b8; }
+.stop-processo .selo { background: #3f3218; color: #f0d48a; }
+.maq.com-parada .peca,
+.maq.com-parada .destaque { opacity: 0.78; }
 .num {
   font-size: 34px;
   font-weight: 800;
   color: var(--muted);
+  padding-top: 2px;
 }
-.maq.live .num { color: var(--ok); }
-.maq.idle .num { color: var(--wait); }
-.peca { font-size: 22px; font-weight: 700; line-height: 1.15; }
-.meta { margin-top: 4px; color: var(--muted); font-size: 16px; }
-.depois { margin-top: 6px; font-size: 15px; color: #c9d4e4; }
+.peca { font-size: 20px; font-weight: 700; line-height: 1.15; }
+.destaque {
+  margin-top: 5px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.fim { color: var(--text); }
+.fim.soon { color: var(--wait); }
+.fim.late { color: var(--late); }
+.detalhe { margin-top: 8px; color: var(--muted); font-size: 13px; }
+.depois { margin-top: 4px; font-size: 13px; color: var(--muted); opacity: 0.85; }
 
 .espera { margin-top: 22px; }
 .espera h2 { margin: 0 0 4px; font-size: 22px; }
@@ -92,6 +128,7 @@ h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
   .sub { font-size: 15px; }
   .clock { font-size: 22px; }
   .peca { font-size: 18px; }
+  .destaque { font-size: 17px; }
   .num { font-size: 28px; }
   .maq { min-height: 0; padding: 12px; }
 }

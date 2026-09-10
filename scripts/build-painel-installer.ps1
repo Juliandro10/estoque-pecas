@@ -34,8 +34,9 @@ if (Test-Path $envFile) {
   }
 }
 $cfg = @{ projectId = $projectId; apiKey = $apiKey } | ConvertTo-Json -Compress
-Set-Content -Path (Join-Path $publicDst "firebase-config.js") -Value "window.PAINEL_FIREBASE = $cfg;" -Encoding UTF8
-Set-Content -Path (Join-Path $payload "firebase-web.json") -Value (@{ projectId = $projectId; apiKey = $apiKey } | ConvertTo-Json) -Encoding UTF8
+$utf8 = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText((Join-Path $publicDst "firebase-config.js"), "window.PAINEL_FIREBASE = $cfg;", $utf8)
+[System.IO.File]::WriteAllText((Join-Path $payload "firebase-web.json"), (@{ projectId = $projectId; apiKey = $apiKey } | ConvertTo-Json), $utf8)
 
 $publishAuth = Join-Path $root "painel-tecelagem\.publish-auth.json"
 if (Test-Path $publishAuth) {
@@ -69,11 +70,11 @@ if ($LASTEXITCODE -ne 0) { throw "Falha ao gerar PainelTecelagem.exe" }
 
 function Find-Iscc {
   $paths = @(
-    (Join-Path $cache "inno\ISCC.exe"),
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
     "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
     "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 7\ISCC.exe"
+    "$env:ProgramFiles\Inno Setup 7\ISCC.exe",
+    (Join-Path $cache "inno\ISCC.exe")
   )
   foreach ($p in $paths) { if (Test-Path $p) { return $p } }
   return $null

@@ -8,7 +8,9 @@ No PC da tecelagem:
 3. Clique em Proximo ate Instalar.
 4. Se o Windows perguntar, permita o aplicativo.
 
-Pronto. Abre sozinho e tambem quando o PC ligar.
+Pronto. Nao aparece janela. Sobe sozinho quando o PC ligar.
 
-Nao feche a janelinha "Painel da tecelagem ligado".
-A TV abre no Chrome: o endereco aparece nessa janelinha (porta 3850).
+A TV abre no Chrome: http://IP-DO-PC-DA-TECELAGEM:3850
+O celular usa: https://controle-tricot-e-cia.web.app/tecelagem/
+
+Para parar, desinstale o Painel Tecelagem no Windows.

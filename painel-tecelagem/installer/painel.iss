@@ -1,5 +1,5 @@
 #define AppName "Painel Tecelagem"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.10"
 #define AppPublisher "Stoll"
 
 [Setup]
@@ -34,6 +34,9 @@ Name: "{autodesktop}\Painel Tecelagem"; Filename: "{app}\PainelTecelagem.exe"; W
 Name: "{group}\Painel Tecelagem"; Filename: "{app}\PainelTecelagem.exe"; WorkingDir: "{app}"
 Name: "{userstartup}\Painel Tecelagem"; Filename: "{app}\PainelTecelagem.exe"; WorkingDir: "{app}"
 
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Painel Tecelagem"; ValueData: """{app}\PainelTecelagem.exe"""; Flags: uninsdeletevalue
+
 [Run]
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""Painel Tecelagem"""; Flags: runhidden; StatusMsg: "Liberando a rede..."
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""Painel Tecelagem"" dir=in action=allow protocol=TCP localport=3850 profile=private,domain"; Flags: runhidden
@@ -44,6 +47,15 @@ Filename: "taskkill"; Parameters: "/IM PainelTecelagem.exe /F"; Flags: runhidden
 Filename: "taskkill"; Parameters: "/IM painel-node.exe /F"; Flags: runhidden; RunOnceId: "KillPainelNode"
 
 [Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/IM PainelTecelagem.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/IM painel-node.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := '';
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   Result := True;

@@ -13,7 +13,7 @@ function fileStamp() {
 
 function formatDate(iso: string | null) {
   if (!iso) return 'ainda sem data';
-  const [year, month, day] = iso.split('-');
+  const [year, month, day] = iso.slice(0, 10).split('-');
   if (!year || !month || !day) return iso;
   return `${day}/${month}/${year}`;
 }

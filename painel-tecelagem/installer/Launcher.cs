@@ -2,9 +2,11 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace PainelTecelagem
@@ -19,11 +21,13 @@ namespace PainelTecelagem
             {
                 if (!created)
                 {
-                    MessageBox.Show(
-                        "O Painel Tecelagem ja esta aberto.",
-                        "Painel Tecelagem",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
+                    if (MainForm.HealthOk()) MainForm.OpenBrowser();
+                    else
+                        MessageBox.Show(
+                            "O Painel Tecelagem ja esta no reloginho, mas a tela nao abre.\n\nAbra o Gerenciador de Tarefas, encerre PainelTecelagem.exe e painel-node.exe, e abra o programa de novo.",
+                            "Painel Tecelagem",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
                     return;
                 }
 
@@ -37,92 +41,111 @@ namespace PainelTecelagem
     sealed class MainForm : Form
     {
         readonly string root;
-        readonly Label status;
-        readonly Label address;
+        readonly string logFile;
+        readonly NotifyIcon tray;
         Process node;
+        bool allowExit;
+        bool booted;
 
         public MainForm()
         {
             root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+            logFile = Path.Combine(root, "painel.log");
+
             Text = "Painel Tecelagem";
-            FormBorderStyle = FormBorderStyle.FixedSingle;
-            MaximizeBox = false;
-            StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(520, 240);
-            BackColor = Color.FromArgb(14, 18, 24);
-            ForeColor = Color.FromArgb(244, 241, 234);
-            Font = new Font("Segoe UI", 11F);
+            ShowInTaskbar = false;
+            FormBorderStyle = FormBorderStyle.FixedToolWindow;
+            ControlBox = false;
+            Opacity = 0;
+            ShowIcon = false;
+            StartPosition = FormStartPosition.Manual;
+            Location = new Point(-32000, -32000);
+            Size = new Size(1, 1);
 
-            var title = new Label
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("Abrir na tela", null, delegate { OpenScreen(); });
+            menu.Items.Add("Ver endereco da TV", null, delegate { ShowAddress(); });
+            menu.Items.Add("Ver log de erro", null, delegate { OpenLog(); });
+
+            tray = new NotifyIcon
             {
-                Text = "Painel da tecelagem ligado",
-                AutoSize = false,
-                Location = new Point(24, 20),
-                Size = new Size(470, 32),
-                Font = new Font("Segoe UI", 16F, FontStyle.Bold)
+                Text = "Painel Tecelagem — ligando...",
+                Icon = SystemIcons.Application,
+                Visible = true,
+                ContextMenuStrip = menu
             };
+            tray.DoubleClick += delegate { OpenScreen(); };
 
-            status = new Label
-            {
-                Text = "Nao feche esta janela. A TV e os outros PCs usam o endereco abaixo.",
-                AutoSize = false,
-                Location = new Point(24, 60),
-                Size = new Size(470, 48)
-            };
-
-            address = new Label
-            {
-                Text = "Abrindo...",
-                AutoSize = false,
-                Location = new Point(24, 112),
-                Size = new Size(470, 48),
-                Font = new Font("Segoe UI", 12F, FontStyle.Bold)
-            };
-
-            var open = new Button
-            {
-                Text = "Abrir na tela",
-                Location = new Point(24, 175),
-                Size = new Size(150, 36),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(61, 186, 122),
-                ForeColor = Color.FromArgb(14, 18, 24)
-            };
-            open.Click += delegate { OpenBrowser(); };
-
-            var close = new Button
-            {
-                Text = "Encerrar",
-                Location = new Point(190, 175),
-                Size = new Size(150, 36),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(42, 51, 68),
-                ForeColor = Color.FromArgb(244, 241, 234)
-            };
-            close.Click += delegate { Close(); };
-
-            Controls.Add(title);
-            Controls.Add(status);
-            Controls.Add(address);
-            Controls.Add(open);
-            Controls.Add(close);
-
+            Log("Launcher 1.0.10 em " + root);
             FormClosing += OnClosing;
-            Load += OnLoad;
+            ThreadPool.QueueUserWorkItem(_ => BootFromWorker());
         }
 
-        void OnLoad(object sender, EventArgs e)
+        protected override void SetVisibleCore(bool value)
         {
+            if (!IsHandleCreated) CreateHandle();
+            base.SetVisibleCore(false);
+        }
+
+        void Log(string text)
+        {
+            var line = DateTime.Now.ToString("HH:mm:ss") + " " + text + Environment.NewLine;
+            try { File.AppendAllText(logFile, line, Encoding.UTF8); }
+            catch { }
+        }
+
+        void BootFromWorker()
+        {
+            if (booted) return;
+            booted = true;
             try
             {
+                Log("Iniciando motor");
                 StartServer();
-                address.Text = TvAddress();
-                OpenBrowser();
+                var ok = WaitUntilUp(20000);
+                RunOnUi(delegate
+                {
+                    if (ok)
+                    {
+                        tray.Text = "Painel Tecelagem — " + FirstLanUrl();
+                        Log("No ar " + FirstLanUrl());
+                    }
+                    else
+                    {
+                        tray.Text = "Painel Tecelagem — com erro";
+                        MessageBox.Show(
+                            "O painel ligou, mas a tela nao abre na porta 3850.\n\n" + LastLog(),
+                            "Painel Tecelagem",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
+                });
             }
             catch (Exception ex)
             {
-                status.Text = "Nao foi possivel ligar o painel.";
-                address.Text = ex.Message;
+                Log("ERRO " + ex.Message);
+                RunOnUi(delegate
+                {
+                    tray.Text = "Painel Tecelagem — com erro";
+                    MessageBox.Show(
+                        "Nao foi possivel ligar o painel.\n\n" + ex.Message + "\n\n" + LastLog(),
+                        "Painel Tecelagem",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                });
+            }
+        }
+
+        void RunOnUi(MethodInvoker action)
+        {
+            try
+            {
+                if (IsHandleCreated) BeginInvoke(action);
+                else action();
+            }
+            catch
+            {
+                try { action(); } catch { }
             }
         }
 
@@ -133,15 +156,10 @@ namespace PainelTecelagem
             if (!File.Exists(nodeExe) || !File.Exists(server))
                 throw new Exception("Arquivos do painel nao encontrados. Reinstale o programa.");
 
-            var logDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "PainelTecelagem");
-            Directory.CreateDirectory(logDir);
-
             var start = new ProcessStartInfo
             {
                 FileName = nodeExe,
-                Arguments = "server.cjs",
+                Arguments = "\"" + server + "\"",
                 WorkingDirectory = root,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -161,23 +179,95 @@ namespace PainelTecelagem
             start.EnvironmentVariables[pathKey] = root + ";" + start.EnvironmentVariables[pathKey];
 
             node = new Process { StartInfo = start, EnableRaisingEvents = true };
-            var log = Path.Combine(logDir, "painel.log");
-            DataReceivedEventHandler write = delegate(object s, DataReceivedEventArgs a)
+            node.OutputDataReceived += delegate(object s, DataReceivedEventArgs a)
             {
-                if (string.IsNullOrEmpty(a.Data)) return;
-                File.AppendAllText(log, DateTime.Now.ToString("HH:mm:ss") + " " + a.Data + Environment.NewLine, Encoding.UTF8);
+                if (!string.IsNullOrEmpty(a.Data)) Log(a.Data);
             };
-            node.OutputDataReceived += write;
-            node.ErrorDataReceived += write;
+            node.ErrorDataReceived += delegate(object s, DataReceivedEventArgs a)
+            {
+                if (!string.IsNullOrEmpty(a.Data)) Log("ERR " + a.Data);
+            };
+            node.Exited += delegate
+            {
+                Log("Motor parou. Codigo " + node.ExitCode);
+                try { tray.Text = "Painel Tecelagem — parou"; }
+                catch { }
+            };
             if (!node.Start()) throw new Exception("Falha ao iniciar o painel.");
             node.BeginOutputReadLine();
             node.BeginErrorReadLine();
+            Thread.Sleep(400);
+            if (node.HasExited)
+                throw new Exception("O motor do painel fechou na hora (codigo " + node.ExitCode + "). Falta o Visual C++ da Microsoft neste Windows.");
         }
 
-        static string TvAddress()
+        bool WaitUntilUp(int ms)
         {
-            var lines = new StringBuilder();
-            lines.AppendLine("Nesta tela:  http://127.0.0.1:3850");
+            var until = DateTime.UtcNow.AddMilliseconds(ms);
+            while (DateTime.UtcNow < until)
+            {
+                if (node != null && node.HasExited) return false;
+                if (HealthOk()) return true;
+                Thread.Sleep(400);
+            }
+            return HealthOk();
+        }
+
+        public static bool HealthOk()
+        {
+            string[] urls = { "http://127.0.0.1:3850/api/health", "http://localhost:3850/api/health" };
+            foreach (var url in urls)
+            {
+                try
+                {
+                    var req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Timeout = 1500;
+                    req.ReadWriteTimeout = 1500;
+                    req.Proxy = null;
+                    using (var res = (HttpWebResponse)req.GetResponse())
+                    {
+                        if ((int)res.StatusCode >= 200 && (int)res.StatusCode < 300)
+                            return true;
+                    }
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        string LastLog()
+        {
+            try
+            {
+                if (!File.Exists(logFile)) return "Sem log em " + logFile;
+                var text = File.ReadAllText(logFile, Encoding.UTF8);
+                if (text.Length > 1200) text = text.Substring(text.Length - 1200);
+                return text;
+            }
+            catch
+            {
+                return "Nao deu para ler o log.";
+            }
+        }
+
+        void OpenLog()
+        {
+            Log("Abrindo log");
+            if (File.Exists(logFile))
+                Process.Start(new ProcessStartInfo { FileName = logFile, UseShellExecute = true });
+            else
+                MessageBox.Show("Ainda nao existe log em\n" + logFile, "Painel Tecelagem");
+        }
+
+        static bool IsLanIp(string ip)
+        {
+            if (ip.StartsWith("127.")) return false;
+            if (ip.StartsWith("100.")) return false;
+            return true;
+        }
+
+        static string FirstLanUrl()
+        {
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (nic.OperationalStatus != OperationalStatus.Up) continue;
@@ -185,14 +275,32 @@ namespace PainelTecelagem
                 {
                     if (info.Address.AddressFamily != AddressFamily.InterNetwork) continue;
                     var ip = info.Address.ToString();
-                    if (ip.StartsWith("127.")) continue;
-                    lines.AppendLine("TV / outros PCs:  http://" + ip + ":3850");
+                    if (!IsLanIp(ip)) continue;
+                    return "http://" + ip + ":3850";
+                }
+            }
+            return "http://127.0.0.1:3850";
+        }
+
+        static string TvAddress()
+        {
+            var lines = new StringBuilder();
+            lines.AppendLine("Neste PC:  http://127.0.0.1:3850");
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                foreach (var info in nic.GetIPProperties().UnicastAddresses)
+                {
+                    if (info.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                    var ip = info.Address.ToString();
+                    if (!IsLanIp(ip)) continue;
+                    lines.AppendLine("TV:  http://" + ip + ":3850");
                 }
             }
             return lines.ToString();
         }
 
-        static void OpenBrowser()
+        public static void OpenBrowser()
         {
             Process.Start(new ProcessStartInfo
             {
@@ -201,10 +309,39 @@ namespace PainelTecelagem
             });
         }
 
+        void OpenScreen()
+        {
+            if (HealthOk())
+            {
+                OpenBrowser();
+                return;
+            }
+            MessageBox.Show(
+                "A tela nao esta no ar.\n\n" + LastLog(),
+                "Painel Tecelagem",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+
+        void ShowAddress()
+        {
+            MessageBox.Show(
+                TvAddress() + Environment.NewLine + "O celular usa o site da nuvem, nao este endereco.",
+                "Painel Tecelagem",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
         void OnClosing(object sender, FormClosingEventArgs e)
         {
+            if (!allowExit && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                return;
+            }
             try
             {
+                if (tray != null) tray.Visible = false;
                 if (node != null && !node.HasExited) node.Kill();
             }
             catch { }

@@ -12,7 +12,8 @@ type PublishAuth = { email: string; password: string };
 
 function readJson(file: string) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>;
+    const raw = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+    return JSON.parse(raw) as Record<string, string>;
   } catch {
     return null;
   }
@@ -111,4 +112,5 @@ export async function publishPainelToFirebase(board: PainelPublico) {
     const text = await res.text();
     throw new Error(`Firestore ${res.status}: ${text.slice(0, 240)}`);
   }
+  console.log('Nuvem ok', board.updated_at);
 }
