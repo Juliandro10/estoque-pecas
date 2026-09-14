@@ -4,6 +4,14 @@ const resumoEl = document.getElementById('resumo');
 const avisoEl = document.getElementById('aviso');
 const relogioEl = document.getElementById('relogio');
 
+const CRACHA_PADRAO = '350';
+let canWrite = false;
+let motivos = [];
+let lastBoard = null;
+let dlgMaquina = null;
+let dlgMotivo = null;
+let dlgBusy = false;
+
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;',
@@ -87,8 +95,206 @@ function sugPedido(sug, espera) {
 }
 
 function isHosted() {
-  return /(?:^|\.)web\.app$|(?:^|\.)firebaseapp\.com$/.test(location.hostname)
-    || location.pathname.includes('/tecelagem');
+  return /(?:^|\.)web\.app$|(?:^|\.)firebaseapp\.com$/.test(location.hostname);
+}
+
+function fold(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
+}
+
+function crachaSalvo() {
+  try {
+    return localStorage.getItem('painel-cracha') || CRACHA_PADRAO;
+  } catch {
+    return CRACHA_PADRAO;
+  }
+}
+
+function salvarCracha(value) {
+  try {
+    localStorage.setItem('painel-cracha', value);
+  } catch {
+    /* ignore */
+  }
+}
+
+function ensureDialog() {
+  if (document.getElementById('dlg')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'dlg';
+  wrap.className = 'dlg';
+  wrap.hidden = true;
+  wrap.innerHTML = `
+    <div class="dlg-card">
+      <h3 id="dlg-title">Máquina</h3>
+      <p class="dlg-status" id="dlg-status"></p>
+      <div id="dlg-abrir">
+        <label for="dlg-busca">Motivo (código ou texto)</label>
+        <input id="dlg-busca" autocomplete="off" placeholder="Ex.: 10 ou desenv" />
+        <div class="dlg-lista" id="dlg-lista"></div>
+        <label for="dlg-obs">Observação</label>
+        <textarea id="dlg-obs" maxlength="600"></textarea>
+      </div>
+      <label for="dlg-cracha">Crachá</label>
+      <input id="dlg-cracha" inputmode="numeric" />
+      <p class="dlg-erro" id="dlg-erro"></p>
+      <div class="dlg-acoes">
+        <button type="button" class="dlg-go" id="dlg-confirma">Confirma</button>
+        <button type="button" class="dlg-stop" id="dlg-encerrar" hidden>Encerrar parada</button>
+        <button type="button" class="dlg-cancel" id="dlg-cancela">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  document.getElementById('dlg-busca').addEventListener('input', () => renderMotivos());
+  document.getElementById('dlg-confirma').addEventListener('click', () => void confirmarAbertura());
+  document.getElementById('dlg-encerrar').addEventListener('click', () => void encerrarParada());
+  document.getElementById('dlg-cancela').addEventListener('click', fecharDialog);
+  wrap.addEventListener('click', (ev) => {
+    if (ev.target === wrap) fecharDialog();
+  });
+}
+
+function fecharDialog() {
+  const dlg = document.getElementById('dlg');
+  if (dlg) dlg.hidden = true;
+  dlgMaquina = null;
+  dlgMotivo = null;
+}
+
+function familiaLabel(familia) {
+  return familia === 'mecanica' ? 'mecânica' : 'outras';
+}
+
+function filtrarMotivos(query) {
+  const q = fold(query);
+  if (!q) return motivos;
+  if (/^\d+$/.test(query.trim())) {
+    const codigo = Number(query.trim());
+    return motivos.filter((m) => Number(m.codigo) === codigo);
+  }
+  return motivos.filter((m) => fold(m.nome).includes(q));
+}
+
+function renderMotivos() {
+  const lista = document.getElementById('dlg-lista');
+  const busca = document.getElementById('dlg-busca');
+  if (!lista || !busca) return;
+  const rows = filtrarMotivos(busca.value);
+  if (dlgMotivo && !rows.some((m) => m.tipo === dlgMotivo.tipo && m.codigo === dlgMotivo.codigo)) {
+    dlgMotivo = rows.length === 1 ? rows[0] : null;
+  }
+  if (!dlgMotivo && rows.length === 1) dlgMotivo = rows[0];
+  lista.innerHTML = rows
+    .map((m) => {
+      const sel = dlgMotivo && m.tipo === dlgMotivo.tipo && m.codigo === dlgMotivo.codigo ? ' sel' : '';
+      return `<button type="button" class="dlg-opt${sel}" data-tipo="${esc(m.tipo)}" data-codigo="${esc(m.codigo)}">
+        ${esc(m.codigo)} · ${esc(m.nome)}
+        <small>${esc(familiaLabel(m.familia))}</small>
+      </button>`;
+    })
+    .join('') || '<p class="dlg-status">Nenhum motivo com esse código ou texto.</p>';
+  lista.querySelectorAll('.dlg-opt').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      dlgMotivo = motivos.find(
+        (m) => m.tipo === Number(btn.dataset.tipo) && m.codigo === Number(btn.dataset.codigo)
+      ) ?? null;
+      renderMotivos();
+    });
+  });
+}
+
+function abrirDialog(machine) {
+  ensureDialog();
+  dlgMaquina = machine;
+  dlgMotivo = null;
+  dlgBusy = false;
+  const dlg = document.getElementById('dlg');
+  const abrir = document.getElementById('dlg-abrir');
+  const confirma = document.getElementById('dlg-confirma');
+  const encerrar = document.getElementById('dlg-encerrar');
+  document.getElementById('dlg-title').textContent = `Máquina ${machine.numero}`;
+  document.getElementById('dlg-status').textContent = machine.parada
+    ? `Parada aberta: ${machine.parada.motivo}`
+    : 'Abrir parada no Syntech (F5).';
+  document.getElementById('dlg-busca').value = '';
+  document.getElementById('dlg-obs').value = '';
+  document.getElementById('dlg-cracha').value = crachaSalvo();
+  document.getElementById('dlg-erro').textContent = '';
+  abrir.hidden = Boolean(machine.parada);
+  confirma.hidden = Boolean(machine.parada);
+  encerrar.hidden = !machine.parada;
+  renderMotivos();
+  dlg.hidden = false;
+  (machine.parada ? document.getElementById('dlg-cracha') : document.getElementById('dlg-busca')).focus();
+}
+
+async function postParada(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Não deu para gravar no Syntech.');
+  return data;
+}
+
+async function confirmarAbertura() {
+  if (dlgBusy || !dlgMaquina) return;
+  const erro = document.getElementById('dlg-erro');
+  if (!dlgMotivo) {
+    erro.textContent = 'Escolha o motivo (código ou texto).';
+    return;
+  }
+  const cracha = document.getElementById('dlg-cracha').value.trim();
+  if (!cracha) {
+    erro.textContent = 'Informe o crachá.';
+    return;
+  }
+  dlgBusy = true;
+  erro.textContent = 'Gravando…';
+  try {
+    salvarCracha(cracha);
+    await postParada('/api/paradas/abrir', {
+      maquina: dlgMaquina.numero,
+      tipo: dlgMotivo.tipo,
+      codigo: dlgMotivo.codigo,
+      cracha,
+      obs: document.getElementById('dlg-obs').value,
+    });
+    fecharDialog();
+    await load();
+  } catch (err) {
+    erro.textContent = err instanceof Error ? err.message : 'Falha ao abrir a parada.';
+  } finally {
+    dlgBusy = false;
+  }
+}
+
+async function encerrarParada() {
+  if (dlgBusy || !dlgMaquina) return;
+  const erro = document.getElementById('dlg-erro');
+  const cracha = document.getElementById('dlg-cracha').value.trim();
+  if (!cracha) {
+    erro.textContent = 'Informe o crachá.';
+    return;
+  }
+  dlgBusy = true;
+  erro.textContent = 'Encerrando…';
+  try {
+    salvarCracha(cracha);
+    await postParada('/api/paradas/encerrar', { maquina: dlgMaquina.numero, cracha });
+    fecharDialog();
+    await load();
+  } catch (err) {
+    erro.textContent = err instanceof Error ? err.message : 'Falha ao encerrar a parada.';
+  } finally {
+    dlgBusy = false;
+  }
 }
 
 function tickClock() {
@@ -100,6 +306,7 @@ function tickClock() {
 }
 
 function render(board) {
+  lastBoard = board;
   const physical = (board.machines ?? []).filter((m) => !m.grupo);
   const espera = board.espera
     ?? (board.pedidos ?? []).filter((p) => (p.maquinas?.length ?? 0) === 0 && p.restante > 0);
@@ -126,6 +333,7 @@ function render(board) {
       const agora = m.agora;
       const sug = m.sugestao;
       const parada = m.parada;
+      const writeCls = canWrite ? ' clickable' : '';
       const stopCls = parada
         ? ` stop-${parada.familia === 'mecanica' ? 'mecanica' : 'processo'}${agora ? ' com-parada' : ''}`
         : '';
@@ -134,7 +342,7 @@ function render(board) {
         const depois = sug
           ? `<div class="depois">Sugestão: ${sugPedido(sug, espera)} · prazo ${esc(formatDate(sug.prazo))} · entra ${esc(formatDate(sug.entra_em))}</div>`
           : `<div class="depois">Sem sugestão no momento</div>`;
-        return `<article class="maq idle${stopCls}"><div class="num">${esc(m.numero)}</div><div>
+        return `<article class="maq idle${stopCls}${writeCls}" data-maq="${esc(m.numero)}"><div class="num">${esc(m.numero)}</div><div>
           ${selo}
           <div class="peca">${parada ? 'Ordem aberta · máquina parada' : 'Parada'}</div>
           ${depois}
@@ -148,7 +356,7 @@ function render(board) {
         : 1 + Number(agora.fila_ordens ?? 0);
       const termino = agora.livre_em || sug?.entra_em || agora.previsao_pedido;
       const fimCls = fimClass(termino);
-      return `<article class="maq live${stopCls}"><div class="num">${esc(m.numero)}</div><div>
+      return `<article class="maq live${stopCls}${writeCls}" data-maq="${esc(m.numero)}"><div class="num">${esc(m.numero)}</div><div>
         ${selo}
         <div class="peca">${esc(agora.programa)}</div>
         <div class="destaque">Pedido ${esc(agora.pedido ?? '—')} — falta ${esc(ordensLabel(opsRestantes))}</div>
@@ -207,6 +415,26 @@ async function loadFromLocal() {
   }
 }
 
+async function detectWrite() {
+  if (isHosted()) {
+    canWrite = false;
+    return;
+  }
+  try {
+    const res = await fetch('/api/paradas/motivos');
+    if (!res.ok) {
+      canWrite = false;
+      return;
+    }
+    const data = await res.json();
+    motivos = Array.isArray(data.motivos) ? data.motivos : [];
+    canWrite = motivos.length > 0;
+    if (canWrite) ensureDialog();
+  } catch {
+    canWrite = false;
+  }
+}
+
 async function load() {
   try {
     render(isHosted() ? await loadFromCloud() : await loadFromLocal());
@@ -216,7 +444,17 @@ async function load() {
   }
 }
 
+maquinasEl.addEventListener('click', (ev) => {
+  if (!canWrite) return;
+  const card = ev.target.closest('.maq[data-maq]');
+  if (!card || !lastBoard) return;
+  const numero = Number(card.dataset.maq);
+  const machine = (lastBoard.machines ?? []).find((m) => m.numero === numero);
+  if (!machine || machine.grupo) return;
+  abrirDialog(machine);
+});
+
 tickClock();
 setInterval(tickClock, 1000);
-load();
+void detectWrite().then(load);
 setInterval(load, isHosted() ? 30_000 : 60_000);

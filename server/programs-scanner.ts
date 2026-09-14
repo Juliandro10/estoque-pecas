@@ -36,6 +36,11 @@ import {
 } from './syntech-yarn-catalog';
 import { readSyntechProducaoBoard } from './syntech-producao';
 import {
+  abrirSyntechParada,
+  encerrarSyntechParada,
+  listSyntechMotivosParada,
+} from './syntech-paradas';
+import {
   addM1Measurement,
   computeDensity,
   findSimilarMeasurements,
@@ -807,6 +812,58 @@ app.get('/api/programs/syntech-producao', async (_req, res) => {
   }
 });
 
+app.get('/api/quadro', async (_req, res) => {
+  try {
+    const board = await readSyntechProducaoBoard();
+    res.json(board);
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao ler o quadro do Syntech.',
+    });
+  }
+});
+
+app.get('/api/paradas/motivos', async (_req, res) => {
+  try {
+    res.json({ motivos: await listSyntechMotivosParada() });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao ler os motivos de parada.',
+    });
+  }
+});
+
+app.post('/api/paradas/abrir', async (req, res) => {
+  try {
+    const result = await abrirSyntechParada({
+      maquina: Number(req.body?.maquina),
+      tipo: Number(req.body?.tipo),
+      codigo: Number(req.body?.codigo),
+      cracha: String(req.body?.cracha ?? ''),
+      obs: String(req.body?.obs ?? ''),
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para abrir a parada.',
+    });
+  }
+});
+
+app.post('/api/paradas/encerrar', async (req, res) => {
+  try {
+    const result = await encerrarSyntechParada({
+      maquina: Number(req.body?.maquina),
+      cracha: String(req.body?.cracha ?? ''),
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para encerrar a parada.',
+    });
+  }
+});
+
 app.post('/api/programs/cadastro-pdf', async (req, res) => {
   try {
     const reference = String(req.body?.reference ?? '').trim();
@@ -930,7 +987,7 @@ app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 31,
+    version: 32,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -950,6 +1007,7 @@ app.get('/api/programs/health', (_req, res) => {
       'syntech-push',
       'syntech-fios',
       'syntech-producao',
+      'syntech-paradas',
       'cadastro-pdf',
       'm1-density',
       'm1-knowledge',

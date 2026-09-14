@@ -12,8 +12,17 @@
       "**/*.exe"
     ],
     "headers": [
-      {
+        {
         "source": "/tecelagem/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/quadro-board/**",
         "headers": [
           {
             "key": "Cache-Control",

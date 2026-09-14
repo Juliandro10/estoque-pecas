@@ -8,8 +8,10 @@ export function Layout() {
   const location = useLocation();
   const desenvControleActive = location.pathname.startsWith('/desenv-controle');
 
+  const quadroActive = location.pathname.startsWith('/quadro');
+
   return (
-    <div className="layout">
+    <div className={`layout${quadroActive ? ' quadro-open' : ''}`}>
       <aside className="sidebar card">
         <div className="brand">
           <strong>Estoque</strong>
@@ -30,6 +32,9 @@ export function Layout() {
           </NavLink>
           <NavLink to="/producao" className={({ isActive }) => (isActive ? 'active' : '')}>
             Produção
+          </NavLink>
+          <NavLink to="/quadro" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Tecelagem
           </NavLink>
           <NavLink to="/relatorios" className={({ isActive }) => (isActive ? 'active' : '')}>
             Estoque
@@ -76,10 +81,14 @@ export function Layout() {
         .sidebar-footer { margin-top: 24px; display: flex; flex-direction: column; gap: 8px; }
         .user-email { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .main { padding: 28px 32px 48px; max-width: 1100px; }
+        .layout.quadro-open .main { padding: 0; max-width: none; min-height: 100vh; background: #0e1218; }
+        .tecelagem-embed { height: 100%; min-height: 100vh; }
+        .tecelagem-embed iframe { display: block; width: 100%; height: 100%; min-height: 100vh; border: 0; background: #0e1218; }
         @media (max-width: 760px) {
           .layout { grid-template-columns: 1fr; }
           .nav { flex-direction: row; flex-wrap: wrap; }
           .main { padding: 20px 16px 40px; }
+          .layout.quadro-open .main { padding: 0; }
         }
       `}</style>
     </div>

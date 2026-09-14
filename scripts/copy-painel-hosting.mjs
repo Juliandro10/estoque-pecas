@@ -50,3 +50,8 @@ if (apiKey) {
 }
 
 console.log(`Painel copiado para ${dest}`);
+
+const quadro = path.join(root, 'dist', 'quadro-board');
+fs.rmSync(quadro, { recursive: true, force: true });
+fs.cpSync(path.join(root, 'painel-tecelagem', 'public'), quadro, { recursive: true });
+console.log(`Quadro do Estoque copiado para ${quadro}`);
