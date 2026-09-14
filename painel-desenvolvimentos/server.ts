@@ -76,6 +76,20 @@ app.get('/api/programs/desenv-pendentes', async (req, res) => {
     });
   }
 });
+app.get('/api/programs/desenv-produto', async (req, res) => {
+  try {
+    const q = new URLSearchParams();
+    if (typeof req.query.codigo === 'string' && req.query.codigo.trim()) {
+      q.set('codigo', req.query.codigo.trim());
+    }
+    const url = `${SCANNER}/api/programs/desenv-produto${q.size ? `?${q}` : ''}`;
+    const r = await fetch(url);
+    const body = await r.text();
+    res.status(r.status).type('application/json').send(body);
+  } catch {
+    res.status(503).json({ existe: false, error: 'Syntech só neste PC da programação, com o Iniciar.bat ligado.' });
+  }
+});
 app.use(express.static(PUBLIC));
 
 app.get('/api/health', (_req, res) => {

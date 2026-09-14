@@ -73,3 +73,87 @@ export async function listSyntechDesenvPendentes(busca = ''): Promise<SyntechDes
     await detachDb(db);
   }
 }
+
+/** A referência já existe no Syntech? Usado no lançamento (novo vs ajuste). */
+export async function lookupSyntechProduto(codigo: string) {
+  const ref = codigo.trim().slice(0, 13);
+  if (!ref) return { existe: false as const, codigo: '', nome: '', cliente: '', tem_programa: false };
+
+  const db = await attachSyntechDb();
+  try {
+    const rows = await queryDb<{
+      CODIGO: string | null;
+      NOME: string | null;
+      PROGRAMA: string | null;
+    }>(
+      db,
+      `SELECT FIRST 1
+          CAST(CODIGO AS VARCHAR(13)) AS CODIGO,
+          CAST(NOME AS VARCHAR(80)) AS NOME,
+          CAST(PROGRAMA AS VARCHAR(40)) AS PROGRAMA
+        FROM PRODUTOS
+        WHERE TRIM(CAST(CODIGO AS VARCHAR(13))) = ?`,
+      [ref]
+    );
+    const row = rows[0];
+    if (!row) return { existe: false as const, codigo: ref, nome: '', cliente: '', tem_programa: false };
+
+    const clientRows = await queryDb<{ NOME: string | null }>(
+      db,
+      `SELECT FIRST 1 CAST(C.NOME AS VARCHAR(60)) AS NOME
+       FROM ORDEM_SERVICO O
+       LEFT JOIN CLIENTES C ON C.CODIGO = O.CLIENTE
+       WHERE TRIM(CAST(O.COD_PROD AS VARCHAR(13))) = ?
+       ORDER BY O.NUMERO DESC`,
+      [ref]
+    );
+
+    return {
+      existe: true as const,
+      codigo: fbStr(row.CODIGO) || ref,
+      nome: fbStr(row.NOME),
+      cliente: fbStr(clientRows[0]?.NOME),
+      tem_programa: Boolean(fbStr(row.PROGRAMA)),
+    };
+  } finally {
+    await detachDb(db);
+  }
+}
+
+export type SyntechProdutoCatalogItem = {
+  nome: string;
+  cliente: string;
+  tem_programa: boolean;
+};
+
+/** Cadastro resumido para o celular consultar na nuvem, sem o Firebird da fábrica. */
+export async function listSyntechProdutoCatalog() {
+  const db = await attachSyntechDb();
+  try {
+    const rows = await queryDb<{
+      CODIGO: string | null;
+      NOME: string | null;
+      PROGRAMA: string | null;
+    }>(
+      db,
+      `SELECT CAST(CODIGO AS VARCHAR(13)) AS CODIGO,
+              CAST(NOME AS VARCHAR(80)) AS NOME,
+              CAST(PROGRAMA AS VARCHAR(40)) AS PROGRAMA
+         FROM PRODUTOS
+        WHERE INATIVO IS NULL OR INATIVO <> 'S'`
+    );
+    const catalog: Record<string, SyntechProdutoCatalogItem> = {};
+    for (const row of rows) {
+      const codigo = fbStr(row.CODIGO);
+      if (!codigo) continue;
+      catalog[codigo] = {
+        nome: fbStr(row.NOME),
+        cliente: '',
+        tem_programa: Boolean(fbStr(row.PROGRAMA)),
+      };
+    }
+    return catalog;
+  } finally {
+    await detachDb(db);
+  }
+}

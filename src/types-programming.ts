@@ -208,6 +208,7 @@ export type ConsolidatedYarnRow = {
   cor?: string | null;
   codigo_ok?: boolean;
   cor_ok?: boolean;
+  cor_sugerida?: string | null;
   /** Slot PRODUTOS (Processos Fábrica) — preenchido quando guia tem mistura. */
   syntech_slot?: number;
   /** Índice do componente no guia (0 = principal). */

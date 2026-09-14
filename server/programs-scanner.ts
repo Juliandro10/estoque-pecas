@@ -40,7 +40,8 @@ import {
   encerrarSyntechParada,
   listSyntechMotivosParada,
 } from './syntech-paradas';
-import { listSyntechDesenvPendentes } from './syntech-desenv';
+import { listSyntechDesenvPendentes, lookupSyntechProduto } from './syntech-desenv';
+import { startSyntechCatalogPublish } from './syntech-catalog-publish';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
 import {
   addM1Measurement,
@@ -836,6 +837,17 @@ app.get('/api/programs/desenv-pendentes', async (req, res) => {
   }
 });
 
+app.get('/api/programs/desenv-produto', async (req, res) => {
+  try {
+    const codigo = String(req.query.codigo ?? '');
+    res.json(await lookupSyntechProduto(codigo));
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao consultar a referência no Syntech.',
+    });
+  }
+});
+
 app.get('/api/paradas/motivos', async (_req, res) => {
   try {
     res.json({ motivos: await listSyntechMotivosParada() });
@@ -1001,7 +1013,7 @@ app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 34,
+    version: 35,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -1023,6 +1035,7 @@ app.get('/api/programs/health', (_req, res) => {
       'syntech-producao',
       'syntech-paradas',
       'desenv-pendentes',
+      'desenv-produto',
       'cadastro-pdf',
       'm1-density',
       'm1-knowledge',
@@ -1050,4 +1063,5 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`Scanner de programas em http://127.0.0.1:${PORT} (${SEARCH_DAYS} dias)`);
   console.log(`${M1_SIN_CAPTURE_BUILD}: M1 processa → .sin + .simx em dados do programa/{{parte}}/`);
   console.log('Sintral tela: cheque aberto → controle-sintral.json + .txt em dados do programa/{parte}/');
+  startSyntechCatalogPublish();
 });

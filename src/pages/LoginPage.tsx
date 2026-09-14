@@ -30,10 +30,10 @@ export function LoginPage() {
         <form onSubmit={(e) => void handleSubmit(e)} className="form-stack">
           {error ? <div className="error-box">{error}</div> : null}
           <div className="field">
-            <label>E-mail</label>
+            <label>E-mail ou usuário</label>
             <input
               required
-              type="email"
+              type="text"
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

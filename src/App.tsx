@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
+import { isDesenvBoardEmail } from '../shared/desenv-setor-auth';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
 import { DashboardPage } from './pages/DashboardPage';
@@ -9,7 +10,7 @@ import { MonthlyReportsPage } from './pages/MonthlyReportsPage';
 import { PartsPage } from './pages/PartsPage';
 import { ProducaoPage } from './pages/ProducaoPage';
 import { TecelagemPage } from './pages/TecelagemPage';
-import { DesenvolvimentosPage } from './pages/DesenvolvimentosPage';
+import { DesenvOnlyPage, DesenvolvimentosPage } from './pages/DesenvolvimentosPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WithdrawalsPage } from './pages/WithdrawalsPage';
 import { DesenvControleLayout } from './pages/dev/DesenvControleLayout';
@@ -26,6 +27,10 @@ export default function App() {
 
   if (loading) return <div className="loader">Carregando…</div>;
   if (!user) return <LoginPage />;
+
+  if (isDesenvBoardEmail(user.email)) {
+    return <DesenvOnlyPage />;
+  }
 
   return (
     <BrowserRouter>

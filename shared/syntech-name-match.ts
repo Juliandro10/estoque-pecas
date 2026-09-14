@@ -213,6 +213,10 @@ function uniqueLastTokenColorMatch(queryNorm: string, candidates: string[]): str
   return hits.length === 1 ? hits[0] : null;
 }
 
+function dropLeadingFio(tokens: string[]): string[] {
+  return tokens[0] === 'FIO' ? tokens.slice(1) : tokens;
+}
+
 export function yarnTypeNamesMatch(query: string, candidate: string): boolean {
   const queryNorm = normalizeSyntechName(query);
   const candidateNorm = normalizeSyntechName(candidate);
@@ -222,8 +226,51 @@ export function yarnTypeNamesMatch(query: string, candidate: string): boolean {
 
   const queryTokens = nameTokens(query);
   const candidateTokens = nameTokens(candidate);
-  if (queryTokens.length !== candidateTokens.length) return false;
-  return tokensAlign(queryTokens, candidateTokens);
+  if (queryTokens.length === candidateTokens.length && tokensAlign(queryTokens, candidateTokens)) {
+    return true;
+  }
+
+  const queryCore = dropLeadingFio(queryTokens);
+  const candidateCore = dropLeadingFio(candidateTokens);
+  if (queryCore.length === 0 || candidateCore.length === 0) return false;
+  return queryCore.length === candidateCore.length && tokensAlign(queryCore, candidateCore);
+}
+
+/** Cor mais próxima mesmo quando não é match seguro — só para sugerir “usar X?”. */
+export function suggestClosestColor(query: string | null, candidates: string[]): string | null {
+  if (!query?.trim() || candidates.length === 0) return null;
+
+  const catalog = dedupePhantomIColors(candidates);
+  const matched = findBestColorMatch(query, catalog);
+  if (matched) return matched;
+
+  const repaired = stripPhantomColorI(query, catalog);
+  const queryCompact = compactName(repaired);
+  if (queryCompact.length < 4) return null;
+
+  let best: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let ties = 0;
+
+  for (const candidate of catalog) {
+    const candidateCompact = compactName(candidate);
+    if (!candidateCompact) continue;
+    const distance = editDistance(queryCompact, candidateCompact);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+      ties = 1;
+    } else if (distance === bestDistance) {
+      ties += 1;
+    }
+  }
+
+  if (!best || ties !== 1) return null;
+
+  const maxLen = Math.max(queryCompact.length, compactName(best).length);
+  const maxAllowed = Math.max(1, Math.min(3, Math.floor(maxLen * 0.25)));
+  if (bestDistance > maxAllowed) return null;
+  return best;
 }
 
 export function findBestYarnTypeMatch(query: string, candidates: string[]): string | null {

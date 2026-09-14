@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0e1218" />
     <title>Desenvolvimentos</title>
-    <link rel="stylesheet" href="./desenv.css?v=4" />
+    <link rel="stylesheet" href="./desenv.css?v=10" />
   </head>
   <body>
     <div id="login" class="login" hidden>
       <form class="login-card" id="login-form">
         <h1>Desenvolvimentos</h1>
-        <p>Entre com a mesma conta do Estoque de Peças.</p>
-        <label>E-mail</label>
-        <input id="login-email" type="email" required autocomplete="username" />
+        <p>Usuário dos setores. Não é o Estoque de Peças.</p>
+        <label>Usuário</label>
+        <input id="login-email" type="text" value="desenvolvimento" required autocomplete="username" />
         <label>Senha</label>
         <input id="login-pass" type="password" required autocomplete="current-password" />
         <p class="erro" id="login-erro"></p>
@@ -24,7 +24,7 @@
       <header class="top">
         <div>
           <h1>Desenvolvimentos</h1>
-          <p class="sub" id="resumo">Fila de amostras e modelos novos</p>
+          <p class="sub" id="resumo">O modelo passa de aba em aba com o OK do setor</p>
         </div>
         <div class="top-acoes">
           <span class="user" id="user-email"></span>
@@ -34,6 +34,7 @@
         </div>
       </header>
       <p class="aviso" id="aviso" hidden></p>
+      <nav class="abas" id="abas"></nav>
       <section class="lista" id="lista"></section>
     </div>
     <div id="dlg-syntech" class="dlg" hidden>
@@ -51,14 +52,23 @@
     <div id="dlg" class="dlg" hidden>
       <form class="dlg-card" id="dlg-form">
         <h2 id="dlg-title">Novo desenvolvimento</h2>
+        <label for="f-ref">Referência</label>
+        <input id="f-ref" maxlength="13" placeholder="Ex.: 5612" />
+        <p class="hint" id="f-ref-hint"></p>
         <label for="f-nome">Modelo / nome</label>
         <input id="f-nome" required maxlength="80" placeholder="Ex.: Mini saia longa" />
         <label for="f-cliente">Cliente</label>
         <input id="f-cliente" maxlength="60" placeholder="Opcional" />
-        <label for="f-status">Onde está agora</label>
-        <select id="f-status"></select>
+        <label for="f-setor">Setor</label>
+        <select id="f-setor"></select>
+        <label for="f-tipo">O que é</label>
+        <select id="f-tipo"></select>
+        <div id="f-tipo-outro-wrap" hidden>
+          <label for="f-tipo-texto">Outro (escreva)</label>
+          <input id="f-tipo-texto" maxlength="40" placeholder="Ex.: piloto, feira…" />
+        </div>
         <label for="f-obs">Observação</label>
-        <textarea id="f-obs" maxlength="400" placeholder="Referência, prazo, quem pediu…"></textarea>
+        <textarea id="f-obs" maxlength="400" placeholder="Prazo, quem pediu, detalhe do ajuste…"></textarea>
         <p class="erro" id="dlg-erro"></p>
         <div class="dlg-acoes">
           <button type="submit" class="btn go">Salvar</button>
@@ -70,6 +80,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="./firebase-config.js"></script>
-    <script src="./desenv.js?v=4"></script>
+    <script src="./desenv.js?v=10"></script>
   </body>
 </html>

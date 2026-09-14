@@ -28,6 +28,11 @@ service cloud.firestore {
         && request.auth.token.email == 'tecelagem@controle-tricot-e-cia.web.app';
     }
 
+    function isDesenvBoardAccount() {
+      return isLoggedIn()
+        && request.auth.token.email == 'desenvolvimentos@controle-tricot-e-cia.web.app';
+    }
+
     function isValidTecelagemQuadro() {
       let data = request.resource.data;
       return data.keys().hasOnly(['json', 'updated_at'])
@@ -47,14 +52,32 @@ service cloud.firestore {
       allow delete: if isLoggedIn() && !isPainelAccount();
     }
 
-    // Fila de desenvolvimentos: qualquer conta do Estoque, em qualquer PC.
+    // Fila de desenvolvimentos: conta do Estoque (tudo) ou conta compartilhada dos setores.
     // A conta do painel da tecelagem nao entra aqui.
     match /desenvolvimentos/{id} {
       allow read, write: if isLoggedIn() && !isPainelAccount();
     }
 
+    function isValidSyntechCatalog() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['json', 'updated_at'])
+        && data.json is string
+        && data.json.size() > 2
+        && data.json.size() < 900000
+        && data.updated_at is string
+        && data.updated_at.size() >= 10
+        && data.updated_at.size() < 80;
+    }
+
+    // Cadastro resumido do Syntech (codigo, nome) para o celular do desenvolvimento.
+    match /syntech_catalog/{id} {
+      allow read: if isLoggedIn() && !isPainelAccount();
+      allow create, update: if isLoggedIn() && !isPainelAccount() && isValidSyntechCatalog();
+      allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
+    }
+
     match /{document=**} {
-      allow read, write: if isLoggedIn() && !isPainelAccount();
+      allow read, write: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
     }
   }
 }

@@ -13,6 +13,8 @@ export type ResolvedProcessYarnRow = ResolvedYarnRow & {
   syntech_slot: number;
   component_index: number;
   blend_source?: string;
+  /** Texto original do guia (.sin), inclusive mistura A + B. */
+  stored_description: string;
   weight_share: number;
   processo_label: string;
 };
@@ -80,12 +82,15 @@ export function expandConsolidatedForProcessos(
       catalog
     );
 
+    const storedDescription = component.consolidatedDescription || parent?.description || component.description;
     return {
       ...matched,
       side: component.side ?? parent?.side,
       syntech_slot: component.slot,
       component_index: component.componentIndex,
-      blend_source: parent && component.componentIndex > 0 ? parent.description : undefined,
+      stored_description: storedDescription,
+      blend_source:
+        storedDescription && storedDescription !== component.description ? storedDescription : undefined,
       weight_share: component.weightShare,
       processo_label: bicoProcessoLabel(
         {

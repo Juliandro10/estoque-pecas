@@ -1,6 +1,7 @@
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 
+import { resolveDesenvLogin } from '../../shared/desenv-setor-auth';
 import { auth } from '../firebase';
 
 export function useAuth() {
@@ -14,7 +15,7 @@ export function useAuth() {
     user,
     loading: user === undefined,
     signIn: (email: string, password: string) =>
-      signInWithEmailAndPassword(auth, email, password),
+      signInWithEmailAndPassword(auth, resolveDesenvLogin(email), password),
     signOut: () => signOut(auth),
   };
 }

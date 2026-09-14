@@ -19,3 +19,14 @@ export function parseSyntechCodeLead(description: string): { codigo: number; res
 
   return null;
 }
+
+/** Grava o código como identidade; o restante da frase vira rótulo. */
+export function stampSyntechCodeLead(description: string, codigo: number): string {
+  const rest = parseSyntechCodeLead(description)?.rest ?? description.trim();
+  if (!rest) return `Codigo ${codigo}`;
+  return `Codigo ${codigo} - ${rest}`;
+}
+
+export function stripSyntechCodeLead(description: string): string {
+  return parseSyntechCodeLead(description)?.rest ?? description.trim();
+}

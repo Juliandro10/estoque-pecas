@@ -12,7 +12,25 @@
       "**/*.exe"
     ],
     "headers": [
-        {
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
         "source": "/tecelagem/**",
         "headers": [
           {
@@ -44,6 +62,18 @@
       {
         "source": "/tecelagem",
         "destination": "/tecelagem/index.html"
+      },
+      {
+        "source": "/desenv-board",
+        "destination": "/desenv-board/index.html"
+      },
+      {
+        "source": "/desenv-board/",
+        "destination": "/desenv-board/index.html"
+      },
+      {
+        "source": "/quadro-board",
+        "destination": "/quadro-board/index.html"
       },
       {
         "source": "**",

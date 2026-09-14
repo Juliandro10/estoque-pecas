@@ -20,7 +20,8 @@
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:hosting": "npm run build && node scripts/copy-painel-hosting.mjs && firebase deploy --only hosting",
     "deploy": "npm run build && node scripts/copy-painel-hosting.mjs && firebase deploy --only firestore:rules,hosting",
-    "painel:cloud-user": "tsx scripts/ensure-painel-firebase-user.ts"
+    "painel:cloud-user": "tsx scripts/ensure-painel-firebase-user.ts",
+    "desenv:cloud-user": "tsx scripts/ensure-desenv-firebase-user.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",

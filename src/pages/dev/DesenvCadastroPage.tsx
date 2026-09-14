@@ -32,7 +32,11 @@ import {
   expandConsolidatedForProcessos,
   processYarnRowsReadyForSyntech,
 } from '../../lib/yarn-blend';
-import { resolveConsolidatedYarns } from '../../lib/syntech-yarn-match';
+import {
+  applyYarnCodigoToStoredDescription,
+  applyYarnColorToStoredDescription,
+  resolveConsolidatedYarns,
+} from '../../lib/syntech-yarn-match';
 import {
   isLocalScannerAvailable,
   localProgramsApi,
@@ -144,6 +148,56 @@ function YarnDescInput({
   );
 }
 
+function YarnCodeInput({
+  value,
+  onCommit,
+}: {
+  value: number | null;
+  onCommit: (next: number | null) => void;
+}) {
+  const display = value != null && value > 0 ? String(value) : '';
+  const [draft, setDraft] = useState(display);
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) setDraft(display);
+  }, [display]);
+
+  function commit() {
+    editingRef.current = false;
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      if (value != null) onCommit(null);
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setDraft(display);
+      return;
+    }
+    if (parsed !== value) onCommit(parsed);
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      className="cell-input yarn-code-input mono"
+      title="Código Syntech — define o tipo do fio"
+      value={draft}
+      onFocus={() => {
+        editingRef.current = true;
+        setDraft(display);
+      }}
+      onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
 export function DesenvCadastroPage() {
   const [reference, setReference] = useState('');
   const [fullSearch, setFullSearch] = useState(false);
@@ -245,6 +299,46 @@ export function DesenvCadastroPage() {
     setYarnParts((prev) =>
       setYarnDescriptionForConsolidatedRow(prev, guide, letter, previousDescription, description)
     );
+  }
+
+  function patchMatchingYarnGuides(
+    row: (typeof consolidatedYarnsResolved)[number],
+    rewrite: (description: string) => string
+  ) {
+    const letterUp = (row.letter || '').toUpperCase();
+    setYarnParts((prev) =>
+      prev.map((part) => ({
+        ...part,
+        guides: part.guides.map((g) => {
+          if (g.guide !== row.guide || g.letter.toUpperCase() !== letterUp) return g;
+          const next = rewrite(g.description);
+          return next === g.description ? g : { ...g, description: next };
+        }),
+      }))
+    );
+  }
+
+  function patchYarnCodigo(row: (typeof consolidatedYarnsResolved)[number], codigo: number | null) {
+    patchMatchingYarnGuides(row, (stored) =>
+      applyYarnCodigoToStoredDescription(stored, row.component_index ?? 0, codigo, yarnCatalog)
+    );
+  }
+
+  function patchYarnColor(row: (typeof consolidatedYarnsResolved)[number], cor: string) {
+    patchMatchingYarnGuides(row, (stored) =>
+      applyYarnColorToStoredDescription(
+        stored,
+        row.component_index ?? 0,
+        cor,
+        yarnCatalog,
+        row.tipo_fio_codigo
+      )
+    );
+  }
+
+  function catalogTypeFor(codigo: number | null) {
+    if (codigo == null) return null;
+    return yarnCatalog?.types.find((item) => item.codigo === codigo) ?? null;
   }
 
   function patchYarnGuideDescription(
@@ -643,7 +737,7 @@ export function DesenvCadastroPage() {
     }
     if (consolidatedYarnsResolved.length > 0 && !processYarnRowsReadyForSyntech(consolidatedYarnsResolved)) {
       setError(
-        `Fio(s) sem código Syntech: ${unresolvedYarnCodes.map((row) => `bico ${row.guide}`).join(', ')}. Atualize o catálogo ou confira as descrições.`
+        `Fio(s) sem código Syntech: ${unresolvedYarnCodes.map((row) => `bico ${row.guide}`).join(', ')}. Informe o código na coluna Cod.`
       );
       return;
     }
@@ -655,7 +749,7 @@ export function DesenvCadastroPage() {
 
     const colorWarning =
       unknownYarnColors.length > 0
-        ? `\n\nAviso — cor não encontrada no cadastro: ${unknownYarnColors
+        ? `\n\nAviso — cor conferir (o tipo segue válido pelo código): ${unknownYarnColors
             .map((row) => `bico ${row.guide} (${row.cor})`)
             .join(', ')}.`
         : '';
@@ -860,13 +954,22 @@ export function DesenvCadastroPage() {
                         ) : null}
                       </p>
                       <p className="yarn-code-hint">
-                        Dica: use <span className="mono">Codigo 44 - seu nome 3 CABOS TOMATE</span> — veja a lista
-                        completa na aba <strong>Fios Syntech</strong>.
+                        O <strong>código</strong> Syntech define o fio. A cor é a lista daquele código — se o
+                        .sin não bater, escolha na lista ou deixe em <em>cor conferir</em>. Catálogo na aba{' '}
+                        <strong>Fios Syntech</strong>.
                       </p>
                       {unresolvedYarnCodes.length > 0 ? (
                         <p className="yarn-catalog-warn">
                           Sem código Syntech:{' '}
                           {unresolvedYarnCodes.map((row) => `slot ${row.syntech_slot ?? row.guide}`).join(', ')}
+                        </p>
+                      ) : null}
+                      {unknownYarnColors.length > 0 ? (
+                        <p className="yarn-catalog-warn">
+                          Cor conferir:{' '}
+                          {unknownYarnColors
+                            .map((row) => `slot ${row.syntech_slot ?? row.guide} (${row.cor})`)
+                            .join(', ')}
                         </p>
                       ) : null}
                       <div className="table-wrap yarn-table-wrap">
@@ -888,6 +991,8 @@ export function DesenvCadastroPage() {
                               const consolidatedRow = consolidatedRowForResolved(row);
                               const editableDescription =
                                 consolidatedRow?.description ?? row.description;
+                              const catalogType = catalogTypeFor(row.tipo_fio_codigo);
+                              const colorOptions = catalogType?.cores ?? [];
                               return (
                               <tr
                                 key={`yarn-${row.guide}-${row.letter}-${consolidatedRow?.parts.join('+') ?? row.parts.join('+')}-${yarnFioIdentityKey(editableDescription)}-${row.component_index ?? 0}`}
@@ -897,15 +1002,18 @@ export function DesenvCadastroPage() {
                                 <td className="yarn-col-consumo mono">{row.consumption || '—'}</td>
                                 <td className="yarn-col-slot mono">{row.syntech_slot}</td>
                                 <td className="yarn-col-bico mono">{row.processo_label ?? `BICO ${row.guide}`}</td>
-                                <td className="yarn-col-cod mono">
-                                  {row.tipo_fio_codigo ?? '—'}
+                                <td className="yarn-col-cod">
+                                  <YarnCodeInput
+                                    value={row.tipo_fio_codigo}
+                                    onCommit={(codigo) => patchYarnCodigo(row, codigo)}
+                                  />
                                 </td>
                                 <td className="yarn-col-fio mono">{row.letter}</td>
                                 <td className="yarn-col-desc">
                                   <YarnDescInput
                                     className="cell-input yarn-desc-input"
                                     value={row.blend_source ? row.description : editableDescription}
-                                    title="Editar nome do fio para bater com o Syntech"
+                                    title="Texto do .sin (rótulo). O código é que vale para o Syntech."
                                     onCommit={(next) =>
                                       patchYarnDescriptionForConsolidatedRow(
                                         row.guide,
@@ -915,6 +1023,41 @@ export function DesenvCadastroPage() {
                                       )
                                     }
                                   />
+                                  {catalogType ? (
+                                    <div className="yarn-cor-row">
+                                      <select
+                                        className="yarn-cor-select"
+                                        value={row.cor_ok ? (row.cor ?? '') : ''}
+                                        title="Cores cadastradas neste código Syntech"
+                                        onChange={(e) => {
+                                          const next = e.target.value;
+                                          if (next) patchYarnColor(row, next);
+                                        }}
+                                      >
+                                        {!row.cor_ok ? (
+                                          <option value="">
+                                            {row.cor ? `cor conferir — ${row.cor}` : 'cor conferir'}
+                                          </option>
+                                        ) : null}
+                                        {colorOptions.map((cor) => (
+                                          <option key={cor} value={cor}>
+                                            {cor}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {row.cor_sugerida && !row.cor_ok ? (
+                                        <button
+                                          type="button"
+                                          className="yarn-cor-suggest"
+                                          onClick={() => {
+                                            if (row.cor_sugerida) patchYarnColor(row, row.cor_sugerida);
+                                          }}
+                                        >
+                                          Usar {row.cor_sugerida}?
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
                                   {row.blend_source ? (
                                     <span className="yarn-blend-note"> · mistura</span>
                                   ) : null}
@@ -1160,7 +1303,26 @@ export function DesenvCadastroPage() {
         .yarn-catalog-warn { margin: 0 0 8px; font-size: 12px; color: #f0a060; }
         .yarn-row-error { background: rgba(220, 80, 80, 0.08); }
         .yarn-row-warn { background: rgba(240, 160, 96, 0.08); }
-        .yarn-col-cod { width: 52px; text-align: right; }
+        .yarn-col-cod { width: 72px; text-align: right; }
+        .yarn-code-input { width: 100%; box-sizing: border-box; text-align: right; padding: 6px 6px; }
+        .yarn-cor-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px;
+          margin-top: 6px;
+        }
+        .yarn-cor-select {
+          max-width: 100%;
+          min-width: 140px;
+          padding: 4px 6px;
+          font-size: 12px;
+        }
+        .yarn-cor-suggest {
+          padding: 4px 8px;
+          font-size: 12px;
+          cursor: pointer;
+        }
         .field-hint { margin: 0; font-size: 13px; color: var(--muted); }
         .yarn-consolidated { margin-bottom: 12px; }
         .yarn-consolidated-title { margin: 0 0 8px; font-size: 13px; color: var(--muted); }

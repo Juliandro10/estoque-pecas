@@ -4,6 +4,7 @@ import {
   findBestColorMatch,
   findBestYarnTypeMatch,
   stripPhantomColorI,
+  suggestClosestColor,
   yarnTypeNamesMatch,
 } from '../shared/syntech-name-match.ts';
 import { buildCorrectedYarnDescription, formatYarnComponentDescription, normalizeYarnCaboSpelling, parseYarnDescription } from '../shared/yarn-description-parse.ts';
@@ -70,6 +71,26 @@ if (colorNamesMatch('PIMENTA', 'MENTA')) {
 const yarnTypes = ['FRESH LINE', 'MODAL AREZZO', 'MODAL AREZO'];
 if (findBestYarnTypeMatch('MODAL AREZO SACHET PINK', yarnTypes) !== 'MODAL AREZZO') {
   console.error('FAIL yarn type prefix match');
+  failed++;
+}
+
+if (!yarnTypeNamesMatch('LANTEJOLA', 'FIO LANTEJOULA')) {
+  console.error('FAIL LANTEJOLA should match FIO LANTEJOULA');
+  failed++;
+}
+if (!yarnTypeNamesMatch('FIO LANTEJOLA', 'FIO LANTEJOULA')) {
+  console.error('FAIL FIO LANTEJOLA should match FIO LANTEJOULA');
+  failed++;
+}
+
+if (suggestClosestColor('DOURADOI', ['DOURADO', 'PRETO']) !== 'DOURADO') {
+  console.error('FAIL suggestClosestColor DOURADOI');
+  failed++;
+}
+if (suggestClosestColor('AREIA MEDIOI', ['AREIA', 'BEGE MEDIO POLI', 'BRANCO']) !== null) {
+  console.error(
+    `FAIL AREIA MEDIOI should stay conferir, got ${suggestClosestColor('AREIA MEDIOI', ['AREIA', 'BEGE MEDIO POLI', 'BRANCO'])}`
+  );
   failed++;
 }
 
