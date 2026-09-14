@@ -732,7 +732,7 @@ export function DesenvCadastroPage() {
     const machine = machineLabel.trim() ? { label: machineLabel.trim() } : null;
 
     if (!localMode || !scannerOk) {
-      exportCadastroPdf(cadastro, machine);
+      exportCadastroPdf(cadastro, machine, yarnCatalog?.types.map((item) => item.tipo) ?? []);
       return;
     }
 
@@ -747,7 +747,7 @@ export function DesenvCadastroPage() {
       }
       if (!folder) {
         setError('Pasta do programa não encontrada. Use busca completa se necessário.');
-        exportCadastroPdf(cadastro, machine);
+        exportCadastroPdf(cadastro, machine, yarnCatalog?.types.map((item) => item.tipo) ?? []);
         return;
       }
 
@@ -763,7 +763,7 @@ export function DesenvCadastroPage() {
       setInfo(`PDF salvo em dados do programa/${result.file_name} e aberto.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar PDF na pasta do programa.');
-      exportCadastroPdf(cadastro, machine);
+      exportCadastroPdf(cadastro, machine, yarnCatalog?.types.map((item) => item.tipo) ?? []);
     } finally {
       setExportingPdf(false);
     }

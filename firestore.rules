@@ -8,6 +8,10 @@ rules_version = '2';
 //   json: string (JSON do quadro slim, sem cliente/operador)
 //   updated_at: string ISO
 //
+// Collection: desenvolvimentos / documentos gerados
+//   nome, cliente, status, obs, prioridade (1 = topo),
+//   criado_em, atualizado_em, criado_por
+//
 // Demais coleções (parts, withdrawals, programs, program_clients,
 // model_cadastro, …): qualquer usuário logado no Estoque de Peças,
 // como já era. A conta do painel da tecelagem NÃO acessa essas coleções.
@@ -41,6 +45,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isLoggedIn() && isValidTecelagemQuadro();
       allow delete: if isLoggedIn() && !isPainelAccount();
+    }
+
+    // Fila de desenvolvimentos: qualquer conta do Estoque, em qualquer PC.
+    // A conta do painel da tecelagem nao entra aqui.
+    match /desenvolvimentos/{id} {
+      allow read, write: if isLoggedIn() && !isPainelAccount();
     }
 
     match /{document=**} {

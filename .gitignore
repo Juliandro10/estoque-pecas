@@ -11,3 +11,5 @@ backups/
 painel-tecelagem/installer/.cache/
 painel-tecelagem/installer/payload/
 painel-tecelagem/.publish-auth.json
+painel-desenvolvimentos/installer/.cache/
+painel-desenvolvimentos/installer/payload/

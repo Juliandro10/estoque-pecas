@@ -98,7 +98,7 @@ export type ProducaoMaquina = {
   agora: ProducaoAgora | null;
   ops: ProducaoOp[];
   sugestao: ProducaoSugestao | null;
-  parada: { motivo: string; familia: 'mecanica' | 'processo' } | null;
+  parada: { motivo: string; obs: string; familia: 'mecanica' | 'processo' } | null;
 };
 
 export type ProducaoBoard = {
@@ -374,23 +374,25 @@ async function readParadasAbertas(db: FirebirdDb) {
     if (nome) tipoPorNome.set(nome, fbNum(row.TIPO));
   }
 
-  const abertas = await queryDb<{ MAQUINA: number; MOTIVO: string | null }>(
+  const abertas = await queryDb<{ MAQUINA: number; MOTIVO: string | null; OBS: string | null }>(
     db,
-    `SELECT MAQUINA, CAST(MOTIVO AS VARCHAR(40)) AS MOTIVO
+    `SELECT MAQUINA, CAST(MOTIVO AS VARCHAR(40)) AS MOTIVO, CAST(OBS AS VARCHAR(200)) AS OBS
      FROM MANUTENCAO
      WHERE DATA_TERMINO IS NULL
        AND FINAL IS NULL
      ORDER BY AUTOINC`
   );
 
-  const byMachine = new Map<number, { motivo: string; familia: 'mecanica' | 'processo' }>();
+  const byMachine = new Map<number, { motivo: string; obs: string; familia: 'mecanica' | 'processo' }>();
   for (const row of abertas) {
     const maquina = fbNum(row.MAQUINA);
     if (maquina < 1 || maquina > 15) continue;
     const raw = fbStr(row.MOTIVO);
     const motivo = prettyMotivo(raw);
+    const obs = fbStr(row.OBS).replace(/\s+/g, ' ').trim();
     byMachine.set(maquina, {
       motivo,
+      obs,
       familia: familiaDeMotivo(raw, tipoPorNome),
     });
   }

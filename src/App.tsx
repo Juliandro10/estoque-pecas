@@ -9,6 +9,7 @@ import { MonthlyReportsPage } from './pages/MonthlyReportsPage';
 import { PartsPage } from './pages/PartsPage';
 import { ProducaoPage } from './pages/ProducaoPage';
 import { TecelagemPage } from './pages/TecelagemPage';
+import { DesenvolvimentosPage } from './pages/DesenvolvimentosPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WithdrawalsPage } from './pages/WithdrawalsPage';
 import { DesenvControleLayout } from './pages/dev/DesenvControleLayout';
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="maquinas" element={<MaquinasPage />} />
           <Route path="producao" element={<ProducaoPage />} />
           <Route path="quadro" element={<TecelagemPage />} />
+          <Route path="desenvolvimentos" element={<DesenvolvimentosPage />} />
           <Route path="relatorios" element={<ReportsPage />} />
           <Route path="relatorios-mensais" element={<MonthlyReportsPage />} />
           <Route path="desenv-controle" element={<DesenvControleLayout />}>

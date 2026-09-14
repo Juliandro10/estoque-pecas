@@ -9,9 +9,11 @@ export function Layout() {
   const desenvControleActive = location.pathname.startsWith('/desenv-controle');
 
   const quadroActive = location.pathname.startsWith('/quadro');
+  const desenvActive = location.pathname.startsWith('/desenvolvimentos');
+  const wideBoard = quadroActive || desenvActive;
 
   return (
-    <div className={`layout${quadroActive ? ' quadro-open' : ''}`}>
+    <div className={`layout${wideBoard ? ' quadro-open' : ''}`}>
       <aside className="sidebar card">
         <div className="brand">
           <strong>Estoque</strong>
@@ -35,6 +37,9 @@ export function Layout() {
           </NavLink>
           <NavLink to="/quadro" className={({ isActive }) => (isActive ? 'active' : '')}>
             Tecelagem
+          </NavLink>
+          <NavLink to="/desenvolvimentos" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Desenvolvimentos
           </NavLink>
           <NavLink to="/relatorios" className={({ isActive }) => (isActive ? 'active' : '')}>
             Estoque

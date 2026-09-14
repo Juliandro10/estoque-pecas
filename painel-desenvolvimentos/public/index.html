@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1218" />
+    <title>Desenvolvimentos</title>
+    <link rel="stylesheet" href="./desenv.css?v=4" />
+  </head>
+  <body>
+    <div id="login" class="login" hidden>
+      <form class="login-card" id="login-form">
+        <h1>Desenvolvimentos</h1>
+        <p>Entre com a mesma conta do Estoque de Peças.</p>
+        <label>E-mail</label>
+        <input id="login-email" type="email" required autocomplete="username" />
+        <label>Senha</label>
+        <input id="login-pass" type="password" required autocomplete="current-password" />
+        <p class="erro" id="login-erro"></p>
+        <button type="submit">Entrar</button>
+      </form>
+    </div>
+    <div id="app" hidden>
+      <header class="top">
+        <div>
+          <h1>Desenvolvimentos</h1>
+          <p class="sub" id="resumo">Fila de amostras e modelos novos</p>
+        </div>
+        <div class="top-acoes">
+          <span class="user" id="user-email"></span>
+          <button type="button" class="btn ghost" id="btn-sair" hidden>Sair</button>
+          <button type="button" class="btn ghost" id="btn-syntech" hidden>Do Syntech</button>
+          <button type="button" class="btn" id="btn-novo">Novo desenvolvimento</button>
+        </div>
+      </header>
+      <p class="aviso" id="aviso" hidden></p>
+      <section class="lista" id="lista"></section>
+    </div>
+    <div id="dlg-syntech" class="dlg" hidden>
+      <div class="dlg-card dlg-wide">
+        <h2>Cadastrados no Syntech, sem programa</h2>
+        <p class="hint">Produto já existe no Syntech, mas ainda não foi desenvolvido.</p>
+        <input id="syn-busca" maxlength="40" placeholder="Buscar referência ou nome" />
+        <p class="erro" id="syn-erro"></p>
+        <div class="syn-lista" id="syn-lista"></div>
+        <div class="dlg-acoes">
+          <button type="button" class="btn ghost" id="syn-fechar">Fechar</button>
+        </div>
+      </div>
+    </div>
+    <div id="dlg" class="dlg" hidden>
+      <form class="dlg-card" id="dlg-form">
+        <h2 id="dlg-title">Novo desenvolvimento</h2>
+        <label for="f-nome">Modelo / nome</label>
+        <input id="f-nome" required maxlength="80" placeholder="Ex.: Mini saia longa" />
+        <label for="f-cliente">Cliente</label>
+        <input id="f-cliente" maxlength="60" placeholder="Opcional" />
+        <label for="f-status">Onde está agora</label>
+        <select id="f-status"></select>
+        <label for="f-obs">Observação</label>
+        <textarea id="f-obs" maxlength="400" placeholder="Referência, prazo, quem pediu…"></textarea>
+        <p class="erro" id="dlg-erro"></p>
+        <div class="dlg-acoes">
+          <button type="submit" class="btn go">Salvar</button>
+          <button type="button" class="btn ghost" id="dlg-cancelar">Cancelar</button>
+        </div>
+      </form>
+    </div>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="./firebase-config.js"></script>
+    <script src="./desenv.js?v=4"></script>
+  </body>
+</html>

@@ -20,6 +20,7 @@ export type PainelPublico = {
     } | null;
     parada: {
       motivo: string;
+      obs: string;
       familia: 'mecanica' | 'processo';
     } | null;
     sugestao: {
@@ -60,7 +61,11 @@ export function toPainelPublico(board: ProducaoBoard): PainelPublico {
             }
           : null,
         parada: machine.parada
-          ? { motivo: machine.parada.motivo, familia: machine.parada.familia }
+          ? {
+              motivo: machine.parada.motivo,
+              obs: machine.parada.obs,
+              familia: machine.parada.familia,
+            }
           : null,
         sugestao: machine.sugestao
           ? {

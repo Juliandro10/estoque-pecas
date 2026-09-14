@@ -1,0 +1,19 @@
+Desenvolvimentos
+================
+
+Em cada PC que vai lancar ou mudar prioridade:
+
+1. Copie o arquivo Painel-Desenvolvimentos-Setup.exe (pen drive ou pasta da rede).
+2. De dois cliques.
+3. Clique em Proximo ate Instalar.
+4. Se o Windows perguntar, permita o aplicativo.
+
+O Chrome abre em http://127.0.0.1:3851
+Entre com a mesma conta do Estoque de Peças.
+
+A fila e a mesma em todos os PCs: quem lanca, sobe ou desce,
+todo mundo ve na hora.
+
+No Estoque de Peças a tela e a mesma: menu Desenvolvimentos.
+
+Para parar, desinstale o Painel Desenvolvimentos no Windows.

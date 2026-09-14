@@ -40,6 +40,8 @@ import {
   encerrarSyntechParada,
   listSyntechMotivosParada,
 } from './syntech-paradas';
+import { listSyntechDesenvPendentes } from './syntech-desenv';
+import { yarnTypesFromCatalog } from './syntech-yarn-types';
 import {
   addM1Measurement,
   computeDensity,
@@ -823,6 +825,17 @@ app.get('/api/quadro', async (_req, res) => {
   }
 });
 
+app.get('/api/programs/desenv-pendentes', async (req, res) => {
+  try {
+    const q = String(req.query.q ?? '');
+    res.json({ itens: await listSyntechDesenvPendentes(q) });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao ler os desenvolvimentos no Syntech.',
+    });
+  }
+});
+
 app.get('/api/paradas/motivos', async (_req, res) => {
   try {
     res.json({ motivos: await listSyntechMotivosParada() });
@@ -905,6 +918,7 @@ app.post('/api/programs/cadastro-pdf', async (req, res) => {
       machine_cms: String(cadastro.machine_cms ?? machineFromSin?.cms ?? ''),
       machine_gauge: String(cadastro.machine_gauge ?? machineFromSin?.gauge ?? ''),
       machine_label: String(cadastro.machine_label ?? machineFromSin?.label ?? ''),
+      yarn_types: yarnTypesFromCatalog(),
     });
     fs.writeFileSync(filePath, pdf);
     openLocalFile(filePath);
@@ -987,7 +1001,7 @@ app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 32,
+    version: 34,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -1008,6 +1022,7 @@ app.get('/api/programs/health', (_req, res) => {
       'syntech-fios',
       'syntech-producao',
       'syntech-paradas',
+      'desenv-pendentes',
       'cadastro-pdf',
       'm1-density',
       'm1-knowledge',

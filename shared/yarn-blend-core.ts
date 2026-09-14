@@ -22,13 +22,24 @@ export const ELASTANO_WEIGHT_FACTOR = 8 / 92;
  */
 export const LUREX_WEIGHT_FACTOR = 0.044 / 2 / (0.296 / 3);
 
+/**
+ * 1 cabo lantejoula/paete × 1 cabo poliéster ou linha — 2,5× o peso do outro cabo.
+ * Grafias: LANTEJOULA e LANTEJOLA (sem U).
+ */
+export const LANTEJOULA_WEIGHT_FACTOR = 2.5;
+
+/** Grafias Syntech/chão: LANTEJOULA e LANTEJOLA (sem U). */
+const LANTEJOULA_NAME = /LANTEJOU?LA|\bPAETE\b/;
+
 export const DEFAULT_YARN_WEIGHT_FACTORS: YarnWeightFactorsFile = {
   default_factor: 1,
   types: {
     CAPRICE: 2.5,
-    'FIO LANTEJOULA': 2.5,
-    LANTEJOULA: 2.5,
-    PAETE: 2.5,
+    'FIO LANTEJOULA': LANTEJOULA_WEIGHT_FACTOR,
+    'FIO LANTEJOLA': LANTEJOULA_WEIGHT_FACTOR,
+    LANTEJOULA: LANTEJOULA_WEIGHT_FACTOR,
+    LANTEJOLA: LANTEJOULA_WEIGHT_FACTOR,
+    PAETE: LANTEJOULA_WEIGHT_FACTOR,
     LINHA: 1,
     ELASTANO: ELASTANO_WEIGHT_FACTOR,
     LASTEX: 1,
@@ -110,26 +121,26 @@ function defaultResolveCabo(
   return Number.isFinite(value) ? value : null;
 }
 
-export function yarnWeightFactor(
-  tipo: string,
-  factors: YarnWeightFactorsFile = loadYarnWeightFactors()
-) {
-  const upper = tipo.trim().toUpperCase();
-  for (const [key, value] of Object.entries(factors.types)) {
-    if (upper.includes(key.toUpperCase())) return value;
-  }
-  return factors.default_factor;
-}
-
 export function yarnWeightFactorFromDescription(
   description: string,
   factors: YarnWeightFactorsFile = loadYarnWeightFactors()
 ) {
   const upper = description.trim().toUpperCase();
-  for (const [key, value] of Object.entries(factors.types)) {
-    if (upper.includes(key.toUpperCase())) return value;
+  if (LANTEJOULA_NAME.test(upper)) {
+    return factors.types['FIO LANTEJOULA'] ?? LANTEJOULA_WEIGHT_FACTOR;
+  }
+  const keys = Object.keys(factors.types).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (upper.includes(key.toUpperCase())) return factors.types[key];
   }
   return factors.default_factor;
+}
+
+export function yarnWeightFactor(
+  tipo: string,
+  factors: YarnWeightFactorsFile = loadYarnWeightFactors()
+) {
+  return yarnWeightFactorFromDescription(tipo, factors);
 }
 
 export function parseCabosForWeightShare(guide: number, description: string) {
@@ -158,7 +169,7 @@ export function fabricGuideWeightShare(
         Number(component.cabo) > 0
           ? Number(component.cabo)
           : parseCabosForWeightShare(guide.guide, component.raw);
-      return sum + cabos * yarnWeightFactor(component.tipo, factors);
+      return sum + cabos * yarnWeightFactorFromDescription(`${component.tipo} ${component.raw}`, factors);
     }, 0);
     if (share > 0) return pct * share;
   }
@@ -182,7 +193,7 @@ export function splitComponentWeightShares(
 ) {
   const weights = components.map((component) => {
     const cabos = Number(component.cabo) || 1;
-    return cabos * yarnWeightFactor(component.tipo, factors);
+    return cabos * yarnWeightFactorFromDescription(`${component.tipo} ${component.raw}`, factors);
   });
   const total = weights.reduce((sum, value) => sum + value, 0);
   if (total <= 0) {
@@ -367,7 +378,55 @@ export function expandProcessYarnComponents(
     }
   }
 
-  return expanded.sort((a, b) => a.slot - b.slot || a.guide - b.guide);
+  return reweightExpandedBlends(expanded, options.partWeightKg).sort(
+    (a, b) => a.slot - b.slot || a.guide - b.guide
+  );
+}
+
+function reweightExpandedBlends(
+  expanded: ProcessYarnComponent[],
+  partWeightKg?: number
+): ProcessYarnComponent[] {
+  const groups = new Map<string, number[]>();
+  expanded.forEach((row, index) => {
+    const key = `${row.guide}:${(row.letter ?? '').toUpperCase()}:${row.consolidatedDescription}`;
+    const list = groups.get(key) ?? [];
+    list.push(index);
+    groups.set(key, list);
+  });
+
+  const next = expanded.map((row) => ({ ...row }));
+  for (const indices of groups.values()) {
+    if (indices.length < 2) continue;
+    const siblings = indices.map((index) => next[index]);
+    if (!siblings.some((row) => row.componentIndex > 0)) continue;
+
+    const weights = siblings.map((row) => {
+      const cabos = Number(row.cabo) || parseCabosForWeightShare(row.guide, row.description);
+      return (
+        cabos *
+        yarnWeightFactorFromDescription(`${row.tipo} ${row.description}`)
+      );
+    });
+    const weightSum = weights.reduce((sum, value) => sum + value, 0);
+    const totalKg = siblings.reduce((sum, row) => sum + row.consumptionKg, 0);
+    if (weightSum <= 0 || totalKg <= 0) continue;
+
+    indices.forEach((index, i) => {
+      const kg = roundKg((totalKg * weights[i]) / weightSum);
+      next[index] = {
+        ...next[index],
+        consumptionKg: kg,
+        pct:
+          partWeightKg && partWeightKg > 0
+            ? roundPerc((kg / partWeightKg) * 100)
+            : next[index].pct,
+        weightShare: weights[i] / weightSum,
+      };
+    });
+  }
+
+  return next;
 }
 
 export { parseYarnDescriptionComponents } from './yarn-description-parse';

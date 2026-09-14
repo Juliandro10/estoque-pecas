@@ -137,12 +137,15 @@ h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
 .maq.stop-processo .num { color: var(--wait); }
 .selo {
   display: inline-block;
+  max-width: 100%;
   margin: 0 0 6px;
   padding: 3px 8px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.02em;
+  line-height: 1.25;
+  white-space: normal;
 }
 .stop-mecanica .selo { background: #4a241e; color: #ffc8b8; }
 .stop-processo .selo { background: #3f3218; color: #f0d48a; }

@@ -27,6 +27,8 @@ export type CadastroPdfInput = {
   machine_gauge?: string;
   /** Ex.: CMS 502 E6.2 — usado se cms/gauge não vierem separados */
   machine_label?: string;
+  /** Tipos do catálogo Syntech — sem isso a lantejoula vira "FIO" e o PDF rateia 50/50. */
+  yarn_types?: string[];
 };
 
 function formatGenerated(iso: string) {
@@ -126,13 +128,17 @@ export function summarizeYarnWeightByTypeAndColor(
     if (isPricingWasteYarn(row)) continue;
     const tipo = row.tipo.trim() || '—';
     const cor = row.cor?.trim() || '—';
-    const key = `${summaryTipoKey(tipo)}|${summaryCorKey(cor === '—' ? '' : cor)}`;
+    const tipoLabel =
+      /LANTEJOU?LA|PAETE/i.test(`${tipo} ${row.description ?? ''}`) && !/LANTEJOU?LA|PAETE/i.test(tipo)
+        ? 'FIO LANTEJOULA'
+        : tipo;
+    const key = `${summaryTipoKey(tipoLabel)}|${summaryCorKey(cor === '—' ? '' : cor)}`;
     const existing = groups.get(key);
     if (existing) {
       existing.consumptionKg += row.consumptionKg;
       continue;
     }
-    groups.set(key, { tipo, cor, consumptionKg: row.consumptionKg, pct: 0 });
+    groups.set(key, { tipo: tipoLabel, cor, consumptionKg: row.consumptionKg, pct: 0 });
   }
 
   const basis = [...groups.values()].reduce((sum, row) => sum + row.consumptionKg, 0);
@@ -192,7 +198,8 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
       side: row.side,
       parts: row.parts,
     })),
-    partWeightKg > 0 ? { partWeightKg } : {}
+    partWeightKg > 0 ? { partWeightKg } : {},
+    cadastro.yarn_types ?? []
   ).filter((row) => row.consumptionKg > 0);
 
   if (expanded.length > 0) {

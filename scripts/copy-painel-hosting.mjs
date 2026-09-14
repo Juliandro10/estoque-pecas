@@ -55,3 +55,15 @@ const quadro = path.join(root, 'dist', 'quadro-board');
 fs.rmSync(quadro, { recursive: true, force: true });
 fs.cpSync(path.join(root, 'painel-tecelagem', 'public'), quadro, { recursive: true });
 console.log(`Quadro do Estoque copiado para ${quadro}`);
+
+const authDomain = process.env.VITE_FIREBASE_AUTH_DOMAIN ?? `${projectId}.firebaseapp.com`;
+const desenvDest = path.join(root, 'dist', 'desenv-board');
+fs.rmSync(desenvDest, { recursive: true, force: true });
+fs.cpSync(path.join(root, 'painel-desenvolvimentos', 'public'), desenvDest, { recursive: true });
+if (apiKey) {
+  fs.writeFileSync(
+    path.join(desenvDest, 'firebase-config.js'),
+    `window.DESENV_FIREBASE = ${JSON.stringify({ projectId, apiKey, authDomain })};\n`
+  );
+}
+console.log(`Desenvolvimentos copiado para ${desenvDest}`);

@@ -94,6 +94,11 @@ function sugPedido(sug, espera) {
   return nome ? `${pedido} · ${esc(nome)}` : pedido;
 }
 
+function paradaLabel(parada) {
+  const obs = String(parada.obs ?? '').replace(/\s+/g, ' ').trim();
+  return obs ? `${parada.motivo} · ${obs}` : parada.motivo;
+}
+
 function isHosted() {
   return /(?:^|\.)web\.app$|(?:^|\.)firebaseapp\.com$/.test(location.hostname);
 }
@@ -218,7 +223,7 @@ function abrirDialog(machine) {
   const encerrar = document.getElementById('dlg-encerrar');
   document.getElementById('dlg-title').textContent = `Máquina ${machine.numero}`;
   document.getElementById('dlg-status').textContent = machine.parada
-    ? `Parada aberta: ${machine.parada.motivo}`
+    ? `Parada aberta: ${paradaLabel(machine.parada)}`
     : 'Abrir parada no Syntech (F5).';
   document.getElementById('dlg-busca').value = '';
   document.getElementById('dlg-obs').value = '';
@@ -337,7 +342,7 @@ function render(board) {
       const stopCls = parada
         ? ` stop-${parada.familia === 'mecanica' ? 'mecanica' : 'processo'}${agora ? ' com-parada' : ''}`
         : '';
-      const selo = parada ? `<div class="selo">${esc(parada.motivo)}</div>` : '';
+      const selo = parada ? `<div class="selo">${esc(paradaLabel(parada))}</div>` : '';
       if (!agora) {
         const depois = sug
           ? `<div class="depois">Sugestão: ${sugPedido(sug, espera)} · prazo ${esc(formatDate(sug.prazo))} · entra ${esc(formatDate(sug.entra_em))}</div>`

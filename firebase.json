@@ -29,6 +29,15 @@
             "value": "no-cache"
           }
         ]
+      },
+      {
+        "source": "/desenv-board/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ],
     "rewrites": [

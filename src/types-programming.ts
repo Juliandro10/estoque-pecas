@@ -571,6 +571,7 @@ export type ProducaoSugestao = {
 
 export type ProducaoParada = {
   motivo: string;
+  obs: string;
   familia: 'mecanica' | 'processo';
 };
 
