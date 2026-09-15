@@ -3,15 +3,19 @@ import './setup-firebird-client';
 import net from 'node:net';
 import Firebird from 'node-firebird';
 
-export const SYNTech_FB_CONFIG = {
-  host: process.env.SYNTECH_FB_HOST ?? 'RENATA',
-  port: Number(process.env.SYNTECH_FB_PORT ?? 3050),
-  database: process.env.SYNTECH_FB_DATABASE ?? 'C:\\Textil\\Empresas\\FABRICA.MDB',
-  user: process.env.SYNTECH_FB_USER ?? 'SYSDBA',
-  password: process.env.SYNTECH_FB_PASSWORD ?? 'masterkey',
-  lowercase_keys: false,
-  pageSize: 4096,
-};
+export function syntechFbConfig() {
+  return {
+    host: process.env.SYNTECH_FB_HOST ?? 'RENATA',
+    port: Number(process.env.SYNTECH_FB_PORT ?? 3050),
+    database: process.env.SYNTECH_FB_DATABASE ?? 'C:\\Textil\\Empresas\\FABRICA.MDB',
+    user: process.env.SYNTECH_FB_USER ?? 'SYSDBA',
+    password: process.env.SYNTECH_FB_PASSWORD ?? 'masterkey',
+    lowercase_keys: false,
+    pageSize: 4096,
+  };
+}
+
+export const SYNTech_FB_CONFIG = syntechFbConfig();
 
 export type FirebirdDb = Firebird.Database;
 export type SyntechTx = Firebird.Transaction;
@@ -44,7 +48,7 @@ function probeTcp(host: string, port: number, ms = 2500): Promise<boolean> {
 
 function attachWithHost(host: string): Promise<FirebirdDb> {
   return new Promise((resolve, reject) => {
-    Firebird.attach({ ...SYNTech_FB_CONFIG, host }, (err, db) => {
+    Firebird.attach({ ...syntechFbConfig(), host }, (err, db) => {
       if (err) reject(err);
       else resolve(db);
     });
@@ -52,7 +56,7 @@ function attachWithHost(host: string): Promise<FirebirdDb> {
 }
 
 export async function attachSyntechDb(): Promise<FirebirdDb> {
-  const configured = SYNTech_FB_CONFIG.host;
+  const configured = syntechFbConfig().host;
   const hosts = [
     ...new Set([
       ...(isIp(configured) ? [configured] : []),
@@ -64,7 +68,7 @@ export async function attachSyntechDb(): Promise<FirebirdDb> {
   ];
   let lastErr: unknown;
   for (const host of hosts) {
-    const reachable = await probeTcp(host, SYNTech_FB_CONFIG.port);
+    const reachable = await probeTcp(host, syntechFbConfig().port);
     if (!reachable) {
       console.warn(`Syntech porta 3050 fechada em ${host}`);
       lastErr = new Error(`Porta 3050 fechada em ${host}`);

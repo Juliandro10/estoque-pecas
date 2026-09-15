@@ -5,7 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  createSyntechProduto,
+  listSyntechDesenvPendentes,
+  listSyntechProdutoOpcoes,
+  lookupSyntechProduto,
+} from '../server/syntech-desenv.ts';
+import { publishSyntechCatalog } from '../server/syntech-catalog-publish.ts';
+
 const PORT = Number(process.env.DESENV_PORT ?? 3851);
+const SYNTECH_OFF =
+  'Não deu para falar com o Syntech neste PC. Precisa estar na rede da fábrica.';
 
 function loadDotEnv(root: string) {
   try {
@@ -57,37 +67,57 @@ function serveFirebaseConfig(_req: express.Request, res: express.Response) {
   res.type('application/javascript').send(firebaseConfigFromEnv());
 }
 
-const SCANNER = process.env.SCANNER_URL ?? 'http://127.0.0.1:3848';
+function syntechError(err: unknown) {
+  return err instanceof Error ? err.message : SYNTECH_OFF;
+}
 
 const app = express();
 app.use(cors());
+app.use(express.json({ limit: '1mb' }));
 app.get('/firebase-config.js', serveFirebaseConfig);
 app.get('/api/programs/desenv-pendentes', async (req, res) => {
   try {
-    const q = new URLSearchParams();
-    if (typeof req.query.q === 'string' && req.query.q.trim()) q.set('q', req.query.q.trim());
-    const url = `${SCANNER}/api/programs/desenv-pendentes${q.size ? `?${q}` : ''}`;
-    const r = await fetch(url);
-    const body = await r.text();
-    res.status(r.status).type('application/json').send(body);
-  } catch {
-    res.status(503).json({
-      error: 'Syntech só neste PC da programação, com o Iniciar.bat ligado.',
-    });
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    res.json({ itens: await listSyntechDesenvPendentes(q) });
+  } catch (err) {
+    res.status(503).json({ error: syntechError(err) });
   }
 });
 app.get('/api/programs/desenv-produto', async (req, res) => {
   try {
-    const q = new URLSearchParams();
-    if (typeof req.query.codigo === 'string' && req.query.codigo.trim()) {
-      q.set('codigo', req.query.codigo.trim());
-    }
-    const url = `${SCANNER}/api/programs/desenv-produto${q.size ? `?${q}` : ''}`;
-    const r = await fetch(url);
-    const body = await r.text();
-    res.status(r.status).type('application/json').send(body);
-  } catch {
-    res.status(503).json({ existe: false, error: 'Syntech só neste PC da programação, com o Iniciar.bat ligado.' });
+    const codigo = typeof req.query.codigo === 'string' ? req.query.codigo : '';
+    res.json(await lookupSyntechProduto(codigo));
+  } catch (err) {
+    res.status(503).json({ existe: false, error: syntechError(err) });
+  }
+});
+app.get('/api/programs/desenv-produto-opcoes', async (_req, res) => {
+  try {
+    res.json(await listSyntechProdutoOpcoes());
+  } catch (err) {
+    res.status(503).json({ error: syntechError(err) });
+  }
+});
+app.post('/api/programs/desenv-cadastrar-produto', async (req, res) => {
+  try {
+    const result = await createSyntechProduto({
+      codigo: String(req.body?.codigo ?? ''),
+      nome: String(req.body?.nome ?? ''),
+      classificacao: Number(req.body?.classificacao),
+      grupo: Number(req.body?.grupo),
+      fornecedor: Number(req.body?.fornecedor),
+      funcionario: Number(req.body?.funcionario),
+      ncm: String(req.body?.ncm ?? ''),
+    });
+    void publishSyntechCatalog().catch((err) => {
+      console.warn(
+        'Cadastro Syntech na nuvem falhou após produto novo:',
+        err instanceof Error ? err.message : err
+      );
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: syntechError(err) });
   }
 });
 app.use(express.static(PUBLIC));

@@ -27,7 +27,49 @@ body {
 }
 h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
 .sub { margin: 6px 0 0; color: var(--muted); font-size: 18px; }
-.clock { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.modos { display: flex; gap: 6px; }
+.modo {
+  border: 1px solid var(--line);
+  background: #141a23;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.modo.on { background: #6ea8ff; border-color: #6ea8ff; color: #071018; }
+.abas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.aba {
+  border: 1px solid var(--line);
+  background: #141a23;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.aba.on { background: #6ea8ff; border-color: #6ea8ff; color: #071018; }
+.aba .n { margin-left: 6px; opacity: 0.8; }
+.desenv-lista { display: flex; flex-direction: column; gap: 8px; }
+.desenv-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+.desenv-card .nome { font-weight: 800; }
+.desenv-card .meta { color: var(--muted); margin-top: 4px; font-size: 14px; }
+.desenv-card.trabalho { border-color: var(--wait); }
+.ref-tag { color: var(--wait); font-weight: 800; margin-right: 8px; }
 .aviso {
   background: #3a241c;
   color: #ffd4c8;

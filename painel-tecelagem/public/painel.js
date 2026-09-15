@@ -3,6 +3,11 @@ const esperaEl = document.getElementById('espera');
 const resumoEl = document.getElementById('resumo');
 const avisoEl = document.getElementById('aviso');
 const relogioEl = document.getElementById('relogio');
+const tituloEl = document.getElementById('titulo');
+const viewTecelagem = document.getElementById('view-tecelagem');
+const viewDesenv = document.getElementById('view-desenv');
+const desenvAbasEl = document.getElementById('desenv-abas');
+const desenvListaEl = document.getElementById('desenv-lista');
 
 const CRACHA_PADRAO = '350';
 let canWrite = false;
@@ -11,6 +16,9 @@ let lastBoard = null;
 let dlgMaquina = null;
 let dlgMotivo = null;
 let dlgBusy = false;
+let modo = 'tecelagem';
+let desenvPublico = null;
+let desenvTab = 'estilo';
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -402,6 +410,73 @@ async function loadFromCloud() {
   return JSON.parse(json);
 }
 
+async function loadDesenvCloud() {
+  const cfg = window.PAINEL_FIREBASE;
+  if (!cfg?.projectId || !cfg?.apiKey) {
+    throw new Error('Falta a configuração da nuvem neste endereço.');
+  }
+  const url = `https://firestore.googleapis.com/v1/projects/${cfg.projectId}/databases/(default)/documents/desenv_publico/fila`;
+  const res = await fetch(url);
+  if (res.status === 404) {
+    throw new Error('Ainda não chegou a fila de desenvolvimentos. Deixe o Painel Tecelagem ligado.');
+  }
+  if (!res.ok) throw new Error('Não deu para ler o desenvolvimento.');
+  const doc = await res.json();
+  const json = doc.fields?.json?.stringValue;
+  if (!json) throw new Error('Fila de desenvolvimentos vazia na nuvem.');
+  return JSON.parse(json);
+}
+
+function tipoPublico(item) {
+  if (item.tipo === 'ajuste') return 'Ajuste';
+  if (item.tipo === 'peca_foto') return 'Peça foto';
+  if (item.tipo === 'show_room') return 'Show room';
+  if (item.tipo === 'outro') return item.tipo_texto || 'Outro';
+  return 'Modelo novo';
+}
+
+function renderDesenv() {
+  const data = desenvPublico;
+  const setores = Array.isArray(data?.setores) ? data.setores : [];
+  if (!setores.some((s) => s.id === desenvTab)) desenvTab = setores[0]?.id || 'estilo';
+  const atual = setores.find((s) => s.id === desenvTab) ?? { itens: [], label: '', n: 0 };
+  desenvAbasEl.innerHTML = setores
+    .map(
+      (s) =>
+        `<button type="button" class="aba${s.id === desenvTab ? ' on' : ''}" data-tab="${esc(s.id)}">${esc(s.label)}<span class="n">${esc(s.n ?? 0)}</span></button>`
+    )
+    .join('');
+  const itens = Array.isArray(atual.itens) ? atual.itens : [];
+  resumoEl.textContent = itens.length
+    ? `${itens.length} em ${atual.label} · só acompanhamento`
+    : `Nada em ${atual.label || 'Desenvolvimento'}`;
+  if (!itens.length) {
+    desenvListaEl.innerHTML = '<p class="nota">Nenhum modelo neste setor.</p>';
+    return;
+  }
+  desenvListaEl.innerHTML = itens
+    .map((item) => {
+      const ref = item.ref ? `<span class="ref-tag">${esc(item.ref)}</span>` : '';
+      const cliente = item.cliente ? esc(item.cliente) : 'sem cliente';
+      return `<article class="desenv-card${item.trabalhando ? ' trabalho' : ''}">
+        <div class="nome">${ref}${esc(item.nome)}</div>
+        <div class="meta">${cliente} · ${esc(tipoPublico(item))}${item.trabalhando ? ' · em trabalho' : ''}</div>
+      </article>`;
+    })
+    .join('');
+}
+
+function setModo(next) {
+  modo = next;
+  document.querySelectorAll('.modo').forEach((btn) => {
+    btn.classList.toggle('on', btn.dataset.modo === modo);
+  });
+  viewTecelagem.hidden = modo !== 'tecelagem';
+  viewDesenv.hidden = modo !== 'desenv';
+  tituloEl.textContent = modo === 'desenv' ? 'Desenvolvimento' : 'Tecelagem';
+  void load();
+}
+
 async function loadFromLocal() {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 25000);
@@ -442,6 +517,12 @@ async function detectWrite() {
 
 async function load() {
   try {
+    if (modo === 'desenv') {
+      desenvPublico = await loadDesenvCloud();
+      avisoEl.hidden = true;
+      renderDesenv();
+      return;
+    }
     render(isHosted() ? await loadFromCloud() : await loadFromLocal());
   } catch (err) {
     avisoEl.hidden = false;
@@ -457,6 +538,16 @@ maquinasEl.addEventListener('click', (ev) => {
   const machine = (lastBoard.machines ?? []).find((m) => m.numero === numero);
   if (!machine || machine.grupo) return;
   abrirDialog(machine);
+});
+
+document.querySelectorAll('.modo').forEach((btn) => {
+  btn.addEventListener('click', () => setModo(btn.dataset.modo));
+});
+desenvAbasEl.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-tab]');
+  if (!btn) return;
+  desenvTab = btn.dataset.tab;
+  renderDesenv();
 });
 
 tickClock();

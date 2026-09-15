@@ -1,5 +1,5 @@
 #define AppName "Painel Tecelagem"
-#define AppVersion "1.0.10"
+#define AppVersion "1.1.0"
 #define AppPublisher "Stoll"
 
 [Setup]

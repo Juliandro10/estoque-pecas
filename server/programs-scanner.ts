@@ -40,8 +40,13 @@ import {
   encerrarSyntechParada,
   listSyntechMotivosParada,
 } from './syntech-paradas';
-import { listSyntechDesenvPendentes, lookupSyntechProduto } from './syntech-desenv';
-import { startSyntechCatalogPublish } from './syntech-catalog-publish';
+import {
+  createSyntechProduto,
+  listSyntechDesenvPendentes,
+  listSyntechProdutoOpcoes,
+  lookupSyntechProduto,
+} from './syntech-desenv';
+import { publishSyntechCatalog, startSyntechCatalogPublish } from './syntech-catalog-publish';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
 import {
   addM1Measurement,
@@ -848,6 +853,41 @@ app.get('/api/programs/desenv-produto', async (req, res) => {
   }
 });
 
+app.get('/api/programs/desenv-produto-opcoes', async (_req, res) => {
+  try {
+    res.json(await listSyntechProdutoOpcoes());
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao ler as opções do cadastro Syntech.',
+    });
+  }
+});
+
+app.post('/api/programs/desenv-cadastrar-produto', async (req, res) => {
+  try {
+    const result = await createSyntechProduto({
+      codigo: String(req.body?.codigo ?? ''),
+      nome: String(req.body?.nome ?? ''),
+      classificacao: Number(req.body?.classificacao),
+      grupo: Number(req.body?.grupo),
+      fornecedor: Number(req.body?.fornecedor),
+      funcionario: Number(req.body?.funcionario),
+      ncm: String(req.body?.ncm ?? ''),
+    });
+    void publishSyntechCatalog().catch((err) => {
+      console.warn(
+        'Cadastro Syntech na nuvem falhou após produto novo:',
+        err instanceof Error ? err.message : err
+      );
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para cadastrar o produto no Syntech.',
+    });
+  }
+});
+
 app.get('/api/paradas/motivos', async (_req, res) => {
   try {
     res.json({ motivos: await listSyntechMotivosParada() });
@@ -1013,7 +1053,7 @@ app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 35,
+    version: 36,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -1036,6 +1076,8 @@ app.get('/api/programs/health', (_req, res) => {
       'syntech-paradas',
       'desenv-pendentes',
       'desenv-produto',
+      'desenv-produto-opcoes',
+      'desenv-cadastrar-produto',
       'cadastro-pdf',
       'm1-density',
       'm1-knowledge',

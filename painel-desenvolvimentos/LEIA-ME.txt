@@ -7,10 +7,10 @@ e mudar prioridade — a lista fica na nuvem, igual para todo mundo.
 No PC da programacao (Estoque de Pecas):
   menu Desenvolvimentos
 
-Nos outros PCs:
+Nos outros PCs (cadastro, estilo, etc.):
   instale Painel-Desenvolvimentos-Setup.exe
-  ou, enquanto testa: npm run desenv
   Chrome em http://127.0.0.1:3851
-  entre com a mesma conta do Estoque de Pecas
+  usuario: desenvolvimento
 
-Ainda nao envia o modelo para o Syntech. Isso vem depois.
+Cadastrar Syntech grava o produto novo no Syntech deste PC,
+desde que ele esteja na rede da fabrica.

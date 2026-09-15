@@ -77,7 +77,7 @@ namespace PainelDesenvolvimentos
             };
             tray.DoubleClick += delegate { OpenScreen(); };
 
-            Log("Launcher 1.0.0 em " + root);
+            Log("Launcher 1.1.0 em " + root);
             FormClosing += OnClosing;
             ThreadPool.QueueUserWorkItem(_ => BootFromWorker());
         }
@@ -301,7 +301,7 @@ namespace PainelDesenvolvimentos
                 }
             }
             lines.AppendLine();
-            lines.AppendLine("Entre com a mesma conta do Estoque de Pecas.");
+            lines.AppendLine("Entre com o usuario desenvolvimento.");
             return lines.ToString();
         }
 

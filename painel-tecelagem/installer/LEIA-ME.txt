@@ -1,16 +1,18 @@
 Painel Tecelagem
 ================
 
-No PC da tecelagem:
+No PC da tecelagem (o que fica ligado):
 
-1. Copie o arquivo Painel-Tecelagem-Setup.exe (pen drive ou pasta da rede).
-2. De dois cliques.
-3. Clique em Proximo ate Instalar.
-4. Se o Windows perguntar, permita o aplicativo.
+1. Copie Painel-Tecelagem-Setup.exe
+2. Dois cliques, Proximo ate Instalar
+3. Se o Windows perguntar, permita o aplicativo
 
-Pronto. Nao aparece janela. Sobe sozinho quando o PC ligar.
+Neste PC da fábrica:
+  - quadro das maquinas
+  - abrir e fechar parada (clique na maquina)
+  - ponte do Syntech para o site de Desenvolvimentos
 
-A TV abre no Chrome: http://IP-DO-PC-DA-TECELAGEM:3850
-O celular usa: https://controle-tricot-e-cia.web.app/tecelagem/
+A TV / patrão: https://controle-tricot-e-cia.web.app/tecelagem/
+(só olhar: Tecelagem ou Desenvolvimento)
 
 Para parar, desinstale o Painel Tecelagem no Windows.

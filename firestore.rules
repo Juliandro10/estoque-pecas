@@ -1,22 +1,5 @@
 rules_version = '2';
 
-// ===============================================================
-// Assumed Data Model
-// ===============================================================
-//
-// Collection: tecelagem_publico / document: quadro
-//   json: string (JSON do quadro slim, sem cliente/operador)
-//   updated_at: string ISO
-//
-// Collection: desenvolvimentos / documentos gerados
-//   nome, cliente, status, obs, prioridade (1 = topo),
-//   criado_em, atualizado_em, criado_por
-//
-// Demais coleções (parts, withdrawals, programs, program_clients,
-// model_cadastro, …): qualquer usuário logado no Estoque de Peças,
-// como já era. A conta do painel da tecelagem NÃO acessa essas coleções.
-// ===============================================================
-
 service cloud.firestore {
   match /databases/{database}/documents {
     function isLoggedIn() {
@@ -33,46 +16,47 @@ service cloud.firestore {
         && request.auth.token.email == 'desenvolvimentos@controle-tricot-e-cia.web.app';
     }
 
-    function isValidTecelagemQuadro() {
+    function isValidPublicJson(maxSize) {
       let data = request.resource.data;
       return data.keys().hasOnly(['json', 'updated_at'])
         && data.json is string
         && data.json.size() > 2
-        && data.json.size() < 200000
+        && data.json.size() < maxSize
         && data.updated_at is string
         && data.updated_at.size() >= 10
         && data.updated_at.size() < 80;
     }
 
-    // Leitura pública: pedido explícito para iPhone/Android do patrão,
-    // sem login do Estoque de Peças.
     match /tecelagem_publico/{document} {
       allow read: if true;
-      allow create, update: if isLoggedIn() && isValidTecelagemQuadro();
+      allow create, update: if isLoggedIn() && isValidPublicJson(200000);
       allow delete: if isLoggedIn() && !isPainelAccount();
     }
 
-    // Fila de desenvolvimentos: conta do Estoque (tudo) ou conta compartilhada dos setores.
-    // A conta do painel da tecelagem nao entra aqui.
+    match /desenv_publico/{document} {
+      allow read: if true;
+      allow create, update: if isLoggedIn() && isValidPublicJson(400000);
+      allow delete: if isLoggedIn() && !isPainelAccount();
+    }
+
     match /desenvolvimentos/{id} {
-      allow read, write: if isLoggedIn() && !isPainelAccount();
+      allow read: if isLoggedIn();
+      allow write: if isLoggedIn() && !isPainelAccount();
     }
 
-    function isValidSyntechCatalog() {
-      let data = request.resource.data;
-      return data.keys().hasOnly(['json', 'updated_at'])
-        && data.json is string
-        && data.json.size() > 2
-        && data.json.size() < 900000
-        && data.updated_at is string
-        && data.updated_at.size() >= 10
-        && data.updated_at.size() < 80;
-    }
-
-    // Cadastro resumido do Syntech (codigo, nome) para o celular do desenvolvimento.
     match /syntech_catalog/{id} {
-      allow read: if isLoggedIn() && !isPainelAccount();
-      allow create, update: if isLoggedIn() && !isPainelAccount() && isValidSyntechCatalog();
+      allow read: if isLoggedIn();
+      allow create, update: if isLoggedIn() && isValidPublicJson(900000);
+      allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
+    }
+
+    match /syntech_cadastros/{id} {
+      allow read: if isLoggedIn();
+      allow create: if isLoggedIn() && !isPainelAccount()
+        && request.resource.data.status == 'pendente'
+        && request.resource.data.codigo is string
+        && request.resource.data.nome is string;
+      allow update: if isLoggedIn();
       allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
     }
 

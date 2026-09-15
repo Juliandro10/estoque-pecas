@@ -6,6 +6,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { readSyntechProducaoBoard } from '../server/syntech-producao.ts';
+import {
+  abrirSyntechParada,
+  encerrarSyntechParada,
+  listSyntechMotivosParada,
+} from '../server/syntech-paradas.ts';
+import { startSyntechDesenvBridge } from '../server/syntech-desenv-bridge.ts';
 import { toPainelPublico } from './public-board.ts';
 import { publishPainelToFirebase } from './publish-firebase.ts';
 
@@ -27,6 +33,7 @@ if (!fs.existsSync(path.join(PUBLIC, 'index.html'))) {
 
 const app = express();
 app.use(cors());
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(PUBLIC));
 
 app.get('/api/health', (_req, res) => {
@@ -43,6 +50,47 @@ app.get('/api/quadro', async (_req, res) => {
   } catch (err) {
     res.status(500).json({
       error: err instanceof Error ? err.message : 'Erro ao ler o Syntech.',
+    });
+  }
+});
+
+app.get('/api/paradas/motivos', async (_req, res) => {
+  try {
+    res.json({ motivos: await listSyntechMotivosParada() });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao ler os motivos de parada.',
+    });
+  }
+});
+
+app.post('/api/paradas/abrir', async (req, res) => {
+  try {
+    const result = await abrirSyntechParada({
+      maquina: Number(req.body?.maquina),
+      tipo: Number(req.body?.tipo),
+      codigo: Number(req.body?.codigo),
+      cracha: String(req.body?.cracha ?? ''),
+      obs: String(req.body?.obs ?? ''),
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para abrir a parada.',
+    });
+  }
+});
+
+app.post('/api/paradas/encerrar', async (req, res) => {
+  try {
+    const result = await encerrarSyntechParada({
+      maquina: Number(req.body?.maquina),
+      cracha: String(req.body?.cracha ?? ''),
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para encerrar a parada.',
     });
   }
 });
@@ -65,6 +113,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   setTimeout(() => {
     void publishTick();
     setInterval(() => void publishTick(), 60_000);
+    startSyntechDesenvBridge();
   }, 1500);
 });
 server.on('error', (err) => {

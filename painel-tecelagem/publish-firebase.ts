@@ -37,7 +37,7 @@ function loadDotEnv(root: string) {
 }
 
 function candidateRoots() {
-  const roots = [process.env.PAINEL_ROOT, process.cwd()];
+  const roots = [process.env.PAINEL_ROOT, process.env.DESENV_ROOT, process.cwd()];
   return [...new Set(roots.filter((value): value is string => Boolean(value)))];
 }
 
@@ -85,32 +85,53 @@ async function signIn(apiKey: string, auth: PublishAuth) {
   return body.idToken;
 }
 
-export async function publishPainelToFirebase(board: PainelPublico) {
+export async function getPainelIdToken() {
   const { projectId, apiKey } = loadFirebaseWebConfig();
   const auth = loadPublishAuth();
-  if (!apiKey || !auth) {
-    console.warn('Nuvem: sem login do painel. TV local funciona; celular nao atualiza.');
-    return;
-  }
-
+  if (!apiKey || !auth) return null;
   const idToken = await signIn(apiKey, auth);
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${PAINEL_FIRESTORE_COLLECTION}/${PAINEL_FIRESTORE_DOCUMENT}`;
+  return { projectId, apiKey, idToken };
+}
+
+export async function patchFirestoreJson(
+  collection: string,
+  documentId: string,
+  json: unknown,
+  updatedAt = new Date().toISOString()
+) {
+  const session = await getPainelIdToken();
+  if (!session) {
+    console.warn('Nuvem: sem login do painel.');
+    return false;
+  }
+  const text = JSON.stringify(json);
+  const url = `https://firestore.googleapis.com/v1/projects/${session.projectId}/databases/(default)/documents/${collection}/${documentId}`;
   const res = await fetch(url, {
     method: 'PATCH',
     headers: {
-      Authorization: `Bearer ${idToken}`,
+      Authorization: `Bearer ${session.idToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       fields: {
-        json: { stringValue: JSON.stringify(board) },
-        updated_at: { stringValue: board.updated_at },
+        json: { stringValue: text },
+        updated_at: { stringValue: updatedAt },
       },
     }),
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Firestore ${res.status}: ${text.slice(0, 240)}`);
+    const errText = await res.text();
+    throw new Error(`Firestore ${res.status}: ${errText.slice(0, 240)}`);
   }
-  console.log('Nuvem ok', board.updated_at);
+  return true;
+}
+
+export async function publishPainelToFirebase(board: PainelPublico) {
+  const ok = await patchFirestoreJson(
+    PAINEL_FIRESTORE_COLLECTION,
+    PAINEL_FIRESTORE_DOCUMENT,
+    board,
+    board.updated_at
+  );
+  if (ok) console.log('Nuvem ok', board.updated_at);
 }

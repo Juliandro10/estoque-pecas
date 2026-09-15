@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0e1218" />
     <title>Desenvolvimentos</title>
-    <link rel="stylesheet" href="./desenv.css?v=10" />
+    <link rel="stylesheet" href="./desenv.css?v=32" />
   </head>
   <body>
     <div id="login" class="login" hidden>
@@ -30,11 +30,13 @@
           <span class="user" id="user-email"></span>
           <button type="button" class="btn ghost" id="btn-sair" hidden>Sair</button>
           <button type="button" class="btn ghost" id="btn-syntech" hidden>Do Syntech</button>
+          <button type="button" class="btn ghost" id="btn-cad-syntech" hidden>Cadastrar Syntech</button>
           <button type="button" class="btn" id="btn-novo">Novo desenvolvimento</button>
         </div>
       </header>
       <p class="aviso" id="aviso" hidden></p>
       <nav class="abas" id="abas"></nav>
+      <div class="agora" id="agora" hidden></div>
       <section class="lista" id="lista"></section>
     </div>
     <div id="dlg-syntech" class="dlg" hidden>
@@ -49,6 +51,35 @@
         </div>
       </div>
     </div>
+    <div id="dlg-cad-syntech" class="dlg" hidden>
+      <form class="dlg-card dlg-wide" id="cad-form">
+        <h2>Cadastrar no Syntech</h2>
+        <p class="hint">Código e descrição você escreve. Classificação, grupo, fornecedor, funcionário e NCM vêm do Syntech. O restante entra depois, nos processos.</p>
+        <label for="cad-codigo">Código</label>
+        <input id="cad-codigo" maxlength="13" required placeholder="Ex.: 5615" autocomplete="off" />
+        <label for="cad-nome">Descrição</label>
+        <input id="cad-nome" maxlength="50" required placeholder="Ex.: BLUSA" autocomplete="off" />
+        <label for="cad-classificacao">Classificação</label>
+        <select id="cad-classificacao" required></select>
+        <label for="cad-grupo">Grupo</label>
+        <select id="cad-grupo" required></select>
+        <label for="cad-fornecedor">Fornecedor</label>
+        <select id="cad-fornecedor" required></select>
+        <label for="cad-funcionario">Funcionário</label>
+        <select id="cad-funcionario" required></select>
+        <label for="cad-ncm">NCM</label>
+        <select id="cad-ncm" required></select>
+        <label class="check">
+          <input id="cad-lancar" type="checkbox" checked />
+          Lançar na fila de Desenv/estilo
+        </label>
+        <p class="erro" id="cad-erro"></p>
+        <div class="dlg-acoes">
+          <button type="submit" class="btn go" id="cad-salvar">Cadastrar</button>
+          <button type="button" class="btn ghost" id="cad-cancelar">Cancelar</button>
+        </div>
+      </form>
+    </div>
     <div id="dlg" class="dlg" hidden>
       <form class="dlg-card" id="dlg-form">
         <h2 id="dlg-title">Novo desenvolvimento</h2>
@@ -61,6 +92,9 @@
         <input id="f-cliente" maxlength="60" placeholder="Opcional" />
         <label for="f-setor">Setor</label>
         <select id="f-setor"></select>
+        <label for="f-posicao">Posição na fila</label>
+        <input id="f-posicao" type="number" min="1" step="1" inputmode="numeric" />
+        <p class="hint">1 é o primeiro. Se deixar em branco, entra no fim da fila.</p>
         <label for="f-tipo">O que é</label>
         <select id="f-tipo"></select>
         <div id="f-tipo-outro-wrap" hidden>
@@ -73,13 +107,150 @@
         <div class="dlg-acoes">
           <button type="submit" class="btn go">Salvar</button>
           <button type="button" class="btn ghost" id="dlg-cancelar">Cancelar</button>
+          <button type="button" class="btn ghost danger" id="dlg-apagar" hidden>Apagar</button>
         </div>
       </form>
     </div>
+    <div id="dlg-ficha" class="dlg" hidden>
+      <div class="dlg-card dlg-ficha">
+        <div class="ficha-toolbar">
+          <h2>Ficha técnica de estilo</h2>
+          <div class="ficha-toolbar-acoes">
+            <button type="button" class="btn go" id="ficha-salvar">Salvar</button>
+            <button type="button" class="btn" id="ficha-imprimir">Salvar e imprimir</button>
+            <button type="button" class="btn ghost" id="ficha-fechar">Fechar</button>
+          </div>
+        </div>
+        <p class="hint">Preencha aqui. A folha de papel só aparece na impressão, frente e verso.</p>
+        <p class="erro" id="ficha-erro"></p>
+        <div class="ficha-form">
+          <section class="ficha-sec-box">
+            <h3>Identificação</h3>
+            <div class="ficha-grid3">
+              <label>Coleção<input id="fi-colecao" maxlength="80" /></label>
+              <label>Cliente<input id="fi-cliente" maxlength="80" /></label>
+              <label>Referência<input id="fi-ref" maxlength="20" /></label>
+              <label>Família<input id="fi-familia" maxlength="80" /></label>
+              <label>Estilista<input id="fi-estilista" maxlength="80" /></label>
+              <label>Nome<input id="fi-nome" maxlength="80" /></label>
+              <label>Prioridade<input id="fi-prioridade" maxlength="40" /></label>
+              <label>Data<input id="fi-data" maxlength="20" /></label>
+            </div>
+          </section>
+          <div class="ficha-split">
+            <div class="ficha-split-main">
+              <section class="ficha-sec-box">
+                <h3>Tecimento</h3>
+                <div class="ficha-grid3">
+                  <label>Passadoria<input id="fi-passadoria" maxlength="80" /></label>
+                  <label>Máquina<input id="fi-maquina" maxlength="40" /></label>
+                  <label>Nº cabos<input id="fi-n-cabos" maxlength="40" /></label>
+                  <label>Fio 1<input id="fi-fio1" maxlength="80" /></label>
+                  <label>Fio 2<input id="fi-fio2" maxlength="80" /></label>
+                  <label>Fio 3<input id="fi-fio3" maxlength="80" /></label>
+                  <label class="span3">Cartela / número / cor<textarea id="fi-cartela" maxlength="240"></textarea></label>
+                  <label>Regulagem<input id="fi-regulagem" maxlength="80" /></label>
+                  <label>Barra<input id="fi-barra" maxlength="80" /></label>
+                  <label>Punho<input id="fi-punho" maxlength="80" /></label>
+                </div>
+              </section>
+              <section class="ficha-sec-box">
+                <h3>Peça</h3>
+                <div class="ficha-grid3">
+                  <label class="span3">Frente<input id="fi-frente" maxlength="240" /></label>
+                  <label>Costas<input id="fi-costas" maxlength="80" /></label>
+                  <label>Manga<input id="fi-manga" maxlength="80" /></label>
+                  <label>Acabamento<input id="fi-acabamento" maxlength="80" /></label>
+                  <label>Decote<input id="fi-decote" maxlength="80" /></label>
+                  <label>Etiqueta<input id="fi-etiqueta" maxlength="80" /></label>
+                  <label>Comprimento<input id="fi-comprimento" maxlength="40" /></label>
+                  <label>Largura<input id="fi-largura" maxlength="40" /></label>
+                  <label>Aviamento<input id="fi-aviamento" maxlength="80" /></label>
+                </div>
+              </section>
+            </div>
+            <section class="ficha-sec-box ficha-foto-card">
+              <h3>Foto do modelo</h3>
+              <div class="ficha-foto-box" id="ficha-foto-box">
+                <img id="ficha-foto-preview" alt="Foto do modelo" hidden />
+                <span class="ficha-foto-vazio" id="ficha-foto-vazio">Sem foto</span>
+              </div>
+              <input id="ficha-foto-file" type="file" accept="image/*" hidden />
+              <input id="ficha-foto-cam" type="file" accept="image/*" capture="environment" hidden />
+              <div class="ficha-foto-acoes">
+                <button type="button" class="btn sm" id="ficha-foto-btn">Escolher foto</button>
+                <button type="button" class="btn ghost sm" id="ficha-foto-tirar">Tirar foto</button>
+                <button type="button" class="btn ghost sm" id="ficha-foto-limpar" hidden>Remover</button>
+              </div>
+              <label>Anotação do croqui<textarea id="fi-notas" maxlength="400" placeholder="Opcional. Sai no espaço de desenho da folha."></textarea></label>
+            </section>
+          </div>
+          <section class="ficha-sec-box">
+            <h3>Verso — modelagem</h3>
+            <div class="ficha-grid2">
+              <div class="ficha-ref-card">
+                <label>Ref modelo<input id="fi-ref-modelo" maxlength="80" /></label>
+                <div class="ficha-foto-box sm" id="ficha-foto-modelo-box">
+                  <img id="ficha-foto-modelo-preview" alt="Ref modelo" hidden />
+                  <span class="ficha-foto-vazio" id="ficha-foto-modelo-vazio">Foto da ref modelo</span>
+                </div>
+                <input id="ficha-foto-modelo-file" type="file" accept="image/*" hidden />
+                <input id="ficha-foto-modelo-cam" type="file" accept="image/*" capture="environment" hidden />
+                <div class="ficha-foto-acoes">
+                  <button type="button" class="btn sm" data-foto="modelo" data-foto-act="pick">Escolher</button>
+                  <button type="button" class="btn ghost sm" data-foto="modelo" data-foto-act="cam">Tirar foto</button>
+                  <button type="button" class="btn ghost sm" id="ficha-foto-modelo-limpar" data-foto="modelo" data-foto-act="clear" hidden>Remover</button>
+                </div>
+              </div>
+              <div class="ficha-ref-card">
+                <label>Ref ponto<input id="fi-ref-ponto" maxlength="80" /></label>
+                <div class="ficha-foto-box sm" id="ficha-foto-ponto-box">
+                  <img id="ficha-foto-ponto-preview" alt="Ref ponto" hidden />
+                  <span class="ficha-foto-vazio" id="ficha-foto-ponto-vazio">Foto da ref ponto</span>
+                </div>
+                <input id="ficha-foto-ponto-file" type="file" accept="image/*" hidden />
+                <input id="ficha-foto-ponto-cam" type="file" accept="image/*" capture="environment" hidden />
+                <div class="ficha-foto-acoes">
+                  <button type="button" class="btn sm" data-foto="ponto" data-foto-act="pick">Escolher</button>
+                  <button type="button" class="btn ghost sm" data-foto="ponto" data-foto-act="cam">Tirar foto</button>
+                  <button type="button" class="btn ghost sm" id="ficha-foto-ponto-limpar" data-foto="ponto" data-foto-act="clear" hidden>Remover</button>
+                </div>
+              </div>
+            </div>
+            <label>Comentários de modelagem<textarea id="fi-comentarios" maxlength="800"></textarea></label>
+            <div class="ficha-prova">
+              <h4>1ª prova</h4>
+              <div class="ficha-grid3">
+                <label>Data<input id="fi-p1-data" maxlength="20" /></label>
+                <label>Lacre<input id="fi-p1-lacre" maxlength="40" /></label>
+                <label>Status<input id="fi-p1-status" maxlength="40" /></label>
+              </div>
+            </div>
+            <div class="ficha-prova">
+              <h4>2ª prova</h4>
+              <div class="ficha-grid3">
+                <label>Data<input id="fi-p2-data" maxlength="20" /></label>
+                <label>Lacre<input id="fi-p2-lacre" maxlength="40" /></label>
+                <label>Status<input id="fi-p2-status" maxlength="40" /></label>
+              </div>
+            </div>
+            <div class="ficha-prova">
+              <h4>3ª prova</h4>
+              <div class="ficha-grid3">
+                <label>Data<input id="fi-p3-data" maxlength="20" /></label>
+                <label>Lacre<input id="fi-p3-lacre" maxlength="40" /></label>
+                <label>Status<input id="fi-p3-status" maxlength="40" /></label>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+    <iframe id="ficha-print-frame" class="ficha-print-frame" title="Impressão da ficha"></iframe>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="./firebase-config.js"></script>
-    <script src="./desenv.js?v=10"></script>
+    <script src="./desenv.js?v=32"></script>
   </body>
 </html>

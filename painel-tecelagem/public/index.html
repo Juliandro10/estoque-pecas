@@ -8,24 +8,36 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Tecelagem" />
     <title>Tecelagem</title>
-    <link rel="stylesheet" href="./painel.css?v=10" />
+    <link rel="stylesheet" href="./painel.css?v=11" />
   </head>
   <body>
     <header class="top">
       <div>
-        <h1>Tecelagem</h1>
+        <h1 id="titulo">Tecelagem</h1>
         <p class="sub" id="resumo">Lendo o quadro…</p>
       </div>
-      <div class="clock" id="relogio"></div>
+      <div class="top-right">
+        <nav class="modos" aria-label="Telas">
+          <button type="button" class="modo on" data-modo="tecelagem">Tecelagem</button>
+          <button type="button" class="modo" data-modo="desenv">Desenvolvimento</button>
+        </nav>
+        <div class="clock" id="relogio"></div>
+      </div>
     </header>
     <p class="aviso" id="aviso" hidden></p>
-    <section class="maquinas" id="maquinas"></section>
-    <section class="espera">
-      <h2>Em espera · sugestão (por prazo)</h2>
-      <p class="nota">Não está lançado nessa máquina. É só a próxima que cabe na galga.</p>
-      <div class="espera-list" id="espera"></div>
+    <section id="view-tecelagem">
+      <section class="maquinas" id="maquinas"></section>
+      <section class="espera">
+        <h2>Em espera · sugestão (por prazo)</h2>
+        <p class="nota">Não está lançado nessa máquina. É só a próxima que cabe na galga.</p>
+        <div class="espera-list" id="espera"></div>
+      </section>
+    </section>
+    <section id="view-desenv" hidden>
+      <nav class="abas" id="desenv-abas"></nav>
+      <div class="desenv-lista" id="desenv-lista"></div>
     </section>
     <script src="./firebase-config.js"></script>
-    <script src="./painel.js?v=10"></script>
+    <script src="./painel.js?v=11"></script>
   </body>
 </html>

@@ -12,6 +12,7 @@ function addToPath(folder: string) {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const candidates = [
   process.env.PAINEL_ROOT,
+  process.env.DESENV_ROOT,
   process.cwd(),
   here,
   path.resolve(here, '..'),

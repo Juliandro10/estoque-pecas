@@ -23,7 +23,11 @@ function loadDesenvAuth() {
   const email = process.env.DESENV_FIREBASE_EMAIL ?? DESENV_BOARD_EMAIL;
   const password = process.env.DESENV_FIREBASE_PASSWORD;
   if (email && password) return { email, password };
-  const roots = [process.cwd(), path.resolve(process.cwd(), 'painel-desenvolvimentos')];
+  const roots = [
+    process.env.DESENV_ROOT,
+    process.cwd(),
+    path.resolve(process.cwd(), 'painel-desenvolvimentos'),
+  ].filter((value): value is string => Boolean(value));
   for (const root of roots) {
     const data = readJson(path.join(root, '.setor-auth.json'))
       ?? readJson(path.join(root, 'painel-desenvolvimentos', '.setor-auth.json'));

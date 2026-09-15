@@ -1,19 +1,22 @@
 Desenvolvimentos
 ================
 
-Em cada PC que vai lancar ou mudar prioridade:
+Este programa e so a fila de desenvolvimentos.
+Nao instala o Estoque de Pecas.
 
-1. Copie o arquivo Painel-Desenvolvimentos-Setup.exe (pen drive ou pasta da rede).
+1. Copie Painel-Desenvolvimentos-Setup.exe (pen drive ou pasta da rede).
 2. De dois cliques.
 3. Clique em Proximo ate Instalar.
 4. Se o Windows perguntar, permita o aplicativo.
 
 O Chrome abre em http://127.0.0.1:3851
-Entre com a mesma conta do Estoque de Peças.
+Usuario: desenvolvimento
+Senha: a senha combinada do setor.
 
-A fila e a mesma em todos os PCs: quem lanca, sobe ou desce,
-todo mundo ve na hora.
+Cadastrar Syntech e Do Syntech so funcionam se este PC
+estiver na rede da fabrica, no mesmo Syntech do cadastro
+de produtos. O restante da fila funciona pela nuvem.
 
-No Estoque de Peças a tela e a mesma: menu Desenvolvimentos.
+A fila e a mesma em todos os PCs.
 
 Para parar, desinstale o Painel Desenvolvimentos no Windows.

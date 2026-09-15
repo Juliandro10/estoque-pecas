@@ -41,6 +41,46 @@ if (-not $authDomain) { $authDomain = "$projectId.firebaseapp.com" }
 $cfg = @{ projectId = $projectId; apiKey = $apiKey; authDomain = $authDomain } | ConvertTo-Json -Compress
 $utf8 = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText((Join-Path $publicDst "firebase-config.js"), "window.DESENV_FIREBASE = $cfg;", $utf8)
+[System.IO.File]::WriteAllText((Join-Path $payload "firebase-web.json"), (@{ projectId = $projectId; apiKey = $apiKey } | ConvertTo-Json), $utf8)
+
+$envKeys = @(
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "SYNTECH_FB_HOST",
+  "SYNTECH_FB_PORT",
+  "SYNTECH_FB_DATABASE",
+  "SYNTECH_FB_USER",
+  "SYNTECH_FB_PASSWORD",
+  "DESENV_FIREBASE_EMAIL",
+  "DESENV_FIREBASE_PASSWORD"
+)
+$envMap = @{}
+if (Test-Path $envFile) {
+  Get-Content $envFile | ForEach-Object {
+    if ($_ -match '^\s*([A-Z0-9_]+)=(.*)$') {
+      $k = $Matches[1].Trim()
+      if ($envKeys -contains $k) { $envMap[$k] = $Matches[2].Trim() }
+    }
+  }
+}
+if (-not $envMap.ContainsKey("SYNTECH_FB_HOST")) { $envMap["SYNTECH_FB_HOST"] = "192.168.1.52" }
+if (-not $envMap.ContainsKey("SYNTECH_FB_PORT")) { $envMap["SYNTECH_FB_PORT"] = "3050" }
+if (-not $envMap.ContainsKey("SYNTECH_FB_DATABASE")) { $envMap["SYNTECH_FB_DATABASE"] = "C:\Textil\Empresas\FABRICA.MDB" }
+$envLines = foreach ($k in $envKeys) {
+  if ($envMap.ContainsKey($k) -and $envMap[$k]) { "$k=$($envMap[$k])" }
+}
+[System.IO.File]::WriteAllLines((Join-Path $payload ".env"), $envLines, $utf8)
+
+$setorAuth = Join-Path $root "painel-desenvolvimentos\.setor-auth.json"
+if (Test-Path $setorAuth) {
+  Copy-Item -Force $setorAuth (Join-Path $payload ".setor-auth.json")
+}
+
+Copy-Item -Force (Join-Path $root "tools\firebird-textil\bin64\fbclient.dll") $payload
+Copy-Item -Force (Join-Path $root "tools\firebird-textil\bin64\gds32.dll") $payload
+$fbMsg = Join-Path $root "tools\firebird-textil\fb64\firebird.msg"
+if (Test-Path $fbMsg) { Copy-Item -Force $fbMsg $payload }
 
 Copy-Item -Force (Join-Path $installer "LEIA-ME.txt") (Join-Path $payload "LEIA-ME.txt")
 
@@ -118,4 +158,4 @@ if (-not (Test-Path $setup)) { throw "Instalador nao foi gerado." }
 Copy-Item -Force (Join-Path $installer "LEIA-ME.txt") (Join-Path $dist "LEIA-ME-Painel-Desenvolvimentos.txt")
 Write-Host ""
 Write-Host "Pronto: $setup"
-Write-Host "Leve esse arquivo no pen drive. No outro PC, dois cliques e Proximo."
+Write-Host "Leve esse arquivo no pen drive. No PC do cadastro, dois cliques e Proximo. Nao instala o Estoque de Pecas."
