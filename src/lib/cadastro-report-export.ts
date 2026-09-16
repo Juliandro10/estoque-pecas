@@ -1,5 +1,10 @@
 import type { ModelCadastro, ProgramMachineInfo } from '../types-programming';
-import { buildCadastroPdfBuffer, cadastroPdfFileName, type CadastroPdfInput } from '../../shared/cadastro-pdf';
+import {
+  buildCadastroCustoView,
+  buildCadastroPdfBuffer,
+  cadastroPdfFileName,
+  type CadastroPdfInput,
+} from '../../shared/cadastro-pdf';
 
 export type CadastroPdfMachine = Pick<ProgramMachineInfo, 'cms' | 'gauge' | 'label'> | { label: string };
 
@@ -36,4 +41,12 @@ export function exportCadastroPdf(
   link.click();
   window.open(url, '_blank', 'noopener,noreferrer');
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export function cadastroCustoViewFromModel(
+  cadastro: ModelCadastro,
+  machine?: CadastroPdfMachine | null,
+  yarnTypes: string[] = []
+) {
+  return buildCadastroCustoView(cadastroToPdfInput(cadastro, machine, yarnTypes));
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0e1218" />
     <title>Desenvolvimentos</title>
-    <link rel="stylesheet" href="./desenv.css?v=32" />
+    <link rel="stylesheet" href="./desenv.css?v=35" />
   </head>
   <body>
     <div id="login" class="login" hidden>
@@ -31,6 +31,8 @@
           <button type="button" class="btn ghost" id="btn-sair" hidden>Sair</button>
           <button type="button" class="btn ghost" id="btn-syntech" hidden>Do Syntech</button>
           <button type="button" class="btn ghost" id="btn-cad-syntech" hidden>Cadastrar Syntech</button>
+          <button type="button" class="btn ghost" id="btn-ver-syncad" hidden>Ver cadastro Syntech</button>
+          <button type="button" class="btn ghost" id="btn-ficha-custo">Ficha de custos</button>
           <button type="button" class="btn" id="btn-novo">Novo desenvolvimento</button>
         </div>
       </header>
@@ -246,11 +248,74 @@
         </div>
       </div>
     </div>
+    <div id="dlg-syncad" class="dlg" hidden>
+      <div class="dlg-card dlg-ficha">
+        <div class="ficha-toolbar">
+          <h2>Cadastro Syntech</h2>
+          <div class="ficha-toolbar-acoes">
+            <input id="syncad-codigo" maxlength="13" placeholder="Código" />
+            <button type="button" class="btn" id="syncad-abrir">Abrir</button>
+            <button type="button" class="btn go" id="syncad-salvar">Salvar no Syntech</button>
+            <button type="button" class="btn ghost" id="syncad-novo">Novo</button>
+            <button type="button" class="btn ghost" id="syncad-fechar">Fechar</button>
+          </div>
+        </div>
+        <p class="hint">Três abas do cadastro de produto. No celular a gravação passa pelo PC da tecelagem.</p>
+        <p class="erro" id="syncad-erro"></p>
+        <nav class="syncad-abas" id="syncad-abas">
+          <button type="button" class="on" data-syncad-tab="produto">Produto</button>
+          <button type="button" data-syncad-tab="processos">Processos fábrica</button>
+          <button type="button" data-syncad-tab="ficha">Ficha técnica</button>
+        </nav>
+        <div class="syncad-pane" id="syncad-pane-produto">
+          <div class="ficha-grid3">
+            <label>Descrição<input id="sc-nome" maxlength="50" /></label>
+            <label>Unidade<input id="sc-unidade" maxlength="6" /></label>
+            <label>Peso bruto<input id="sc-peso-bruto" /></label>
+            <label>Peso líquido<input id="sc-peso-liq" /></label>
+            <label>Classificação<select id="sc-classificacao"></select></label>
+            <label>Grupo<select id="sc-grupo"></select></label>
+            <label>Fornecedor<select id="sc-fornecedor"></select></label>
+            <label>Funcionário<select id="sc-funcionario"></select></label>
+            <label>NCM<select id="sc-ncm"></select></label>
+            <label>Estoque mínimo<input id="sc-est-min" /></label>
+            <label>Dias p/ entrega<input id="sc-dias" /></label>
+            <label class="span3">Observações<textarea id="sc-obs" maxlength="200"></textarea></label>
+          </div>
+        </div>
+        <div class="syncad-pane" id="syncad-pane-processos" hidden>
+          <h3>Matéria-prima da máquina</h3>
+          <div class="table-wrap"><table class="syncad-table"><thead><tr><th>Bico</th><th>Parte</th><th>Tipo de fio</th><th>%</th><th>Cabo</th><th>Peso</th></tr></thead><tbody id="sc-bicos"></tbody></table></div>
+          <div class="ficha-grid2">
+            <div>
+              <h3>Partes</h3>
+              <div id="sc-partes"></div>
+              <button type="button" class="btn ghost sm" id="sc-parte-add">+ Parte</button>
+            </div>
+            <div>
+              <h3>Cores do produto</h3>
+              <div id="sc-cores"></div>
+              <button type="button" class="btn ghost sm" id="sc-cor-add">+ Cor</button>
+            </div>
+          </div>
+        </div>
+        <div class="syncad-pane" id="syncad-pane-ficha" hidden>
+          <div class="ficha-grid3">
+            <label class="span2">Programa<input id="sc-programa" maxlength="40" /></label>
+            <label>Rec / máquina<select id="sc-maquina"></select></label>
+          </div>
+          <h3>Guia-fios</h3>
+          <div class="table-wrap"><table class="syncad-table"><thead><tr><th>Nº</th><th>Cabo E</th><th>Esquerda</th><th>Cabo D</th><th>Direita</th><th>Cor do fio</th></tr></thead><tbody id="sc-guias"></tbody></table></div>
+          <h3>Tempo e peso</h3>
+          <div class="table-wrap"><table class="syncad-table"><thead><tr><th>Nº</th><th>Descrição</th><th>Tempo</th><th>Peso</th></tr></thead><tbody id="sc-tempos"></tbody></table></div>
+        </div>
+      </div>
+    </div>
     <iframe id="ficha-print-frame" class="ficha-print-frame" title="Impressão da ficha"></iframe>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="./firebase-config.js"></script>
-    <script src="./desenv.js?v=32"></script>
+    <script src="./desenv.js?v=35"></script>
   </body>
 </html>

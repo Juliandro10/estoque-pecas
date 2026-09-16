@@ -18,6 +18,7 @@ import type {
   SyntechYarnCatalogFile,
   ProducaoBoard,
 } from '../types-programming';
+import type { SyntechProdutoCadastro, SyntechProdutoCadastroOpcoes } from '../../shared/syntech-produto-cadastro';
 import type { ClientFirestoreBackup } from './backup-export';
 
 async function localRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -101,6 +102,21 @@ export const localProgramsApi = {
   syncSyntechFios: () =>
     localRequest<SyntechYarnCatalogFile>('/api/programs/syntech-fios/sync', { method: 'POST' }),
   syntechProducao: () => localRequest<ProducaoBoard>('/api/programs/syntech-producao'),
+  syntechProdutoOpcoes: () => localRequest<SyntechProdutoCadastroOpcoes>('/api/programs/syntech-produto-opcoes'),
+  syntechProdutoGet: (codigo: string) =>
+    localRequest<SyntechProdutoCadastro>(`/api/programs/syntech-produto/${encodeURIComponent(codigo.trim())}`),
+  syntechProdutoSave: (codigo: string, payload: SyntechProdutoCadastro) =>
+    localRequest<{ ok: boolean; codigo: string }>(`/api/programs/syntech-produto/${encodeURIComponent(codigo.trim())}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  syntechProdutoCreate: (payload: SyntechProdutoCadastro) =>
+    localRequest<{ ok: boolean; codigo: string; nome: string }>('/api/programs/syntech-produto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   saveCadastroPdf: (payload: {
     reference: string;
     full_search?: boolean;
@@ -257,6 +273,10 @@ export function scannerSupportsM1Native(health: { version?: number; features?: s
 
 export function scannerSupportsBackup(health: { version?: number; features?: string[] }) {
   return (health.version ?? 0) >= 30 || health.features?.includes('backup') === true;
+}
+
+export function scannerSupportsSyntechProdutoCadastro(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 37 || health.features?.includes('syntech-produto-cadastro') === true;
 }
 
 export function isLocalScannerAvailable() {

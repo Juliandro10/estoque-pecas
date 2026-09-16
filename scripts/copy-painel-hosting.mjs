@@ -67,3 +67,14 @@ if (apiKey) {
   );
 }
 console.log(`Desenvolvimentos copiado para ${desenvDest}`);
+
+const fichaCustoDest = path.join(root, 'dist', 'ficha-custo');
+fs.rmSync(fichaCustoDest, { recursive: true, force: true });
+fs.cpSync(path.join(root, 'ficha-custo', 'public'), fichaCustoDest, { recursive: true });
+if (apiKey) {
+  fs.writeFileSync(
+    path.join(fichaCustoDest, 'firebase-config.js'),
+    `window.FICHA_CUSTO_FIREBASE = ${JSON.stringify({ projectId, apiKey })};\n`
+  );
+}
+console.log(`Ficha de custos copiada para ${fichaCustoDest}`);

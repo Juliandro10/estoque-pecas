@@ -11,6 +11,12 @@ import {
   listSyntechProdutoOpcoes,
   lookupSyntechProduto,
 } from '../server/syntech-desenv.ts';
+import {
+  createSyntechProdutoCadastro,
+  getSyntechProdutoCadastro,
+  listSyntechProdutoCadastroOpcoes,
+  saveSyntechProdutoCadastro,
+} from '../server/syntech-produto-cadastro.ts';
 import { publishSyntechCatalog } from '../server/syntech-catalog-publish.ts';
 
 const PORT = Number(process.env.DESENV_PORT ?? 3851);
@@ -116,6 +122,39 @@ app.post('/api/programs/desenv-cadastrar-produto', async (req, res) => {
       );
     });
     res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: syntechError(err) });
+  }
+});
+app.get('/api/programs/syntech-produto-opcoes', async (_req, res) => {
+  try {
+    res.json(await listSyntechProdutoCadastroOpcoes());
+  } catch (err) {
+    res.status(503).json({ error: syntechError(err) });
+  }
+});
+app.get('/api/programs/syntech-produto/:codigo', async (req, res) => {
+  try {
+    res.json(await getSyntechProdutoCadastro(String(req.params.codigo ?? '')));
+  } catch (err) {
+    res.status(404).json({ error: syntechError(err) });
+  }
+});
+app.put('/api/programs/syntech-produto/:codigo', async (req, res) => {
+  try {
+    res.json(
+      await saveSyntechProdutoCadastro({
+        ...(req.body ?? {}),
+        codigo: String(req.params.codigo ?? req.body?.codigo ?? ''),
+      } as import('../shared/syntech-produto-cadastro.ts').SyntechProdutoCadastro)
+    );
+  } catch (err) {
+    res.status(400).json({ error: syntechError(err) });
+  }
+});
+app.post('/api/programs/syntech-produto', async (req, res) => {
+  try {
+    res.json(await createSyntechProdutoCadastro((req.body ?? {}) as import('../shared/syntech-produto-cadastro.ts').SyntechProdutoCadastro));
   } catch (err) {
     res.status(400).json({ error: syntechError(err) });
   }

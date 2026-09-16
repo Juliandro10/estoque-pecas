@@ -56,6 +56,15 @@
             "value": "no-cache"
           }
         ]
+      },
+      {
+        "source": "/ficha-custo/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ],
     "rewrites": [
@@ -74,6 +83,14 @@
       {
         "source": "/quadro-board",
         "destination": "/quadro-board/index.html"
+      },
+      {
+        "source": "/ficha-custo",
+        "destination": "/ficha-custo/index.html"
+      },
+      {
+        "source": "/ficha-custo/",
+        "destination": "/ficha-custo/index.html"
       },
       {
         "source": "**",

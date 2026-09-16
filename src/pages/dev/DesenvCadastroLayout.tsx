@@ -14,9 +14,15 @@ export function DesenvCadastroLayout() {
         <NavLink to="/desenv-cadastro" end className={({ isActive }) => (isActive ? 'active' : '')}>
           Cadastro
         </NavLink>
+        <NavLink to="/desenv-cadastro/syntech" className={({ isActive }) => (isActive ? 'active' : '')}>
+          Cadastro Syntech
+        </NavLink>
         <NavLink to="/desenv-cadastro/fios" className={({ isActive }) => (isActive ? 'active' : '')}>
           Fios Syntech
         </NavLink>
+        <a href="/ficha-custo/" target="_blank" rel="noreferrer">
+          Ficha de custos
+        </a>
       </nav>
 
       <Outlet />

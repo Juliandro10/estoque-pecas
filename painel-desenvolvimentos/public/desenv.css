@@ -169,7 +169,38 @@ h1 { margin: 0; font-size: 34px; letter-spacing: 0.03em; }
 .selo.cliente { background: #243044; color: #d5e4ff; }
 .selo.encerrado { background: #2a2f38; color: #9aa6b8; }
 .selo.tipo { background: #3a241c; color: #ffd4c8; }
-.acoes { display: flex; flex-direction: column; gap: 6px; }
+.acoes {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.acoes-setor {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.mais-wrap { position: relative; }
+.mais-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 12;
+  min-width: 188px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: #171d27;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+.mais-menu .btn { width: 100%; text-align: left; }
 .btn {
   border: 0;
   border-radius: 8px;
@@ -326,6 +357,34 @@ h1 { margin: 0; font-size: 34px; letter-spacing: 0.03em; }
   font-weight: 700;
 }
 .ficha-form .span3 { grid-column: 1 / -1; }
+.syncad-abas {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 12px;
+}
+.syncad-abas button {
+  border: 1px solid var(--line);
+  background: #10151d;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.syncad-abas button.on {
+  background: var(--ok);
+  color: #062214;
+  border-color: var(--ok);
+}
+.syncad-pane h3 { margin: 14px 0 8px; font-size: 14px; color: var(--wait); }
+.syncad-pane .span2 { grid-column: span 2; }
+.syncad-pane .span3 { grid-column: 1 / -1; }
+.syncad-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.syncad-table th, .syncad-table td { border: 1px solid var(--line); padding: 4px; }
+.syncad-table input, .syncad-table select { width: 100%; }
+.ficha-toolbar-acoes input { width: 120px; }
 .ficha-form input,
 .ficha-form textarea {
   width: 100%;
@@ -403,7 +462,7 @@ h1 { margin: 0; font-size: 34px; letter-spacing: 0.03em; }
 }
 @media (max-width: 700px) {
   .card { grid-template-columns: 44px 1fr; }
-  .acoes { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+  .acoes { grid-column: 1 / -1; }
   h1 { font-size: 26px; }
   .ficha-grid2, .ficha-grid3 { grid-template-columns: 1fr; }
 }

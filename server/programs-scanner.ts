@@ -46,8 +46,20 @@ import {
   listSyntechProdutoOpcoes,
   lookupSyntechProduto,
 } from './syntech-desenv';
+import {
+  createSyntechProdutoCadastro,
+  getSyntechProdutoCadastro,
+  listSyntechProdutoCadastroOpcoes,
+  saveSyntechProdutoCadastro,
+} from './syntech-produto-cadastro';
+import type { SyntechProdutoCadastro } from '../shared/syntech-produto-cadastro';
 import { publishSyntechCatalog, startSyntechCatalogPublish } from './syntech-catalog-publish';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
+import {
+  findCadastroPdfInFolder,
+  publishCadastroPdfToNuvem,
+  startCadastroPdfImportOnce,
+} from './cadastro-custo-file';
 import {
   addM1Measurement,
   computeDensity,
@@ -888,6 +900,57 @@ app.post('/api/programs/desenv-cadastrar-produto', async (req, res) => {
   }
 });
 
+app.get('/api/programs/syntech-produto-opcoes', async (_req, res) => {
+  try {
+    res.json(await listSyntechProdutoCadastroOpcoes());
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Erro ao ler as opções do cadastro Syntech.',
+    });
+  }
+});
+
+app.get('/api/programs/syntech-produto/:codigo', async (req, res) => {
+  try {
+    res.json(await getSyntechProdutoCadastro(String(req.params.codigo ?? '')));
+  } catch (err) {
+    res.status(404).json({
+      error: err instanceof Error ? err.message : 'Não achei esse produto no Syntech.',
+    });
+  }
+});
+
+app.put('/api/programs/syntech-produto/:codigo', async (req, res) => {
+  try {
+    const result = await saveSyntechProdutoCadastro({
+      ...(req.body ?? {}),
+      codigo: String(req.params.codigo ?? req.body?.codigo ?? ''),
+    } as SyntechProdutoCadastro);
+    void publishSyntechCatalog().catch((err) => {
+      console.warn('Catálogo Syntech após correção:', err instanceof Error ? err.message : err);
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para gravar o cadastro no Syntech.',
+    });
+  }
+});
+
+app.post('/api/programs/syntech-produto', async (req, res) => {
+  try {
+    const result = await createSyntechProdutoCadastro((req.body ?? {}) as SyntechProdutoCadastro);
+    void publishSyntechCatalog().catch((err) => {
+      console.warn('Catálogo Syntech após produto novo:', err instanceof Error ? err.message : err);
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para cadastrar o produto no Syntech.',
+    });
+  }
+});
+
 app.get('/api/paradas/motivos', async (_req, res) => {
   try {
     res.json({ motivos: await listSyntechMotivosParada() });
@@ -926,6 +989,36 @@ app.post('/api/paradas/encerrar', async (req, res) => {
     res.status(400).json({
       error: err instanceof Error ? err.message : 'Não deu para encerrar a parada.',
     });
+  }
+});
+
+app.get('/api/programs/cadastro-pdf', async (req, res) => {
+  try {
+    const reference = String(req.query.ref ?? req.query.codigo ?? '').trim();
+    if (!reference) {
+      res.status(400).json({ error: 'Informe a referência.' });
+      return;
+    }
+    startCadastroPdfImportOnce();
+    const match = findProgram(reference, true);
+    if (!match) {
+      res.status(404).json({ error: 'Pasta do programa não encontrada.' });
+      return;
+    }
+    const hit = findCadastroPdfInFolder(match.folder_path, reference);
+    if (!hit) {
+      res.status(404).json({ error: 'Não achei PDF de custos na pasta do programa.' });
+      return;
+    }
+    const buffer = fs.readFileSync(hit.path);
+    void publishCadastroPdfToNuvem(hit).catch((err) => {
+      console.warn('Cópia da ficha para a nuvem:', err instanceof Error ? err.message : err);
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${hit.file_name}"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao abrir o PDF.' });
   }
 });
 
@@ -974,6 +1067,14 @@ app.post('/api/programs/cadastro-pdf', async (req, res) => {
     });
     fs.writeFileSync(filePath, pdf);
     openLocalFile(filePath);
+    void publishCadastroPdfToNuvem({
+      reference,
+      path: filePath,
+      file_name: fileName,
+      bytes: pdf.length,
+    }).catch((err) => {
+      console.warn('Cópia da ficha para a nuvem:', err instanceof Error ? err.message : err);
+    });
 
     res.json({ ok: true, path: filePath, file_name: fileName, opened: true });
   } catch (err) {
@@ -1053,7 +1154,7 @@ app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 36,
+    version: 38,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -1078,7 +1179,9 @@ app.get('/api/programs/health', (_req, res) => {
       'desenv-produto',
       'desenv-produto-opcoes',
       'desenv-cadastrar-produto',
+      'syntech-produto-cadastro',
       'cadastro-pdf',
+      'cadastro-pdf-read',
       'm1-density',
       'm1-knowledge',
       'm1-measurements',
@@ -1106,4 +1209,5 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`${M1_SIN_CAPTURE_BUILD}: M1 processa → .sin + .simx em dados do programa/{{parte}}/`);
   console.log('Sintral tela: cheque aberto → controle-sintral.json + .txt em dados do programa/{parte}/');
   startSyntechCatalogPublish();
+  setTimeout(() => startCadastroPdfImportOnce(), 12000);
 });

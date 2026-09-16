@@ -56,6 +56,9 @@ export function Layout() {
           <NavLink to="/desenv-cadastro" className={({ isActive }) => (isActive ? 'active' : '')}>
             Desenv-Cadastro
           </NavLink>
+          <a href="/ficha-custo/" target="_blank" rel="noreferrer">
+            Ficha de custos
+          </a>
           <NavLink to="/desenv-m1" className={({ isActive }) => (isActive ? 'active' : '')}>
             Desenv-M1
           </NavLink>

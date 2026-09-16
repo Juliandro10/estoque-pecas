@@ -39,6 +39,18 @@ service cloud.firestore {
       allow delete: if isLoggedIn() && !isPainelAccount();
     }
 
+    match /cadastro_custo_publico/{document} {
+      allow read: if true;
+      allow create, update: if isLoggedIn() && isValidPublicJson(200000);
+      allow delete: if isLoggedIn() && !isPainelAccount();
+    }
+
+    match /cadastro_custo_pdf/{document} {
+      allow read: if true;
+      allow create, update: if isLoggedIn() && isValidPublicJson(900000);
+      allow delete: if isLoggedIn() && !isPainelAccount();
+    }
+
     match /desenvolvimentos/{id} {
       allow read: if isLoggedIn();
       allow write: if isLoggedIn() && !isPainelAccount();
@@ -54,8 +66,7 @@ service cloud.firestore {
       allow read: if isLoggedIn();
       allow create: if isLoggedIn() && !isPainelAccount()
         && request.resource.data.status == 'pendente'
-        && request.resource.data.codigo is string
-        && request.resource.data.nome is string;
+        && request.resource.data.codigo is string;
       allow update: if isLoggedIn();
       allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
     }

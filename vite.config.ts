@@ -9,8 +9,10 @@ import { defineConfig } from 'vite';
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const BOARD = 'quadro-board';
 const DESENV = 'desenv-board';
+const FICHA_CUSTO = 'ficha-custo';
 const boardSrc = path.resolve(rootDir, 'painel-tecelagem/public');
 const desenvSrc = path.resolve(rootDir, 'painel-desenvolvimentos/public');
+const fichaCustoSrc = path.resolve(rootDir, 'ficha-custo/public');
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -36,13 +38,22 @@ function loadDotEnv() {
   }
 }
 
-function desenvFirebaseConfigJs() {
+function firebaseEnv() {
   loadDotEnv();
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID ?? 'controle-tricot-e-cia';
   const apiKey = process.env.VITE_FIREBASE_API_KEY ?? '';
   const authDomain =
     process.env.VITE_FIREBASE_AUTH_DOMAIN ?? `${projectId}.firebaseapp.com`;
-  return `window.DESENV_FIREBASE = ${JSON.stringify({ projectId, apiKey, authDomain })};\n`;
+  return { projectId, apiKey, authDomain };
+}
+
+function desenvFirebaseConfigJs() {
+  return `window.DESENV_FIREBASE = ${JSON.stringify(firebaseEnv())};\n`;
+}
+
+function fichaCustoFirebaseConfigJs() {
+  const { projectId, apiKey } = firebaseEnv();
+  return `window.FICHA_CUSTO_FIREBASE = ${JSON.stringify({ projectId, apiKey })};\n`;
 }
 
 function staticBoardPlugin(name: string, prefix: string, src: string): Plugin {
@@ -57,6 +68,11 @@ function staticBoardPlugin(name: string, prefix: string, src: string): Plugin {
     if (name === DESENV && rel === 'firebase-config.js') {
       res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
       res.end(desenvFirebaseConfigJs());
+      return;
+    }
+    if (name === FICHA_CUSTO && rel === 'firebase-config.js') {
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      res.end(fichaCustoFirebaseConfigJs());
       return;
     }
     const file = path.normalize(path.join(src, rel));
@@ -81,6 +97,9 @@ function staticBoardPlugin(name: string, prefix: string, src: string): Plugin {
       if (name === DESENV) {
         fs.writeFileSync(path.join(dest, 'firebase-config.js'), desenvFirebaseConfigJs());
       }
+      if (name === FICHA_CUSTO) {
+        fs.writeFileSync(path.join(dest, 'firebase-config.js'), fichaCustoFirebaseConfigJs());
+      }
     },
   };
 }
@@ -90,6 +109,7 @@ export default defineConfig({
     react(),
     staticBoardPlugin(BOARD, `/${BOARD}`, boardSrc),
     staticBoardPlugin(DESENV, `/${DESENV}`, desenvSrc),
+    staticBoardPlugin(FICHA_CUSTO, `/${FICHA_CUSTO}`, fichaCustoSrc),
   ],
   resolve: {
     alias: {

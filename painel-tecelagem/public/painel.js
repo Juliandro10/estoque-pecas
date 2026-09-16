@@ -30,6 +30,23 @@ function esc(value) {
   }[ch]));
 }
 
+function fichaCustoUrl(ref) {
+  const url = new URL('../ficha-custo/', window.location.href);
+  const value = String(ref ?? '').trim();
+  if (value) url.searchParams.set('ref', value);
+  return url.toString();
+}
+
+function openFichaCusto(ref) {
+  window.open(fichaCustoUrl(ref), '_blank', 'noopener,noreferrer');
+}
+
+function fichaCustoBtn(ref) {
+  const value = String(ref ?? '').trim();
+  if (!value) return '';
+  return `<button type="button" class="ficha-custo" data-ficha-custo="${esc(value)}">Ficha custos</button>`;
+}
+
 function padItem(n) {
   return String(n).padStart(6, '0');
 }
@@ -376,6 +393,7 @@ function render(board) {
         <div class="destaque fim${fimCls ? ` ${fimCls}` : ''}">Término — ${esc(formatTermino(termino))}</div>
         <div class="detalhe">Ordem atual ${esc(padItem(agora.item_op))} — falta ${esc(pecasLabel(agora.restante))}</div>
         ${depois}
+        ${fichaCustoBtn(agora.programa)}
       </div></article>`;
     })
     .join('');
@@ -388,6 +406,7 @@ function render(board) {
         <strong>${esc(p.pedido ?? '—')} · ${esc(referencia)}</strong>
         Prazo ${esc(formatDate(p.prazo))} · ${esc(p.restante)} pç
         · sugestão máq. ${esc(p.sugestao_maquina ?? '—')} · entra ${esc(formatDate(p.sugestao_entra_em))}
+        ${fichaCustoBtn(referencia === '—' ? '' : referencia)}
       </article>`;
     })
     .join('');
@@ -461,6 +480,7 @@ function renderDesenv() {
       return `<article class="desenv-card${item.trabalhando ? ' trabalho' : ''}">
         <div class="nome">${ref}${esc(item.nome)}</div>
         <div class="meta">${cliente} · ${esc(tipoPublico(item))}${item.trabalhando ? ' · em trabalho' : ''}</div>
+        ${fichaCustoBtn(item.ref)}
       </article>`;
     })
     .join('');
@@ -530,7 +550,17 @@ async function load() {
   }
 }
 
+function onFichaCustoClick(ev) {
+  const btn = ev.target.closest('[data-ficha-custo]');
+  if (!btn) return false;
+  ev.preventDefault();
+  ev.stopPropagation();
+  openFichaCusto(btn.getAttribute('data-ficha-custo'));
+  return true;
+}
+
 maquinasEl.addEventListener('click', (ev) => {
+  if (onFichaCustoClick(ev)) return;
   if (!canWrite) return;
   const card = ev.target.closest('.maq[data-maq]');
   if (!card || !lastBoard) return;
@@ -543,6 +573,13 @@ maquinasEl.addEventListener('click', (ev) => {
 document.querySelectorAll('.modo').forEach((btn) => {
   btn.addEventListener('click', () => setModo(btn.dataset.modo));
 });
+document.getElementById('btn-ficha-custo').addEventListener('click', (ev) => {
+  ev.preventDefault();
+  ev.stopPropagation();
+  openFichaCusto('');
+});
+esperaEl.addEventListener('click', onFichaCustoClick);
+desenvListaEl.addEventListener('click', onFichaCustoClick);
 desenvAbasEl.addEventListener('click', (ev) => {
   const btn = ev.target.closest('button[data-tab]');
   if (!btn) return;

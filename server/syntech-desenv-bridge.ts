@@ -3,8 +3,13 @@ import {
   createSyntechProduto,
   listSyntechDesenvPendentes,
   listSyntechProdutoCatalog,
-  listSyntechProdutoOpcoes,
 } from './syntech-desenv.ts';
+import {
+  createSyntechProdutoCadastro,
+  getSyntechProdutoCadastro,
+  listSyntechProdutoCadastroOpcoes,
+  saveSyntechProdutoCadastro,
+} from './syntech-produto-cadastro.ts';
 
 export const SYNTECH_CATALOG_COLLECTION = 'syntech_catalog';
 export const SYNTECH_CATALOG_DOCUMENT = 'produtos';
@@ -177,7 +182,7 @@ async function publishDesenvPublico() {
 
 export async function publishSyntechDesenvNuvem() {
   const catalog = await listSyntechProdutoCatalog();
-  const opcoes = await listSyntechProdutoOpcoes();
+  const opcoes = await listSyntechProdutoCadastroOpcoes();
   const pendentes = await listSyntechDesenvPendentes('');
   const now = new Date().toISOString();
   await patchFirestoreJson(SYNTECH_CATALOG_COLLECTION, SYNTECH_CATALOG_DOCUMENT, catalog, now);
@@ -193,9 +198,55 @@ async function processCadastroFila() {
   const jobs = await firestoreQueryPendentes();
   for (const job of jobs) {
     const id = String(job.id);
+    const acao = String(job.acao ?? 'criar');
+    const codigo = String(job.codigo ?? '');
     try {
+      if (acao === 'ler') {
+        const produto = await getSyntechProdutoCadastro(codigo);
+        await firestorePatchFields(SYNTECH_CADASTROS_COLLECTION, id, {
+          status: 'ok',
+          codigo: produto.codigo,
+          nome: produto.nome,
+          json: JSON.stringify(produto),
+          atualizado_em: new Date().toISOString(),
+          erro: '',
+        });
+        console.log(`Syntech cadastro lido ${produto.codigo}`);
+        continue;
+      }
+      if (acao === 'salvar') {
+        const payload = JSON.parse(String(job.json ?? '{}')) as Record<string, unknown>;
+        const result = await saveSyntechProdutoCadastro({
+          ...payload,
+          codigo: String(payload.codigo ?? codigo),
+        } as Parameters<typeof saveSyntechProdutoCadastro>[0]);
+        await firestorePatchFields(SYNTECH_CADASTROS_COLLECTION, id, {
+          status: 'ok',
+          codigo: result.codigo,
+          atualizado_em: new Date().toISOString(),
+          erro: '',
+        });
+        console.log(`Syntech cadastro gravado ${result.codigo}`);
+        continue;
+      }
+      if (acao === 'criar-completo') {
+        const payload = JSON.parse(String(job.json ?? '{}')) as Record<string, unknown>;
+        const result = await createSyntechProdutoCadastro({
+          ...payload,
+          codigo: String(payload.codigo ?? codigo),
+        } as Parameters<typeof createSyntechProdutoCadastro>[0]);
+        await firestorePatchFields(SYNTECH_CADASTROS_COLLECTION, id, {
+          status: 'ok',
+          codigo: result.codigo,
+          nome: result.nome,
+          atualizado_em: new Date().toISOString(),
+          erro: '',
+        });
+        console.log(`Syntech cadastro completo ok ${result.codigo}`);
+        continue;
+      }
       const result = await createSyntechProduto({
-        codigo: String(job.codigo ?? ''),
+        codigo,
         nome: String(job.nome ?? ''),
         classificacao: Number(job.classificacao),
         grupo: Number(job.grupo),

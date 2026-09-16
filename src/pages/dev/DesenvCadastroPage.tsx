@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   applyAutoYarnConsumption,
@@ -27,7 +28,8 @@ import {
   totalYarnConsumption,
 } from '../../lib/cadastro-db';
 import { normalizeYarnCaboSpelling } from '../../../shared/yarn-description-parse';
-import { exportCadastroPdf } from '../../lib/cadastro-report-export';
+import { cadastroCustoViewFromModel, exportCadastroPdf } from '../../lib/cadastro-report-export';
+import { cadastroCustoPageUrl, publishCadastroCusto } from '../../lib/cadastro-custo-publish';
 import {
   expandConsolidatedForProcessos,
   processYarnRowsReadyForSyntech,
@@ -807,6 +809,11 @@ export function DesenvCadastroPage() {
     }
   }
 
+  function viewFichaCustos() {
+    const ref = reference.trim();
+    window.open(ref ? cadastroCustoPageUrl(ref) : '/ficha-custo/', '_blank', 'noopener,noreferrer');
+  }
+
   async function exportPdf() {
     const ref = reference.trim();
     if (!ref || parts.length === 0) {
@@ -824,9 +831,19 @@ export function DesenvCadastroPage() {
     };
 
     const machine = machineLabel.trim() ? { label: machineLabel.trim() } : null;
+    const yarnTypes = yarnCatalog?.types.map((item) => item.tipo) ?? [];
+
+    const publishConsulta = async () => {
+      try {
+        await publishCadastroCusto(cadastroCustoViewFromModel(cadastro, machine, yarnTypes));
+      } catch {
+        /* a consulta no navegador fica sem esta geração */
+      }
+    };
 
     if (!localMode || !scannerOk) {
-      exportCadastroPdf(cadastro, machine, yarnCatalog?.types.map((item) => item.tipo) ?? []);
+      await publishConsulta();
+      exportCadastroPdf(cadastro, machine, yarnTypes);
       return;
     }
 
@@ -841,7 +858,8 @@ export function DesenvCadastroPage() {
       }
       if (!folder) {
         setError('Pasta do programa não encontrada. Use busca completa se necessário.');
-        exportCadastroPdf(cadastro, machine, yarnCatalog?.types.map((item) => item.tipo) ?? []);
+        await publishConsulta();
+        exportCadastroPdf(cadastro, machine, yarnTypes);
         return;
       }
 
@@ -854,10 +872,12 @@ export function DesenvCadastroPage() {
           machine_label: machine?.label,
         },
       });
+      await publishConsulta();
       setInfo(`PDF salvo em dados do programa/${result.file_name} e aberto.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar PDF na pasta do programa.');
-      exportCadastroPdf(cadastro, machine, yarnCatalog?.types.map((item) => item.tipo) ?? []);
+      await publishConsulta();
+      exportCadastroPdf(cadastro, machine, yarnTypes);
     } finally {
       setExportingPdf(false);
     }
@@ -888,6 +908,12 @@ export function DesenvCadastroPage() {
           <button type="submit" className="btn" disabled={loading || readingTimes}>
             {loading ? 'Carregando…' : 'Carregar'}
           </button>
+          <Link
+            className="btn btn-ghost"
+            to={`/desenv-cadastro/syntech${reference.trim() ? `?codigo=${encodeURIComponent(reference.trim())}` : ''}`}
+          >
+            Ver cadastro Syntech
+          </Link>
         </div>
         <label className="check-row">
           <input
@@ -1270,6 +1296,9 @@ export function DesenvCadastroPage() {
                 {pushingSyntech ? 'Enviando…' : 'Enviar ao Syntech'}
               </button>
             ) : null}
+            <button type="button" className="btn btn-ghost" onClick={() => viewFichaCustos()}>
+              Ver ficha de custos
+            </button>
             <button
               type="button"
               className="btn btn-ghost"

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ficha de custos</title>
+    <link rel="stylesheet" href="./ficha-custo.css?v=2" />
+  </head>
+  <body>
+    <div class="toolbar">
+      <input id="ref" type="text" inputmode="numeric" placeholder="Referência, ex. 5614" />
+      <button type="button" id="abrir">Abrir</button>
+      <button type="button" class="ghost" id="imprimir">Imprimir</button>
+    </div>
+    <p class="erro" id="erro" hidden></p>
+    <div id="folha"></div>
+    <script src="./firebase-config.js"></script>
+    <script src="./ficha-custo.js?v=2"></script>
+  </body>
+</html>

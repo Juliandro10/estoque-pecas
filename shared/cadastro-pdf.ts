@@ -14,10 +14,12 @@ import {
 import { expandProcessYarnComponents, type ProcessYarnComponent } from './yarn-blend-core';
 import { bicoProcessoLabel } from './guia-fio-text';
 
+export type CadastroPdfPart = PartWeightRow & { time_mmss?: string };
+
 export type CadastroPdfInput = {
   reference: string;
   name: string;
-  parts: PartWeightRow[];
+  parts: CadastroPdfPart[];
   yarn_parts: YarnPartRow[];
   observations: string;
   updated_at: string;
@@ -29,6 +31,30 @@ export type CadastroPdfInput = {
   machine_label?: string;
   /** Tipos do catálogo Syntech — sem isso a lantejoula vira "FIO" e o PDF rateia 50/50. */
   yarn_types?: string[];
+};
+
+export type CadastroCustoView = {
+  reference: string;
+  name: string;
+  company: string;
+  machine_line: string;
+  updated_at: string;
+  updated_label: string;
+  parts: { label: string; file_name: string; time: string; weight: string }[];
+  parts_total_time: string;
+  parts_total_weight: string;
+  yarns: {
+    pct: string;
+    consumption: string;
+    bico: string;
+    letter: string;
+    description: string;
+    parts: string;
+  }[];
+  summary: { tipo: string; cor: string; peso: string; pct: string }[];
+  summary_total_peso: string;
+  summary_total_pct: string;
+  observations: string;
 };
 
 function formatGenerated(iso: string) {
@@ -152,39 +178,7 @@ export function summarizeYarnWeightByTypeAndColor(
     .sort((a, b) => b.consumptionKg - a.consumptionKg || a.tipo.localeCompare(b.tipo, 'pt-BR'));
 }
 
-export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-  doc.setFontSize(16);
-  doc.text('Ficha de Cadastro — Dados de Custo', 14, 18);
-  doc.setFontSize(11);
-  doc.setTextColor(80);
-  doc.text('TRICOT & CIA', 14, 26);
-  doc.text(`Ref: ${cadastro.reference} — ${cadastro.name}`, 14, 32);
-
-  let y = 38;
-  const machineLine = formatMachinePdfLine(cadastro);
-  if (machineLine) {
-    doc.text(machineLine, 14, y);
-    y += 6;
-  }
-  doc.text(`Atualizado: ${formatGenerated(cadastro.updated_at)}`, 14, y);
-  doc.setTextColor(0);
-
-  autoTable(doc, {
-    startY: y + 6,
-    head: [['Parte', 'Arquivo', 'Tempo', 'Peso bruto (kg)']],
-    body: cadastro.parts.map((p) => [p.label, p.file_name || '—', p.time_mmss || '—', p.weight_kg || '—']),
-    foot: [['Total', '', totalPartsTime(cadastro.parts), totalPartsWeight(cadastro.parts)]],
-    styles: { fontSize: 9, cellPadding: 2.5 },
-    headStyles: { fillColor: [18, 28, 46] },
-    footStyles: { fillColor: [235, 238, 243], fontStyle: 'bold', textColor: [0, 0, 0] },
-    theme: 'grid',
-  });
-
-  let yAfterParts = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 6;
-  yAfterParts += 8;
-
+export function buildCadastroCustoView(cadastro: CadastroPdfInput): CadastroCustoView {
   const yarnParts = applyAutoYarnConsumption(cadastro.yarn_parts, cadastro.parts);
   const consolidated = consolidateYarnParts(yarnParts, cadastro.parts);
   const partWeightKg = cadastro.parts.reduce((sum, part) => sum + parseConsumptionInput(part.weight_kg), 0);
@@ -202,38 +196,112 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
     cadastro.yarn_types ?? []
   ).filter((row) => row.consumptionKg > 0);
 
-  if (expanded.length > 0) {
-    const siblings = expanded.map((row) => ({
-      guide: row.guide,
-      slot: row.slot,
-      letter: row.letter,
-      side: row.side,
-      parts: row.parts,
-      componentIndex: row.componentIndex,
-    }));
+  const siblings = expanded.map((row) => ({
+    guide: row.guide,
+    slot: row.slot,
+    letter: row.letter,
+    side: row.side,
+    parts: row.parts,
+    componentIndex: row.componentIndex,
+  }));
+
+  const yarns = expanded.map((row) => ({
+    pct: formatPct(row.pct),
+    consumption: formatConsumption(row.consumptionKg),
+    bico: bicoProcessoLabel(
+      {
+        guide: row.guide,
+        slot: row.slot,
+        letter: row.letter,
+        side: row.side,
+        parts: row.parts,
+        componentIndex: row.componentIndex,
+      },
+      siblings
+    ),
+    letter: row.letter ?? '',
+    description: row.description || '—',
+    parts: (row.parts ?? []).join(', '),
+  }));
+
+  const summaryRows = summarizeYarnWeightByTypeAndColor(expanded, partWeightKg);
+  const summaryTotal = summaryRows.reduce((sum, row) => sum + row.consumptionKg, 0);
+
+  return {
+    reference: cadastro.reference.trim(),
+    name: cadastro.name.trim(),
+    company: 'TRICOT & CIA',
+    machine_line: formatMachinePdfLine(cadastro),
+    updated_at: cadastro.updated_at,
+    updated_label: formatGenerated(cadastro.updated_at),
+    parts: cadastro.parts.map((part) => ({
+      label: part.label || '—',
+      file_name: part.file_name || '—',
+      time: part.time_mmss || '—',
+      weight: part.weight_kg || '—',
+    })),
+    parts_total_time: totalPartsTime(cadastro.parts),
+    parts_total_weight: totalPartsWeight(cadastro.parts),
+    yarns,
+    summary: summaryRows.map((row) => ({
+      tipo: row.tipo,
+      cor: row.cor,
+      peso: formatConsumption(row.consumptionKg),
+      pct: formatPct(row.pct),
+    })),
+    summary_total_peso: formatConsumption(summaryTotal),
+    summary_total_pct: formatPct(summaryRows.reduce((sum, row) => sum + row.pct, 0) || (summaryRows.length ? 100 : 0)),
+    observations: cadastro.observations.trim(),
+  };
+}
+
+export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
+  const view = buildCadastroCustoView(cadastro);
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  doc.setFontSize(16);
+  doc.text('Ficha de Cadastro — Dados de Custo', 14, 18);
+  doc.setFontSize(11);
+  doc.setTextColor(80);
+  doc.text(view.company, 14, 26);
+  doc.text(`Ref: ${view.reference} — ${view.name}`, 14, 32);
+
+  let y = 38;
+  if (view.machine_line) {
+    doc.text(view.machine_line, 14, y);
+    y += 6;
+  }
+  doc.text(`Atualizado: ${view.updated_label}`, 14, y);
+  doc.setTextColor(0);
+
+  autoTable(doc, {
+    startY: y + 6,
+    head: [['Parte', 'Arquivo', 'Tempo', 'Peso bruto (kg)']],
+    body: view.parts.map((p) => [p.label, p.file_name, p.time, p.weight]),
+    foot: [['Total', '', view.parts_total_time, view.parts_total_weight]],
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [18, 28, 46] },
+    footStyles: { fillColor: [235, 238, 243], fontStyle: 'bold', textColor: [0, 0, 0] },
+    theme: 'grid',
+  });
+
+  let yAfterParts = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 6;
+  yAfterParts += 8;
+
+  if (view.yarns.length > 0) {
     doc.setFontSize(11);
     doc.text('Fios consolidados (programa)', 14, yAfterParts);
     yAfterParts += 4;
     autoTable(doc, {
       startY: yAfterParts + 2,
       head: [['%', 'Consumo total', 'Bico', 'Fio', 'Descrição', 'Partes']],
-      body: expanded.map((row) => [
-        formatPct(row.pct),
-        formatConsumption(row.consumptionKg),
-        bicoProcessoLabel(
-          {
-            guide: row.guide,
-            slot: row.slot,
-            letter: row.letter,
-            side: row.side,
-            parts: row.parts,
-            componentIndex: row.componentIndex,
-          },
-          siblings
-        ),
-        row.letter ?? '',
-        row.description || '—',
-        (row.parts ?? []).join(', '),
+      body: view.yarns.map((row) => [
+        row.pct,
+        row.consumption,
+        row.bico,
+        row.letter,
+        row.description,
+        row.parts,
       ]),
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [18, 28, 46] },
@@ -242,29 +310,15 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
     yAfterParts = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? yAfterParts;
     yAfterParts += 8;
 
-    const summary = summarizeYarnWeightByTypeAndColor(expanded, partWeightKg);
-    if (summary.length > 0) {
-      const summaryTotal = summary.reduce((sum, row) => sum + row.consumptionKg, 0);
+    if (view.summary.length > 0) {
       doc.setFontSize(11);
       doc.text('Resumo para preço — peso por fio e cor', 14, yAfterParts);
       yAfterParts += 4;
       autoTable(doc, {
         startY: yAfterParts + 2,
         head: [['Fio', 'Cor', 'Peso (kg)', '%']],
-        body: summary.map((row) => [
-          row.tipo,
-          row.cor,
-          formatConsumption(row.consumptionKg),
-          formatPct(row.pct),
-        ]),
-        foot: [
-          [
-            'Total',
-            '',
-            formatConsumption(summaryTotal),
-            formatPct(summary.reduce((sum, row) => sum + row.pct, 0) || 100),
-          ],
-        ],
+        body: view.summary.map((row) => [row.tipo, row.cor, row.peso, row.pct]),
+        foot: [['Total', '', view.summary_total_peso, view.summary_total_pct]],
         styles: { fontSize: 9, cellPadding: 2.5 },
         headStyles: { fillColor: [18, 28, 46] },
         footStyles: { fillColor: [235, 238, 243], fontStyle: 'bold', textColor: [0, 0, 0] },
@@ -280,8 +334,8 @@ export function buildCadastroPdfBuffer(cadastro: CadastroPdfInput): Buffer {
   }
 
   doc.setFontSize(10);
-  if (cadastro.observations) {
-    doc.text(`Obs: ${cadastro.observations}`, 14, yAfterParts);
+  if (view.observations) {
+    doc.text(`Obs: ${view.observations}`, 14, yAfterParts);
   }
 
   const arrayBuffer = doc.output('arraybuffer');

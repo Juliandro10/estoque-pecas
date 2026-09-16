@@ -93,6 +93,8 @@ const synBusca = document.getElementById('syn-busca');
 const synErro = document.getElementById('syn-erro');
 const btnSyntech = document.getElementById('btn-syntech');
 const btnCadSyntech = document.getElementById('btn-cad-syntech');
+const btnVerSyncad = document.getElementById('btn-ver-syncad');
+const dlgSyncad = document.getElementById('dlg-syncad');
 const dlgCad = document.getElementById('dlg-cad-syntech');
 const cadForm = document.getElementById('cad-form');
 const cadErro = document.getElementById('cad-erro');
@@ -202,6 +204,17 @@ function refOf(item) {
   return String(item?.syntech_codigo ?? item?.referencia ?? '').trim();
 }
 
+function fichaCustoUrl(ref) {
+  const url = new URL('../ficha-custo/', window.location.href);
+  const value = String(ref ?? '').trim();
+  if (value) url.searchParams.set('ref', value);
+  return url.toString();
+}
+
+function openFichaCusto(ref) {
+  window.open(fichaCustoUrl(ref), '_blank', 'noopener,noreferrer');
+}
+
 function sameRef(item, codigo) {
   const left = refOf(item);
   const right = String(codigo ?? '').trim();
@@ -225,6 +238,29 @@ function temFicha(item) {
   const ficha = item?.ficha;
   if (!ficha || typeof ficha !== 'object') return false;
   return Object.values(ficha).some((value) => String(value ?? '').trim());
+}
+
+function closeAllMais(except) {
+  document.querySelectorAll('.mais-wrap.open').forEach((wrap) => {
+    if (wrap === except) return;
+    wrap.classList.remove('open');
+    const btn = wrap.querySelector('[data-act="mais"]');
+    const menu = wrap.querySelector('.mais-menu');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+    if (menu) menu.hidden = true;
+  });
+}
+
+function toggleMais(btn) {
+  const wrap = btn.closest('.mais-wrap');
+  if (!wrap) return;
+  const menu = wrap.querySelector('.mais-menu');
+  const open = wrap.classList.contains('open');
+  closeAllMais();
+  if (open || !menu) return;
+  wrap.classList.add('open');
+  btn.setAttribute('aria-expanded', 'true');
+  menu.hidden = false;
 }
 
 function dataFicha(iso) {
@@ -958,6 +994,16 @@ function render() {
           : status === 'encerrado'
             ? ''
             : `${voltarBtn}<button type="button" class="btn go sm" data-act="ok">${esc(OK_LABEL)}</button>`;
+      const maisMenu = `<div class="mais-wrap">
+          <button type="button" class="btn ghost sm" data-act="mais" aria-expanded="false">Mais</button>
+          <div class="mais-menu" hidden>
+            <button type="button" class="btn ghost sm" data-act="ficha">Ficha</button>
+            <button type="button" class="btn ghost sm" data-act="ficha-custo">Ficha custos</button>
+            <button type="button" class="btn ghost sm" data-act="syncad">Cadastro Syntech</button>
+            <button type="button" class="btn ghost sm" data-act="edit">Editar</button>
+            <button type="button" class="btn ghost sm danger" data-act="apagar">Apagar</button>
+          </div>
+        </div>`;
       return `<article class="card${aberto ? ' trabalho' : ''}${temPrioAlerta(item) ? ' prio-alerta' : ''}" data-id="${esc(item.id)}">
         <div class="prio">
           ${
@@ -978,11 +1024,11 @@ function render() {
           ${obs}
         </div>
         <div class="acoes">
-          ${abrirBtn}
-          ${okBtn}
-          <button type="button" class="btn ghost sm" data-act="ficha">Ficha</button>
-          <button type="button" class="btn ghost sm" data-act="edit">Editar</button>
-          <button type="button" class="btn ghost sm danger" data-act="apagar">Apagar</button>
+          <div class="acoes-setor">
+            ${abrirBtn}
+            ${okBtn}
+          </div>
+          ${maisMenu}
         </div>
       </article>`;
     })
@@ -1235,6 +1281,7 @@ async function probeSyntech() {
   }
   btnSyntech.hidden = !syntechOk;
   btnCadSyntech.hidden = !syntechOk;
+  btnVerSyncad.hidden = !syntechOk;
 }
 
 async function addFromSyntech(codigo) {
@@ -1324,6 +1371,323 @@ function closeCadDialog() {
   dlgCad.hidden = true;
   cadBusy = false;
   document.getElementById('cad-salvar').disabled = false;
+}
+
+let syncadNovo = false;
+let syncadOpcoes = null;
+let syncadForm = null;
+
+function emptySyncad(codigo) {
+  return {
+    codigo: codigo || '',
+    nome: '',
+    unidade: 'PC',
+    peso_bruto: 0,
+    peso_liquido: 0,
+    classificacao: null,
+    grupo: null,
+    fornecedor: null,
+    funcionario: null,
+    ncm: '',
+    estoque_minimo: 0,
+    dias_entrega: 0,
+    observacoes: '',
+    programa: '',
+    maquina: null,
+    bicos: Array.from({ length: 10 }, (_, i) => ({
+      bico: i + 1,
+      parte: '',
+      tipo_fio: null,
+      perc: null,
+      cabo: null,
+      peso: null,
+    })),
+    partes: [],
+    cores: [],
+    guias: Array.from({ length: 8 }, (_, i) => ({
+      numero: i + 1,
+      esquerda: '',
+      cabo: '',
+      direita: '',
+      cabod: '',
+      cor_do_fio: '',
+    })),
+    tempos: Array.from({ length: 8 }, (_, i) => ({
+      numero: i + 1,
+      descricao: '',
+      tempo: '',
+      peso: null,
+    })),
+  };
+}
+
+function numVal(el) {
+  const n = Number(String(el.value ?? '').replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+async function waitFilaSyntech(docRef) {
+  for (let i = 0; i < 45; i += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 800));
+    const snap = await docRef.get();
+    const row = snap.data() || {};
+    if (row.status === 'ok') return row;
+    if (row.status === 'erro') throw new Error(row.erro || 'Não deu para falar com o Syntech.');
+  }
+  throw new Error('O PC da tecelagem ainda não gravou. Confira se o Painel Tecelagem está ligado.');
+}
+
+async function loadSyncadOpcoes() {
+  if (syntechLocal) {
+    const res = await fetch('/api/programs/syntech-produto-opcoes');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Não deu para ler as opções do Syntech.');
+    syncadOpcoes = data;
+  } else {
+    const data = await readNuvemJson('syntech_catalog', 'opcoes');
+    if (!data) throw new Error('Ainda não chegou o cadastro do Syntech. Deixe o Painel Tecelagem ligado.');
+    syncadOpcoes = data;
+  }
+  fillLookup('sc-classificacao', syncadOpcoes.classificacoes, syncadForm?.classificacao);
+  fillLookup('sc-grupo', syncadOpcoes.grupos, syncadForm?.grupo);
+  fillLookup('sc-fornecedor', syncadOpcoes.fornecedores, syncadForm?.fornecedor);
+  fillLookup('sc-funcionario', syncadOpcoes.funcionarios, syncadForm?.funcionario);
+  fillLookup('sc-ncm', syncadOpcoes.ncms, syncadForm?.ncm, true);
+  ['sc-classificacao', 'sc-grupo', 'sc-fornecedor', 'sc-funcionario', 'sc-ncm'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && ![...el.options].some((opt) => opt.value === '')) {
+      el.insertAdjacentHTML('afterbegin', '<option value="">—</option>');
+    }
+  });
+  const maq = document.getElementById('sc-maquina');
+  maq.innerHTML = `<option value="">—</option>${(syncadOpcoes.maquinas || [])
+    .map(
+      (row) =>
+        `<option value="${esc(row.numero)}"${Number(syncadForm?.maquina) === Number(row.numero) ? ' selected' : ''}>${esc(`${String(row.numero).padStart(4, '0')} ${row.nome || ''}`)}</option>`
+    )
+    .join('')}`;
+}
+
+function tipoFioOptions(selected) {
+  return `<option value="">—</option>${(syncadOpcoes?.tipos_fio || [])
+    .map(
+      (row) =>
+        `<option value="${esc(row.codigo)}"${Number(selected) === Number(row.codigo) ? ' selected' : ''}>${esc(`${row.codigo} ${row.nome || ''}`)}</option>`
+    )
+    .join('')}`;
+}
+
+function paintSyncadLists() {
+  document.getElementById('sc-bicos').innerHTML = (syncadForm.bicos || [])
+    .map(
+      (row) => `<tr>
+        <td>${row.bico}</td>
+        <td><input data-sc-bico="${row.bico}" data-k="parte" value="${esc(row.parte || '')}" /></td>
+        <td><select data-sc-bico="${row.bico}" data-k="tipo_fio">${tipoFioOptions(row.tipo_fio)}</select></td>
+        <td><input data-sc-bico="${row.bico}" data-k="perc" value="${row.perc ?? ''}" /></td>
+        <td><input data-sc-bico="${row.bico}" data-k="cabo" value="${row.cabo ?? ''}" /></td>
+        <td><input data-sc-bico="${row.bico}" data-k="peso" value="${row.peso ?? ''}" /></td>
+      </tr>`
+    )
+    .join('');
+  document.getElementById('sc-guias').innerHTML = (syncadForm.guias || [])
+    .map(
+      (row) => `<tr>
+        <td>${row.numero}</td>
+        <td><input data-sc-guia="${row.numero}" data-k="cabo" value="${esc(row.cabo || '')}" /></td>
+        <td><input data-sc-guia="${row.numero}" data-k="esquerda" value="${esc(row.esquerda || '')}" /></td>
+        <td><input data-sc-guia="${row.numero}" data-k="cabod" value="${esc(row.cabod || '')}" /></td>
+        <td><input data-sc-guia="${row.numero}" data-k="direita" value="${esc(row.direita || '')}" /></td>
+        <td><input data-sc-guia="${row.numero}" data-k="cor_do_fio" value="${esc(row.cor_do_fio || '')}" /></td>
+      </tr>`
+    )
+    .join('');
+  document.getElementById('sc-tempos').innerHTML = (syncadForm.tempos || [])
+    .map(
+      (row) => `<tr>
+        <td>${row.numero}</td>
+        <td><input data-sc-tempo="${row.numero}" data-k="descricao" value="${esc(row.descricao || '')}" /></td>
+        <td><input data-sc-tempo="${row.numero}" data-k="tempo" placeholder="mm:ss" value="${esc(row.tempo || '')}" /></td>
+        <td><input data-sc-tempo="${row.numero}" data-k="peso" value="${row.peso ?? ''}" /></td>
+      </tr>`
+    )
+    .join('');
+  document.getElementById('sc-partes').innerHTML = (syncadForm.partes || [])
+    .map(
+      (row, i) => `<div class="ficha-grid2" style="margin-bottom:6px">
+        <input data-sc-parte="${i}" data-k="parte" placeholder="Parte" value="${esc(row.parte || '')}" />
+        <input data-sc-parte="${i}" data-k="quant" placeholder="Qtd" value="${row.quant ?? 1}" />
+      </div>`
+    )
+    .join('');
+  document.getElementById('sc-cores').innerHTML = (syncadForm.cores || [])
+    .map(
+      (row, i) => `<div class="ficha-grid2" style="margin-bottom:6px">
+        <input data-sc-cor="${i}" data-k="cor" placeholder="Cód." value="${row.cor || ''}" />
+        <input data-sc-cor="${i}" data-k="nome" placeholder="Nome" value="${esc(row.nome || '')}" />
+      </div>`
+    )
+    .join('');
+}
+
+function paintSyncadCabecalho() {
+  const f = syncadForm;
+  document.getElementById('syncad-codigo').value = f.codigo || '';
+  document.getElementById('sc-nome').value = f.nome || '';
+  document.getElementById('sc-unidade').value = f.unidade || 'PC';
+  document.getElementById('sc-peso-bruto').value = f.peso_bruto ?? '';
+  document.getElementById('sc-peso-liq').value = f.peso_liquido ?? '';
+  document.getElementById('sc-est-min').value = f.estoque_minimo ?? '';
+  document.getElementById('sc-dias').value = f.dias_entrega ?? '';
+  document.getElementById('sc-obs').value = f.observacoes || '';
+  document.getElementById('sc-programa').value = f.programa || '';
+  document.getElementById('sc-classificacao').value = f.classificacao ?? '';
+  document.getElementById('sc-grupo').value = f.grupo ?? '';
+  document.getElementById('sc-fornecedor').value = f.fornecedor ?? '';
+  document.getElementById('sc-funcionario').value = f.funcionario ?? '';
+  document.getElementById('sc-ncm').value = f.ncm || '';
+  document.getElementById('sc-maquina').value = f.maquina ?? '';
+}
+
+function collectSyncad() {
+  const form = emptySyncad(document.getElementById('syncad-codigo').value.trim());
+  form.nome = document.getElementById('sc-nome').value.trim();
+  form.unidade = document.getElementById('sc-unidade').value.trim() || 'PC';
+  form.peso_bruto = numVal(document.getElementById('sc-peso-bruto')) ?? 0;
+  form.peso_liquido = numVal(document.getElementById('sc-peso-liq')) ?? 0;
+  form.classificacao = numVal(document.getElementById('sc-classificacao'));
+  form.grupo = numVal(document.getElementById('sc-grupo'));
+  form.fornecedor = numVal(document.getElementById('sc-fornecedor'));
+  form.funcionario = numVal(document.getElementById('sc-funcionario'));
+  form.ncm = document.getElementById('sc-ncm').value.trim();
+  form.estoque_minimo = numVal(document.getElementById('sc-est-min')) ?? 0;
+  form.dias_entrega = numVal(document.getElementById('sc-dias')) ?? 0;
+  form.observacoes = document.getElementById('sc-obs').value.trim();
+  form.programa = document.getElementById('sc-programa').value.trim();
+  form.maquina = numVal(document.getElementById('sc-maquina'));
+  form.bicos = [...document.querySelectorAll('#sc-bicos tr')].map((tr, i) => ({
+    bico: i + 1,
+    parte: tr.querySelector('[data-k=parte]')?.value.trim() || '',
+    tipo_fio: numVal(tr.querySelector('[data-k=tipo_fio]')),
+    perc: numVal(tr.querySelector('[data-k=perc]')),
+    cabo: numVal(tr.querySelector('[data-k=cabo]')),
+    peso: numVal(tr.querySelector('[data-k=peso]')),
+  }));
+  form.guias = [...document.querySelectorAll('#sc-guias tr')].map((tr, i) => ({
+    numero: i + 1,
+    cabo: tr.querySelector('[data-k=cabo]')?.value.trim() || '',
+    esquerda: tr.querySelector('[data-k=esquerda]')?.value.trim() || '',
+    cabod: tr.querySelector('[data-k=cabod]')?.value.trim() || '',
+    direita: tr.querySelector('[data-k=direita]')?.value.trim() || '',
+    cor_do_fio: tr.querySelector('[data-k=cor_do_fio]')?.value.trim() || '',
+  }));
+  form.tempos = [...document.querySelectorAll('#sc-tempos tr')].map((tr, i) => ({
+    numero: i + 1,
+    descricao: tr.querySelector('[data-k=descricao]')?.value.trim() || '',
+    tempo: tr.querySelector('[data-k=tempo]')?.value.trim() || '',
+    peso: numVal(tr.querySelector('[data-k=peso]')),
+  }));
+  const parteN = document.querySelectorAll('#sc-partes [data-sc-parte][data-k=parte]').length;
+  form.partes = [];
+  for (let i = 0; i < parteN; i += 1) {
+    const parte = document.querySelector(`[data-sc-parte="${i}"][data-k=parte]`)?.value.trim() || '';
+    const quant = numVal(document.querySelector(`[data-sc-parte="${i}"][data-k=quant]`)) ?? 1;
+    if (parte) form.partes.push({ parte, quant });
+  }
+  const corN = document.querySelectorAll('#sc-cores [data-sc-cor][data-k=cor]').length;
+  form.cores = [];
+  for (let i = 0; i < corN; i += 1) {
+    const cor = numVal(document.querySelector(`[data-sc-cor="${i}"][data-k=cor]`)) ?? 0;
+    const nome = document.querySelector(`[data-sc-cor="${i}"][data-k=nome]`)?.value.trim() || '';
+    if (cor) form.cores.push({ cor, nome, principal: i === 0 });
+  }
+  return form;
+}
+
+async function fetchSyncad(codigo) {
+  if (syntechLocal) {
+    const res = await fetch(`/api/programs/syntech-produto/${encodeURIComponent(codigo)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Não achei esse produto no Syntech.');
+    return data;
+  }
+  document.getElementById('syncad-erro').textContent = 'Enviando Syntech…';
+  const docRef = await db.collection('syntech_cadastros').add({
+    status: 'pendente',
+    acao: 'ler',
+    codigo,
+    nome: '',
+    criado_em: new Date().toISOString(),
+  });
+  const row = await waitFilaSyntech(docRef);
+  if (!row.json) throw new Error('O Syntech não devolveu o cadastro.');
+  return JSON.parse(row.json);
+}
+
+async function openSyncad(codigo) {
+  const erro = document.getElementById('syncad-erro');
+  erro.textContent = '';
+  syncadNovo = !codigo;
+  syncadForm = emptySyncad(codigo || '');
+  dlgSyncad.hidden = false;
+  document.getElementById('syncad-codigo').value = codigo || '';
+  try {
+    await loadSyncadOpcoes();
+    if (codigo) {
+      syncadForm = await fetchSyncad(codigo);
+      syncadNovo = false;
+    }
+    paintSyncadLists();
+    paintSyncadCabecalho();
+    erro.textContent = '';
+  } catch (err) {
+    paintSyncadLists();
+    paintSyncadCabecalho();
+    erro.textContent = err instanceof Error ? err.message : 'Não deu para abrir o cadastro.';
+  }
+}
+
+async function saveSyncad() {
+  const erro = document.getElementById('syncad-erro');
+  erro.textContent = '';
+  const form = collectSyncad();
+  if (!form.codigo || !form.nome) {
+    erro.textContent = 'Informe código e descrição.';
+    return;
+  }
+  try {
+    if (syntechLocal) {
+      const url = syncadNovo
+        ? '/api/programs/syntech-produto'
+        : `/api/programs/syntech-produto/${encodeURIComponent(form.codigo)}`;
+      const res = await fetch(url, {
+        method: syncadNovo ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não deu para gravar no Syntech.');
+      syncadNovo = false;
+      document.getElementById('syncad-codigo').value = data.codigo || form.codigo;
+      erro.textContent = `Gravado ${data.codigo || form.codigo}.`;
+      return;
+    }
+    erro.textContent = 'Enviando Syntech…';
+    const docRef = await db.collection('syntech_cadastros').add({
+      status: 'pendente',
+      acao: syncadNovo ? 'criar-completo' : 'salvar',
+      codigo: form.codigo,
+      nome: form.nome,
+      json: JSON.stringify(form),
+      criado_em: new Date().toISOString(),
+    });
+    const row = await waitFilaSyntech(docRef);
+    syncadNovo = false;
+    document.getElementById('syncad-codigo').value = row.codigo || form.codigo;
+    erro.textContent = `Gravado ${row.codigo || form.codigo}.`;
+  } catch (err) {
+    erro.textContent = err instanceof Error ? err.message : 'Não deu para gravar no Syntech.';
+  }
 }
 
 function isEnterField(el) {
@@ -1569,6 +1933,12 @@ document.getElementById('btn-syntech').addEventListener('click', () => {
 document.getElementById('btn-cad-syntech').addEventListener('click', () => {
   void openCadDialog();
 });
+document.getElementById('btn-ver-syncad').addEventListener('click', () => {
+  void openSyncad('');
+});
+document.getElementById('btn-ficha-custo').addEventListener('click', () => {
+  openFichaCusto('');
+});
 document.getElementById('cad-cancelar').addEventListener('click', closeCadDialog);
 bindBackdropClose(dlgCad, closeCadDialog);
 cadForm.addEventListener('submit', (ev) => {
@@ -1704,9 +2074,16 @@ listaEl.addEventListener('keydown', (ev) => {
 });
 listaEl.addEventListener('click', (ev) => {
   if (ev.target.closest('button[data-act="visto-prio"]')) {
+    closeAllMais();
     void vistoPrioridade(activeTab);
     return;
   }
+  const maisBtn = ev.target.closest('button[data-act="mais"]');
+  if (maisBtn) {
+    toggleMais(maisBtn);
+    return;
+  }
+  if (!ev.target.closest('.mais-wrap')) closeAllMais();
   const btn = ev.target.closest('button[data-act]');
   const card = ev.target.closest('.card');
   if (!btn || !card) return;
@@ -1714,6 +2091,8 @@ listaEl.addEventListener('click', (ev) => {
   if (!item) return;
   if (btn.dataset.act === 'edit') openDialog(item);
   if (btn.dataset.act === 'ficha') openFicha(item);
+  if (btn.dataset.act === 'ficha-custo') openFichaCusto(refOf(item));
+  if (btn.dataset.act === 'syncad') void openSyncad(refOf(item));
   if (btn.dataset.act === 'ok') void avancar(item);
   if (btn.dataset.act === 'abrir') void setTrabalhando(item, true);
   if (btn.dataset.act === 'fechar') void setTrabalhando(item, false);
@@ -1721,6 +2100,10 @@ listaEl.addEventListener('click', (ev) => {
   if (btn.dataset.act === 'voltar') void voltouCliente(item);
   if (btn.dataset.act === 'encerrar') void encerrar(item);
   if (btn.dataset.act === 'apagar') void apagar(item);
+  closeAllMais();
+});
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest('.mais-wrap')) closeAllMais();
 });
 
 document.getElementById('ficha-fechar').addEventListener('click', closeFicha);
@@ -1776,5 +2159,40 @@ dlgFicha.addEventListener('click', (ev) => {
     ev.target.value = '';
   });
 });
+
+document.getElementById('syncad-fechar').addEventListener('click', () => {
+  dlgSyncad.hidden = true;
+});
+document.getElementById('syncad-abrir').addEventListener('click', () => {
+  void openSyncad(document.getElementById('syncad-codigo').value.trim());
+});
+document.getElementById('syncad-salvar').addEventListener('click', () => {
+  void saveSyncad();
+});
+document.getElementById('syncad-novo').addEventListener('click', () => {
+  void openSyncad('');
+});
+document.getElementById('syncad-abas').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-syncad-tab]');
+  if (!btn) return;
+  document.querySelectorAll('#syncad-abas button').forEach((el) => el.classList.toggle('on', el === btn));
+  document.getElementById('syncad-pane-produto').hidden = btn.dataset.syncadTab !== 'produto';
+  document.getElementById('syncad-pane-processos').hidden = btn.dataset.syncadTab !== 'processos';
+  document.getElementById('syncad-pane-ficha').hidden = btn.dataset.syncadTab !== 'ficha';
+});
+document.getElementById('sc-parte-add').addEventListener('click', () => {
+  syncadForm = collectSyncad();
+  syncadForm.partes.push({ parte: '', quant: 1 });
+  paintSyncadLists();
+});
+document.getElementById('sc-cor-add').addEventListener('click', () => {
+  syncadForm = collectSyncad();
+  syncadForm.cores.push({ cor: 0, nome: '', principal: syncadForm.cores.length === 0 });
+  paintSyncadLists();
+});
+bindBackdropClose(dlgSyncad, () => {
+  dlgSyncad.hidden = true;
+});
+dlgSyncad.addEventListener('keydown', onEnterNextField);
 
 boot();

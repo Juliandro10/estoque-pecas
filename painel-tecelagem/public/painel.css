@@ -40,6 +40,17 @@ h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
   cursor: pointer;
 }
 .modo.on { background: #6ea8ff; border-color: #6ea8ff; color: #071018; }
+.ficha-custo-top {
+  border: 1px solid var(--line);
+  background: #141a23;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ficha-custo-top:hover { color: var(--text); border-color: #4a5a74; }
 .abas {
   display: flex;
   flex-wrap: wrap;
@@ -212,6 +223,20 @@ h1 { margin: 0; font-size: 42px; letter-spacing: 0.04em; }
 .fim.late { color: var(--late); }
 .detalhe { margin-top: 8px; color: var(--muted); font-size: 13px; }
 .depois { margin-top: 4px; font-size: 13px; color: var(--muted); opacity: 0.85; }
+.ficha-custo {
+  display: inline-block;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  background: #141a23;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ficha-custo:hover { color: var(--text); border-color: #4a5a74; }
 
 .espera { margin-top: 22px; }
 .espera h2 { margin: 0 0 4px; font-size: 22px; }
