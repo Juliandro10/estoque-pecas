@@ -59,6 +59,8 @@ export type SyntechProdutoCadastro = {
   cores: SyntechProdutoCor[];
   guias: SyntechProdutoGuia[];
   tempos: SyntechProdutoTempo[];
+  md5_foto?: string;
+  tem_foto?: boolean;
 };
 
 export type SyntechLookupOption = {
@@ -136,5 +138,7 @@ export function emptySyntechProdutoCadastro(codigo = ''): SyntechProdutoCadastro
     cores: [],
     guias: emptyGuias(),
     tempos: emptyTempos(),
+    md5_foto: '',
+    tem_foto: false,
   };
 }

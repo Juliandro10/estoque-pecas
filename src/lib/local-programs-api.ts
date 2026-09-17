@@ -105,6 +105,8 @@ export const localProgramsApi = {
   syntechProdutoOpcoes: () => localRequest<SyntechProdutoCadastroOpcoes>('/api/programs/syntech-produto-opcoes'),
   syntechProdutoGet: (codigo: string) =>
     localRequest<SyntechProdutoCadastro>(`/api/programs/syntech-produto/${encodeURIComponent(codigo.trim())}`),
+  syntechProdutoFotoUrl: (codigo: string, md5 = '') =>
+    `/api/programs/syntech-produto-foto/${encodeURIComponent(codigo.trim())}${md5 ? `?md5=${encodeURIComponent(md5)}` : ''}`,
   syntechProdutoSave: (codigo: string, payload: SyntechProdutoCadastro) =>
     localRequest<{ ok: boolean; codigo: string }>(`/api/programs/syntech-produto/${encodeURIComponent(codigo.trim())}`, {
       method: 'PUT',
@@ -212,7 +214,7 @@ export const localProgramsApi = {
       search_days: number;
       features?: string[];
     }>('/api/programs/health'),
-  backup: (options?: {
+    backup: (options?: {
     localOnly?: boolean;
     firestoreOnly?: boolean;
     firestore?: ClientFirestoreBackup;
@@ -221,6 +223,18 @@ export const localProgramsApi = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(options ?? {}),
+    }),
+  mensageiroSenha: (uid: string, senha: string) =>
+    localRequest<{ ok: boolean }>('/api/programs/mensageiro-senha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, senha }),
+    }),
+  mensageiroExcluir: (uid: string) =>
+    localRequest<{ ok: boolean }>('/api/programs/mensageiro-excluir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid }),
     }),
 };
 
@@ -277,6 +291,14 @@ export function scannerSupportsBackup(health: { version?: number; features?: str
 
 export function scannerSupportsSyntechProdutoCadastro(health: { version?: number; features?: string[] }) {
   return (health.version ?? 0) >= 37 || health.features?.includes('syntech-produto-cadastro') === true;
+}
+
+export function scannerSupportsMensageiroSenha(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 40 || health.features?.includes('mensageiro-senha') === true;
+}
+
+export function scannerSupportsMensageiroExcluir(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 41 || health.features?.includes('mensageiro-excluir') === true;
 }
 
 export function isLocalScannerAvailable() {

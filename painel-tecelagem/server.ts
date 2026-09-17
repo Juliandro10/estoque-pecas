@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { readSyntechProducaoBoard } from '../server/syntech-producao.ts';
+import { readSyntechProducaoBoardCached } from '../server/syntech-producao.ts';
 import {
   abrirSyntechParada,
   encerrarSyntechParada,
@@ -42,7 +42,7 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/quadro', async (_req, res) => {
   try {
-    const board = await readSyntechProducaoBoard();
+    const board = await readSyntechProducaoBoardCached();
     res.json(board);
     void publishPainelToFirebase(toPainelPublico(board)).catch((err) => {
       console.warn('Nuvem:', err instanceof Error ? err.message : err);
@@ -126,7 +126,7 @@ async function publishTick() {
   if (publishing) return;
   publishing = true;
   try {
-    const board = await readSyntechProducaoBoard();
+    const board = await readSyntechProducaoBoardCached();
     await publishPainelToFirebase(toPainelPublico(board));
   } catch (err) {
     console.warn('Nuvem:', err instanceof Error ? err.message : err);

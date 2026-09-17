@@ -85,12 +85,28 @@ async function signIn(apiKey: string, auth: PublishAuth) {
   return body.idToken;
 }
 
+let painelSession: { projectId: string; apiKey: string; idToken: string; exp: number } | null = null;
+let painelQuotaUntil = 0;
+
 export async function getPainelIdToken() {
   const { projectId, apiKey } = loadFirebaseWebConfig();
   const auth = loadPublishAuth();
   if (!apiKey || !auth) return null;
-  const idToken = await signIn(apiKey, auth);
-  return { projectId, apiKey, idToken };
+  if (painelSession && Date.now() < painelSession.exp) return painelSession;
+  if (Date.now() < painelQuotaUntil) return null;
+  try {
+    const idToken = await signIn(apiKey, auth);
+    painelSession = { projectId, apiKey, idToken, exp: Date.now() + 50 * 60 * 1000 };
+    return painelSession;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/QUOTA/i.test(msg)) {
+      painelQuotaUntil = Date.now() + 30 * 60 * 1000;
+      console.warn('Nuvem: cota de login estourada, pausa 30 min.');
+      return null;
+    }
+    throw err;
+  }
 }
 
 export async function patchFirestoreJson(

@@ -51,6 +51,11 @@ function desenvFirebaseConfigJs() {
   return `window.DESENV_FIREBASE = ${JSON.stringify(firebaseEnv())};\n`;
 }
 
+function painelFirebaseConfigJs() {
+  const { projectId, apiKey } = firebaseEnv();
+  return `window.PAINEL_FIREBASE = ${JSON.stringify({ projectId, apiKey })};\n`;
+}
+
 function fichaCustoFirebaseConfigJs() {
   const { projectId, apiKey } = firebaseEnv();
   return `window.FICHA_CUSTO_FIREBASE = ${JSON.stringify({ projectId, apiKey })};\n`;
@@ -65,6 +70,11 @@ function staticBoardPlugin(name: string, prefix: string, src: string): Plugin {
     }
     const rel =
       url === prefix || url === `${prefix}/` ? 'index.html' : decodeURIComponent(url.slice(prefix.length + 1));
+    if (name === BOARD && rel === 'firebase-config.js') {
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      res.end(painelFirebaseConfigJs());
+      return;
+    }
     if (name === DESENV && rel === 'firebase-config.js') {
       res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
       res.end(desenvFirebaseConfigJs());
@@ -94,6 +104,9 @@ function staticBoardPlugin(name: string, prefix: string, src: string): Plugin {
     closeBundle() {
       const dest = path.join(rootDir, 'dist', name);
       fs.cpSync(src, dest, { recursive: true });
+      if (name === BOARD) {
+        fs.writeFileSync(path.join(dest, 'firebase-config.js'), painelFirebaseConfigJs());
+      }
       if (name === DESENV) {
         fs.writeFileSync(path.join(dest, 'firebase-config.js'), desenvFirebaseConfigJs());
       }

@@ -12,6 +12,7 @@ import {
   localProgramsApi,
   scannerSupportsSyntechProdutoCadastro,
 } from '../../lib/local-programs-api';
+import { readSyntechOpcoesNuvem, readSyntechProdutoNuvem } from '../../lib/syntech-produto-nuvem';
 
 type Aba = 'produto' | 'processos' | 'ficha';
 
@@ -40,6 +41,7 @@ export function DesenvCadastroSyntechPage() {
   const [info, setInfo] = useState('');
   const [scannerOk, setScannerOk] = useState(false);
   const [numDrafts, setNumDrafts] = useState<Record<string, string>>({});
+  const [fotoBroken, setFotoBroken] = useState(false);
   const localMode = isLocalScannerAvailable();
 
   const tipoNome = useMemo(() => {
@@ -77,7 +79,13 @@ export function DesenvCadastroSyntechPage() {
 
   async function boot() {
     if (!localMode) {
-      setError('Abra o Desenv-Cadastro neste PC, com o Iniciar.bat ligado, para falar com o Syntech.');
+      try {
+        const opcoesNuvem = await readSyntechOpcoesNuvem();
+        if (opcoesNuvem) setOpcoes(opcoesNuvem);
+        setInfo('Leitura pela nuvem. Para gravar, abra neste PC com o Iniciar.bat.');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Não deu para ler o cadastro na nuvem.');
+      }
       return;
     }
     try {
@@ -103,12 +111,22 @@ export function DesenvCadastroSyntechPage() {
     setError('');
     setInfo('');
     try {
-      const data = await localProgramsApi.syntechProdutoGet(ref);
+      let data = null as Awaited<ReturnType<typeof localProgramsApi.syntechProdutoGet>> | null;
+      if (localMode) {
+        try {
+          data = await localProgramsApi.syntechProdutoGet(ref);
+        } catch {
+          data = null;
+        }
+      }
+      if (!data) data = await readSyntechProdutoNuvem(ref);
+      if (!data) throw new Error('Não achei esse produto. Abra neste PC com o Iniciar.bat para gravar na nuvem.');
       setForm(data);
+      setFotoBroken(false);
       setNovo(false);
       setParams({ codigo: data.codigo });
       setBusca(data.codigo);
-      setInfo(`Cadastro ${data.codigo} lido do Syntech.`);
+      setInfo(data && localMode ? `Cadastro ${data.codigo} lido do Syntech.` : `Cadastro ${data.codigo} lido da nuvem.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não achei esse produto.');
     } finally {
@@ -119,6 +137,7 @@ export function DesenvCadastroSyntechPage() {
   function blank() {
     setNovo(true);
     setForm(emptySyntechProdutoCadastro(''));
+    setFotoBroken(true);
     setParams({});
     setBusca('');
     setInfo('Cadastro em branco. Preencha a aba Produto e salve.');
@@ -221,6 +240,7 @@ export function DesenvCadastroSyntechPage() {
 
       {aba === 'produto' ? (
         <section className="card syn-sec">
+          <div className="syn-produto">
           <div className="syn-grid">
             <label>
               Código
@@ -330,6 +350,19 @@ export function DesenvCadastroSyntechPage() {
               Observações
               <textarea value={form.observacoes} onChange={(e) => patch({ observacoes: e.target.value })} />
             </label>
+          </div>
+          <aside className="syn-foto">
+            {!novo && form.codigo && !fotoBroken ? (
+              <img
+                src={localProgramsApi.syntechProdutoFotoUrl(form.codigo, form.md5_foto ?? '')}
+                alt={`Foto ${form.codigo}`}
+                onError={() => setFotoBroken(true)}
+              />
+            ) : (
+              <div className="syn-foto-vazia">A foto está na pasta do Syntech. Este PC ainda não copiou o arquivo.</div>
+            )}
+            <span>Foto de identificação do Syntech</span>
+          </aside>
           </div>
         </section>
       ) : null}
@@ -664,6 +697,43 @@ export function DesenvCadastroSyntechPage() {
         .syn-abas button.on { background: var(--accent); color: #0b1220; border-color: transparent; }
         .syn-sec { padding: 16px; }
         .syn-sec h3 { margin: 16px 0 10px; font-size: 15px; }
+        .syn-produto {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 220px;
+          gap: 16px;
+          align-items: start;
+        }
+        .syn-foto {
+          border: 1px solid var(--border);
+          background: var(--inset);
+          border-radius: 10px;
+          min-height: 280px;
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+        .syn-foto img {
+          width: 100%;
+          height: 280px;
+          object-fit: contain;
+          background: #fff;
+          border-radius: 6px;
+        }
+        .syn-foto-vazia {
+          width: 100%;
+          height: 280px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          color: var(--muted);
+          font-size: 14px;
+          font-weight: 700;
+        }
+        .syn-foto span { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; }
         .syn-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -680,7 +750,7 @@ export function DesenvCadastroSyntechPage() {
         .muted { color: var(--muted); }
         small { display: block; color: var(--muted); font-weight: 400; }
         @media (max-width: 900px) {
-          .syn-grid, .syn-split { grid-template-columns: 1fr; }
+          .syn-grid, .syn-split, .syn-produto { grid-template-columns: 1fr; }
           .span2, .span3 { grid-column: span 1; }
         }
       `}</style>

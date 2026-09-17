@@ -16,6 +16,59 @@ service cloud.firestore {
         && request.auth.token.email == 'desenvolvimentos@controle-tricot-e-cia.web.app';
     }
 
+    function isFabricaChat() {
+      return isLoggedIn()
+        && request.auth.token.email.matches('.*@mensageiro[.]controle-tricot-e-cia[.]web[.]app$');
+    }
+
+    function isEstoqueStaff() {
+      return isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount() && !isFabricaChat();
+    }
+
+    function isValidPessoa() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['login', 'nome', 'email', 'papel', 'atualizado_em', 'precisa_trocar_senha'])
+        && data.login is string
+        && data.login.size() >= 3
+        && data.login.size() < 40
+        && data.nome is string
+        && data.nome.size() > 0
+        && data.nome.size() < 80
+        && data.email is string
+        && data.email.size() > 5
+        && data.email.size() < 120
+      && data.papel in ['estoque', 'fabrica']
+      && data.atualizado_em is timestamp
+      && (!('precisa_trocar_senha' in data) || data.precisa_trocar_senha is bool);
+    }
+
+    function isValidConversa() {
+      let data = request.resource.data;
+      return data.membros is list
+        && data.membros.size() == 2
+        && request.auth.uid in data.membros
+        && data.atualizado_em is timestamp
+        && (!('ultimo_texto' in data) || (data.ultimo_texto is string && data.ultimo_texto.size() < 200))
+        && (!('ultimo_de' in data) || (data.ultimo_de is string && data.ultimo_de.size() < 80))
+        && (!('lidos' in data) || data.lidos is map);
+    }
+
+    function isValidMsg() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['de', 'texto', 'ref', 'criado_em'])
+        && data.de == request.auth.uid
+        && data.texto is string
+        && data.texto.size() > 0
+        && data.texto.size() < 1800
+        && data.ref is string
+        && data.ref.size() < 40
+        && data.criado_em is timestamp;
+    }
+
+    function conversaMembros(convoId) {
+      return get(/databases/$(database)/documents/mensageiro_conversas/$(convoId)).data.membros;
+    }
+
     function isValidPublicJson(maxSize) {
       let data = request.resource.data;
       return data.keys().hasOnly(['json', 'updated_at'])
@@ -62,6 +115,12 @@ service cloud.firestore {
       allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
     }
 
+    match /syntech_produtos/{id} {
+      allow read: if isLoggedIn();
+      allow create, update: if isLoggedIn() && isValidPublicJson(900000);
+      allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
+    }
+
     match /syntech_cadastros/{id} {
       allow read: if isLoggedIn();
       allow create: if isLoggedIn() && !isPainelAccount()
@@ -71,8 +130,44 @@ service cloud.firestore {
       allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
     }
 
+    match /mensageiro_pessoas/{uid} {
+      allow read: if isLoggedIn() && !isPainelAccount();
+      allow create: if isValidPessoa() && (
+        isEstoqueStaff()
+        || (isFabricaChat() && request.auth.uid == uid && request.resource.data.papel == 'fabrica')
+      );
+      allow update: if isValidPessoa() && (
+        isEstoqueStaff()
+        || (
+          request.auth.uid == uid
+          && resource.data.papel == request.resource.data.papel
+          && resource.data.login == request.resource.data.login
+          && resource.data.email == request.resource.data.email
+        )
+      );
+      allow delete: if isEstoqueStaff();
+    }
+
+    match /mensageiro_conversas/{id} {
+      allow read: if isLoggedIn() && request.auth.uid in resource.data.membros;
+      allow create: if isLoggedIn() && !isPainelAccount() && isValidConversa();
+      allow update: if isLoggedIn()
+        && request.auth.uid in resource.data.membros
+        && request.resource.data.membros == resource.data.membros
+        && isValidConversa();
+      allow delete: if false;
+
+      match /msgs/{msgId} {
+        allow read: if isLoggedIn() && request.auth.uid in conversaMembros(id);
+        allow create: if isLoggedIn()
+          && request.auth.uid in conversaMembros(id)
+          && isValidMsg();
+        allow update, delete: if false;
+      }
+    }
+
     match /{document=**} {
-      allow read, write: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
+      allow read, write: if isEstoqueStaff();
     }
   }
 }

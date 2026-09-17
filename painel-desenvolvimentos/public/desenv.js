@@ -1263,7 +1263,7 @@ async function probeSyntech() {
   syntechOk = false;
   try {
     const res = await fetch('/api/programs/desenv-pendentes');
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok && Array.isArray(data.itens)) {
       syntechOk = true;
       syntechLocal = true;
@@ -1340,7 +1340,7 @@ async function loadCadOpcoes() {
     cadOpcoes = data;
   } else {
     const data = await readNuvemJson('syntech_catalog', 'opcoes');
-    if (!data) throw new Error('Ainda não chegou o cadastro do Syntech. Deixe o Painel Tecelagem ligado.');
+    if (!data) throw new Error('Ainda não chegou o cadastro do Syntech. Deixe o Estoque ligado (Iniciar.bat).');
     cadOpcoes = data;
   }
   const d = cadOpcoes.defaults || {};
@@ -1426,7 +1426,7 @@ function numVal(el) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function waitFilaSyntech(docRef) {
+async function waitFilaSyntech(docRef, timeoutMsg) {
   for (let i = 0; i < 45; i += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, 800));
     const snap = await docRef.get();
@@ -1434,7 +1434,9 @@ async function waitFilaSyntech(docRef) {
     if (row.status === 'ok') return row;
     if (row.status === 'erro') throw new Error(row.erro || 'Não deu para falar com o Syntech.');
   }
-  throw new Error('O PC da tecelagem ainda não gravou. Confira se o Painel Tecelagem está ligado.');
+  throw new Error(
+    timeoutMsg || 'O Syntech não respondeu. Deixe o Estoque ligado (Iniciar.bat).'
+  );
 }
 
 async function loadSyncadOpcoes() {
@@ -1445,7 +1447,7 @@ async function loadSyncadOpcoes() {
     syncadOpcoes = data;
   } else {
     const data = await readNuvemJson('syntech_catalog', 'opcoes');
-    if (!data) throw new Error('Ainda não chegou o cadastro do Syntech. Deixe o Painel Tecelagem ligado.');
+    if (!data) throw new Error('Ainda não chegou o cadastro do Syntech. Deixe o Estoque ligado (Iniciar.bat).');
     syncadOpcoes = data;
   }
   fillLookup('sc-classificacao', syncadOpcoes.classificacoes, syncadForm?.classificacao);
@@ -1611,17 +1613,9 @@ async function fetchSyncad(codigo) {
     if (!res.ok) throw new Error(data.error || 'Não achei esse produto no Syntech.');
     return data;
   }
-  document.getElementById('syncad-erro').textContent = 'Enviando Syntech…';
-  const docRef = await db.collection('syntech_cadastros').add({
-    status: 'pendente',
-    acao: 'ler',
-    codigo,
-    nome: '',
-    criado_em: new Date().toISOString(),
-  });
-  const row = await waitFilaSyntech(docRef);
-  if (!row.json) throw new Error('O Syntech não devolveu o cadastro.');
-  return JSON.parse(row.json);
+  const data = await readNuvemJson('syntech_produtos', codigo);
+  if (data && (data.codigo || data.nome)) return data;
+  throw new Error('Cadastro ainda não está na nuvem. Abra o código no Estoque (Desenv-Cadastro → Cadastro Syntech).');
 }
 
 async function openSyncad(codigo) {
@@ -1672,7 +1666,7 @@ async function saveSyncad() {
       erro.textContent = `Gravado ${data.codigo || form.codigo}.`;
       return;
     }
-    erro.textContent = 'Enviando Syntech…';
+    erro.textContent = 'Gravando…';
     const docRef = await db.collection('syntech_cadastros').add({
       status: 'pendente',
       acao: syncadNovo ? 'criar-completo' : 'salvar',
@@ -1681,7 +1675,10 @@ async function saveSyncad() {
       json: JSON.stringify(form),
       criado_em: new Date().toISOString(),
     });
-    const row = await waitFilaSyntech(docRef);
+    const row = await waitFilaSyntech(
+      docRef,
+      'Não deu para gravar. Deixe o Estoque ligado (Iniciar.bat).'
+    );
     syncadNovo = false;
     document.getElementById('syncad-codigo').value = row.codigo || form.codigo;
     erro.textContent = `Gravado ${row.codigo || form.codigo}.`;
@@ -1778,7 +1775,7 @@ async function submitCadastro(ev) {
       ref = String(data.codigo || codigo).trim();
       modelo = String(data.nome || nome).trim();
     } else {
-      cadErro.textContent = 'Enviando Syntech…';
+      cadErro.textContent = 'Cadastrando…';
       const docRef = await db.collection('syntech_cadastros').add({
         status: 'pendente',
         codigo,
@@ -1805,7 +1802,7 @@ async function submitCadastro(ev) {
         }
       }
       if (!done) {
-        throw new Error('O PC da tecelagem ainda não gravou. Confira se o Painel Tecelagem está ligado.');
+        throw new Error('Não deu para cadastrar. Deixe o Estoque ligado (Iniciar.bat).');
       }
       ref = String(done.codigo || codigo).trim();
       modelo = String(done.nome || nome).trim();
@@ -1849,6 +1846,25 @@ function inIframe() {
 
 const DESENV_LOGIN_USER = 'desenvolvimento';
 const DESENV_LOGIN_EMAIL = 'desenvolvimentos@controle-tricot-e-cia.web.app';
+const MENSAGEIRO_DOMAIN = 'mensageiro.controle-tricot-e-cia.web.app';
+
+function isFabricaEmail(email) {
+  return String(email ?? '')
+    .trim()
+    .toLowerCase()
+    .endsWith(`@${MENSAGEIRO_DOMAIN}`);
+}
+
+function senhaParaAuth(senha) {
+  const s = String(senha ?? '').trim();
+  return s === '1234' ? '1234xx' : s;
+}
+
+function estoqueUrl() {
+  const host = location.hostname;
+  if (host === '127.0.0.1' || host === 'localhost') return 'http://127.0.0.1:3847/';
+  return '/';
+}
 
 function resolveLogin(value) {
   const raw = (value ?? '').trim().toLowerCase();
@@ -1860,15 +1876,34 @@ function resolveLogin(value) {
   ) {
     return DESENV_LOGIN_EMAIL;
   }
+  if (raw.includes('@')) return raw;
+  const login = raw.replace(/[^a-z0-9._-]+/g, '');
+  if (login.length >= 3) return `${login}@${MENSAGEIRO_DOMAIN}`;
   return (value ?? '').trim();
+}
+
+function nomeDoEmail(email) {
+  const raw = String(email ?? '').trim().toLowerCase();
+  if (raw === DESENV_LOGIN_EMAIL) return DESENV_LOGIN_USER;
+  const at = raw.indexOf('@');
+  return at > 0 ? raw.slice(0, at) : raw;
 }
 
 function showApp(user) {
   loginEl.hidden = true;
   appEl.hidden = false;
-  const email = (user.email ?? '').trim().toLowerCase();
-  document.getElementById('user-email').textContent =
-    email === DESENV_LOGIN_EMAIL ? DESENV_LOGIN_USER : user.email ?? '';
+  const el = document.getElementById('user-email');
+  el.textContent = nomeDoEmail(user.email);
+  if (user.uid && db) {
+    db.collection('mensageiro_pessoas')
+      .doc(user.uid)
+      .get()
+      .then((snap) => {
+        const nome = String(snap.data()?.nome ?? '').trim();
+        if (nome) el.textContent = nome;
+      })
+      .catch(() => undefined);
+  }
   document.getElementById('btn-sair').hidden = inIframe();
   listen();
   void probeSyntech();
@@ -1913,12 +1948,14 @@ document.getElementById('login-form').addEventListener('submit', async (ev) => {
   try {
     await auth.signInWithEmailAndPassword(
       resolveLogin(document.getElementById('login-email').value),
-      document.getElementById('login-pass').value
+      senhaParaAuth(document.getElementById('login-pass').value)
     );
   } catch {
     erro.textContent = 'Usuário ou senha incorretos.';
   }
 });
+const linkEstoque = document.getElementById('link-estoque');
+if (linkEstoque) linkEstoque.href = estoqueUrl();
 
 document.getElementById('btn-sair').addEventListener('click', () => {
   void auth.signOut();

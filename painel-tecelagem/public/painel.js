@@ -499,15 +499,31 @@ function setModo(next) {
 
 async function loadFromLocal() {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25000);
+  const timer = setTimeout(() => ctrl.abort(), 12000);
   try {
     const res = await fetch('/api/quadro', { signal: ctrl.signal });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Falha ao ler o quadro');
+    const raw = await res.text();
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      data = {};
+    }
+    if (!res.ok || !raw) {
+      throw new Error(
+        data.error || 'O scanner local não está ligado. Abra o Iniciar.bat e deixe a janela aberta.'
+      );
+    }
     return data;
   } catch (err) {
+    try {
+      const cloud = await loadFromCloud();
+      if (cloud) return cloud;
+    } catch {
+      /* usa o erro local */
+    }
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error('O Syntech nao respondeu a tempo. Veja o log no reloginho do Painel Tecelagem.');
+      throw new Error('O Syntech está demorando. Mostrando o último quadro da nuvem se houver.');
     }
     throw err;
   } finally {

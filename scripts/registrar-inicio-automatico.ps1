@@ -25,7 +25,8 @@ $settings = New-ScheduledTaskSettingsSet `
   -DontStopIfGoingOnBatteries `
   -StartWhenAvailable `
   -RestartCount 3 `
-  -RestartInterval (New-TimeSpan -Minutes 2)
+  -RestartInterval (New-TimeSpan -Minutes 2) `
+  -ExecutionTimeLimit ([TimeSpan]::Zero)
 
 Register-ScheduledTask `
   -TaskName $taskName `
@@ -38,7 +39,7 @@ Register-ScheduledTask `
 Write-Host ""
 Write-Host "Tarefa registrada: $taskName"
 Write-Host "  Dispara: ao fazer logon ($env:USERNAME), com atraso de 30s"
-Write-Host "  Log:     $projectRoot\logs\servico.log"
+Write-Host "  Log:     $projectRoot\logs\vigia.log"
 Write-Host ""
 Write-Host "Para testar agora: Abra 'Agendador de Tarefas' -> clique direito na tarefa -> Executar"
 Write-Host "Para remover:      .\scripts\remover-inicio-automatico.ps1"

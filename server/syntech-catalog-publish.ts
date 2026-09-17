@@ -52,10 +52,33 @@ async function signIn(apiKey: string, auth: { email: string; password: string })
   return body.idToken;
 }
 
-export async function publishSyntechCatalog() {
+let desenvSession: { projectId: string; apiKey: string; idToken: string; exp: number } | null = null;
+let desenvQuotaUntil = 0;
+
+export async function getDesenvSession() {
   const { projectId, apiKey } = loadFirebaseWebConfig();
   const auth = loadDesenvAuth();
-  if (!apiKey || !auth) {
+  if (!apiKey || !auth) return null;
+  if (desenvSession && Date.now() < desenvSession.exp) return desenvSession;
+  if (Date.now() < desenvQuotaUntil) return null;
+  try {
+    const idToken = await signIn(apiKey, auth);
+    desenvSession = { projectId, apiKey, idToken, exp: Date.now() + 50 * 60 * 1000 };
+    return desenvSession;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/QUOTA/i.test(msg)) {
+      desenvQuotaUntil = Date.now() + 30 * 60 * 1000;
+      console.warn('Cadastro Syntech: cota de login estourada, pausa 30 min.');
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function publishSyntechCatalog() {
+  const session = await getDesenvSession();
+  if (!session) {
     console.warn('Cadastro Syntech: sem login da conta de Desenvolvimentos. Celular nao puxa nome do modelo.');
     return;
   }
@@ -64,13 +87,12 @@ export async function publishSyntechCatalog() {
   if (json.length < 3 || json.length >= 900000) {
     throw new Error(`Cadastro Syntech fora do tamanho (${json.length} bytes).`);
   }
-  const idToken = await signIn(apiKey, auth);
   const updatedAt = new Date().toISOString();
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${SYNTECH_CATALOG_COLLECTION}/${SYNTECH_CATALOG_DOCUMENT}`;
+  const url = `https://firestore.googleapis.com/v1/projects/${session.projectId}/databases/(default)/documents/${SYNTECH_CATALOG_COLLECTION}/${SYNTECH_CATALOG_DOCUMENT}`;
   const res = await fetch(url, {
     method: 'PATCH',
     headers: {
-      Authorization: `Bearer ${idToken}`,
+      Authorization: `Bearer ${session.idToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -93,6 +115,6 @@ export function startSyntechCatalogPublish() {
       console.warn('Cadastro Syntech na nuvem falhou:', err instanceof Error ? err.message : err);
     });
   };
-  run();
+  setTimeout(run, 90_000);
   setInterval(run, INTERVAL_MS);
 }

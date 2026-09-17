@@ -1,15 +1,18 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import { isDesenvBoardEmail } from '../shared/desenv-setor-auth';
+import { isFabricaChatEmail } from '../shared/mensageiro-auth';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { MaquinasPage } from './pages/MaquinasPage';
+import { MensageiroPessoasPage } from './pages/MensageiroPessoasPage';
 import { MonthlyReportsPage } from './pages/MonthlyReportsPage';
 import { PartsPage } from './pages/PartsPage';
 import { ProducaoPage } from './pages/ProducaoPage';
 import { TecelagemPage } from './pages/TecelagemPage';
+import { TrocarSenhaPage } from './pages/TrocarSenhaPage';
 import { DesenvOnlyPage, DesenvolvimentosPage } from './pages/DesenvolvimentosPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WithdrawalsPage } from './pages/WithdrawalsPage';
@@ -33,11 +36,28 @@ export default function App() {
     return <DesenvOnlyPage />;
   }
 
+  if (isFabricaChatEmail(user.email)) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<Navigate to="/desenvolvimentos" replace />} />
+            <Route path="desenvolvimentos" element={<DesenvolvimentosPage />} />
+            <Route path="senha" element={<TrocarSenhaPage />} />
+            <Route path="*" element={<Navigate to="/desenvolvimentos" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<DashboardPage />} />
+          <Route path="pessoas" element={<MensageiroPessoasPage />} />
+          <Route path="senha" element={<TrocarSenhaPage />} />
           <Route path="pecas" element={<PartsPage />} />
           <Route path="retiradas" element={<WithdrawalsPage />} />
           <Route path="maquinas" element={<MaquinasPage />} />

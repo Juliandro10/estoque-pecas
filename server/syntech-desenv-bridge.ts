@@ -8,8 +8,12 @@ import {
   createSyntechProdutoCadastro,
   getSyntechProdutoCadastro,
   listSyntechProdutoCadastroOpcoes,
+  loadAndPublishSyntechProdutoNuvem,
+  publishSyntechProdutoNuvem,
   saveSyntechProdutoCadastro,
 } from './syntech-produto-cadastro.ts';
+import { findSyntechProdutoFoto, saveSyntechFotoCache, type SyntechProdutoFoto } from './syntech-produto-foto.ts';
+import { getDesenvSession } from './syntech-catalog-publish.ts';
 
 export const SYNTECH_CATALOG_COLLECTION = 'syntech_catalog';
 export const SYNTECH_CATALOG_DOCUMENT = 'produtos';
@@ -96,7 +100,7 @@ async function firestoreQueryPendentes() {
             value: { stringValue: 'pendente' },
           },
         },
-        limit: 8,
+        limit: 20,
       },
     }),
   });
@@ -196,13 +200,40 @@ export async function publishSyntechDesenvNuvem() {
 
 async function processCadastroFila() {
   const jobs = await firestoreQueryPendentes();
+  const ordem: Record<string, number> = { ler: 0, salvar: 1, 'criar-completo': 2, criar: 3, foto: 4 };
+  jobs.sort((a, b) => (ordem[String(a.acao ?? 'criar')] ?? 3) - (ordem[String(b.acao ?? 'criar')] ?? 3));
   for (const job of jobs) {
     const id = String(job.id);
     const acao = String(job.acao ?? 'criar');
     const codigo = String(job.codigo ?? '');
     try {
+      if (acao === 'foto') {
+        const foto = await findSyntechProdutoFoto(codigo);
+        if (!foto) {
+          await firestorePatchFields(SYNTECH_CADASTROS_COLLECTION, id, {
+            status: 'erro',
+            codigo,
+            atualizado_em: new Date().toISOString(),
+            erro: 'sem foto neste PC',
+          });
+          continue;
+        }
+        saveSyntechFotoCache(codigo, foto);
+        await firestorePatchFields(SYNTECH_CADASTROS_COLLECTION, id, {
+          status: 'ok',
+          codigo,
+          json: foto.buffer.toString('base64'),
+          atualizado_em: new Date().toISOString(),
+          erro: '',
+        });
+        console.log(`Syntech foto lida ${codigo}`);
+        continue;
+      }
       if (acao === 'ler') {
         const produto = await getSyntechProdutoCadastro(codigo);
+        void publishSyntechProdutoNuvem(produto).catch((err) => {
+          console.warn('Nuvem cadastro após ler:', err instanceof Error ? err.message : err);
+        });
         await firestorePatchFields(SYNTECH_CADASTROS_COLLECTION, id, {
           status: 'ok',
           codigo: produto.codigo,
@@ -274,19 +305,130 @@ async function processCadastroFila() {
   }
 }
 
+export async function resolveSyntechProdutoFoto(codigoRaw: string): Promise<SyntechProdutoFoto | null> {
+  const codigo = String(codigoRaw ?? '').trim();
+  if (!codigo) return null;
+  const local = await findSyntechProdutoFoto(codigo);
+  if (local) return local;
+
+  const session = await getDesenvSession();
+  if (!session) return null;
+
+  const createUrl = `https://firestore.googleapis.com/v1/projects/${session.projectId}/databases/(default)/documents/${SYNTECH_CADASTROS_COLLECTION}`;
+  const created = await fetch(createUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fields: {
+        status: { stringValue: 'pendente' },
+        acao: { stringValue: 'foto' },
+        codigo: { stringValue: codigo },
+        criado_em: { stringValue: new Date().toISOString() },
+      },
+    }),
+  });
+  if (!created.ok) {
+    const text = await created.text();
+    console.warn('Fila foto', created.status, text.slice(0, 240));
+    return null;
+  }
+  const body = (await created.json()) as { name?: string };
+  const id = String(body.name ?? '').split('/').pop();
+  if (!id) return null;
+
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const again = await findSyntechProdutoFoto(codigo);
+    if (again) return again;
+    const getUrl = `https://firestore.googleapis.com/v1/projects/${session.projectId}/databases/(default)/documents/${SYNTECH_CADASTROS_COLLECTION}/${id}`;
+    const snap = await fetch(getUrl, { headers: { Authorization: `Bearer ${session.idToken}` } });
+    if (!snap.ok) continue;
+    const doc = (await snap.json()) as { fields?: Record<string, { stringValue?: string }> };
+    const status = doc.fields?.status?.stringValue;
+    const json = doc.fields?.json?.stringValue;
+    if (status === 'ok' && json) {
+      const buffer = Buffer.from(json, 'base64');
+      if (buffer.length < 40) return null;
+      const foto = { buffer, mime: 'image/jpeg', md5: '' };
+      saveSyntechFotoCache(codigo, foto);
+      return foto;
+    }
+    if (status === 'erro') return null;
+  }
+  return null;
+}
+
+const lastProdutoPub = new Map<string, number>();
+
+async function publishFilaCadastros() {
+  const listed = await firestoreGet('desenvolvimentos?pageSize=400');
+  const refs = [
+    ...new Set(
+      (listed?.documents ?? [])
+        .map((doc) => {
+          const fields = decodeFields(doc.fields);
+          return String(fields.syntech_codigo ?? fields.referencia ?? '').trim();
+        })
+        .filter(Boolean)
+    ),
+  ];
+  let n = 0;
+  for (const ref of refs) {
+    if (n >= 2) break;
+    if (Date.now() - (lastProdutoPub.get(ref) ?? 0) < 30 * 60 * 1000) continue;
+    try {
+      await loadAndPublishSyntechProdutoNuvem(ref);
+      lastProdutoPub.set(ref, Date.now());
+      n += 1;
+    } catch (err) {
+      lastProdutoPub.set(ref, Date.now() - 25 * 60 * 1000);
+      console.warn(`Nuvem cadastro ${ref}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  if (n) console.log(`Nuvem cadastros publicados: ${n}`);
+}
+
+export function startSyntechCadastroFila() {
+  let drainBusy = false;
+  let publishBusy = false;
+  const drain = () => {
+    if (drainBusy) return;
+    drainBusy = true;
+    void processCadastroFila()
+      .catch((err) => {
+        console.warn('Fila Syntech:', err instanceof Error ? err.message : err);
+      })
+      .finally(() => {
+        drainBusy = false;
+      });
+  };
+  const publishCadastros = () => {
+    if (publishBusy) return;
+    publishBusy = true;
+    void publishFilaCadastros()
+      .catch((err) => {
+        console.warn('Nuvem cadastros:', err instanceof Error ? err.message : err);
+      })
+      .finally(() => {
+        publishBusy = false;
+      });
+  };
+  setTimeout(drain, 8_000);
+  setTimeout(publishCadastros, 90_000);
+  setInterval(drain, 15_000);
+  setInterval(publishCadastros, 120_000);
+}
+
 export function startSyntechDesenvBridge() {
   const publish = () => {
     void publishSyntechDesenvNuvem().catch((err) => {
       console.warn('Nuvem desenv:', err instanceof Error ? err.message : err);
     });
   };
-  const drain = () => {
-    void processCadastroFila().catch((err) => {
-      console.warn('Fila Syntech:', err instanceof Error ? err.message : err);
-    });
-  };
   publish();
-  drain();
   setInterval(publish, 60_000);
-  setInterval(drain, 5_000);
+  startSyntechCadastroFila();
 }

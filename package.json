@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:scanner": "tsx watch server/programs-scanner.ts",
+    "scanner": "tsx server/programs-scanner.ts",
     "painel": "tsx painel-tecelagem/server.ts",
     "desenv": "tsx painel-desenvolvimentos/server.ts",
     "painel:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-painel-installer.ps1",

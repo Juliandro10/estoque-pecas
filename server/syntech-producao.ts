@@ -1123,3 +1123,32 @@ export async function readSyntechProducaoBoard(): Promise<ProducaoBoard> {
     await detachDb(db);
   }
 }
+
+let quadroCache: ProducaoBoard | null = null;
+let quadroCacheAt = 0;
+let quadroLive: Promise<ProducaoBoard> | null = null;
+
+export function readSyntechProducaoBoardCached(): Promise<ProducaoBoard> {
+  const age = Date.now() - quadroCacheAt;
+  if (quadroCache && age < 12_000) return Promise.resolve(quadroCache);
+  if (!quadroLive) {
+    quadroLive = readSyntechProducaoBoard()
+      .then((board) => {
+        quadroCache = board;
+        quadroCacheAt = Date.now();
+        return board;
+      })
+      .finally(() => {
+        quadroLive = null;
+      });
+  }
+  if (quadroCache && age < 5 * 60_000) {
+    return Promise.race([
+      quadroLive,
+      new Promise<ProducaoBoard>((resolve) => {
+        setTimeout(() => resolve(quadroCache as ProducaoBoard), 4000);
+      }),
+    ]);
+  }
+  return quadroLive;
+}

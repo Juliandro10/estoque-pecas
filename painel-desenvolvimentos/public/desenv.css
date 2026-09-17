@@ -231,6 +231,8 @@ h1 { margin: 0; font-size: 34px; letter-spacing: 0.03em; }
 }
 .login-card h1, .dlg-card h2 { margin: 0 0 8px; }
 .login-card p { color: var(--muted); margin: 0 0 16px; }
+.login-hint { font-size: 13px !important; margin: 0 0 12px !important; }
+.login-hint a { color: var(--accent, #38bdf8); }
 .login-card label, .dlg-card label {
   display: block;
   margin: 10px 0 4px;

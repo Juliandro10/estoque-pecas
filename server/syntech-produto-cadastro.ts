@@ -25,6 +25,7 @@ import {
   type SyntechTx,
 } from './syntech-db';
 import { createSyntechProduto, listSyntechProdutoOpcoes } from './syntech-desenv';
+import { patchFirestoreJson } from '../painel-tecelagem/publish-firebase.ts';
 
 const BICO_DB = 16;
 
@@ -258,9 +259,11 @@ export async function getSyntechProdutoCadastro(codigoRaw: string): Promise<Synt
     const cols = await produtoColumnSet(db);
     const obsCol = pickCol(cols, ['OBSERVACOES', 'OBSERVACAO', 'OBS']);
     const diasCol = pickCol(cols, ['DIAS_ENTREGA', 'PRAZO_ENTREGA', 'DIAS', 'PRAZO']);
+    const md5Col = pickCol(cols, ['MD5_FOTO']);
     const extra = [
       obsCol ? `CAST(${obsCol} AS VARCHAR(400)) AS OBS_TXT` : `CAST('' AS VARCHAR(1)) AS OBS_TXT`,
       diasCol ? `${diasCol} AS DIAS_TXT` : `CAST(0 AS INTEGER) AS DIAS_TXT`,
+      md5Col ? `CAST(${md5Col} AS VARCHAR(50)) AS MD5_FOTO` : `CAST('' AS VARCHAR(1)) AS MD5_FOTO`,
     ].join(',\n          ');
 
     const rows = await queryDb<Record<string, unknown>>(
@@ -377,6 +380,8 @@ export async function getSyntechProdutoCadastro(codigoRaw: string): Promise<Synt
       observacoes: fbStr(row.OBS_TXT),
       programa: fbStr(row.PROGRAMA),
       maquina: asInt(row.MAQUINA),
+      md5_foto: fbStr(row.MD5_FOTO),
+      tem_foto: Boolean(fbStr(row.MD5_FOTO)),
       bicos: mergeBicos(bicos),
       partes,
       cores: await readCores(db, codigo),
@@ -596,4 +601,16 @@ export async function createSyntechProdutoCadastro(input: SyntechProdutoCadastro
   });
   await saveSyntechProdutoCadastro({ ...payload, codigo: created.codigo, nome: created.nome });
   return created;
+}
+
+export async function publishSyntechProdutoNuvem(produto: SyntechProdutoCadastro) {
+  const codigo = clipSyntechText(String(produto.codigo ?? '').trim(), 13);
+  if (!codigo) return false;
+  return patchFirestoreJson('syntech_produtos', codigo, produto);
+}
+
+export async function loadAndPublishSyntechProdutoNuvem(codigoRaw: string) {
+  const produto = await getSyntechProdutoCadastro(codigoRaw);
+  await publishSyntechProdutoNuvem(produto);
+  return produto;
 }

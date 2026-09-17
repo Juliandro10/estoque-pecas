@@ -16,7 +16,7 @@ export function LoginPage() {
     try {
       await signIn(email.trim(), password);
     } catch {
-      setError('E-mail ou senha incorretos.');
+      setError('Usuário ou senha incorretos.');
     } finally {
       setLoading(false);
     }
@@ -26,11 +26,11 @@ export function LoginPage() {
     <div className="login-screen">
       <div className="card login-card">
         <h1>Estoque</h1>
-        <p className="login-sub">Peças de máquinas — Tricot e Cia</p>
+        <p className="login-sub">Tricot e Cia — entre com o usuário da fábrica ou o e-mail</p>
         <form onSubmit={(e) => void handleSubmit(e)} className="form-stack">
           {error ? <div className="error-box">{error}</div> : null}
           <div className="field">
-            <label>E-mail ou usuário</label>
+            <label>Usuário</label>
             <input
               required
               type="text"

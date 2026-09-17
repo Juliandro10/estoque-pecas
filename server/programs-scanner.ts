@@ -34,7 +34,7 @@ import {
   readSyntechYarnCatalog,
   syncSyntechYarnCatalogFromDb,
 } from './syntech-yarn-catalog';
-import { readSyntechProducaoBoard } from './syntech-producao';
+import { readSyntechProducaoBoardCached } from './syntech-producao';
 import {
   abrirSyntechParada,
   encerrarSyntechParada,
@@ -50,10 +50,13 @@ import {
   createSyntechProdutoCadastro,
   getSyntechProdutoCadastro,
   listSyntechProdutoCadastroOpcoes,
+  publishSyntechProdutoNuvem,
   saveSyntechProdutoCadastro,
 } from './syntech-produto-cadastro';
 import type { SyntechProdutoCadastro } from '../shared/syntech-produto-cadastro';
-import { publishSyntechCatalog, startSyntechCatalogPublish } from './syntech-catalog-publish';
+import { startSyntechCadastroFila, resolveSyntechProdutoFoto } from './syntech-desenv-bridge';
+import { startSyntechCatalogPublish } from './syntech-catalog-publish';
+import { definirSenhaFirebase, excluirLoginFirebase } from './mensageiro-senha';
 import { yarnTypesFromCatalog } from './syntech-yarn-types';
 import {
   findCadastroPdfInFolder,
@@ -823,7 +826,7 @@ app.post('/api/programs/syntech-fios/sync', async (_req, res) => {
 
 app.get('/api/programs/syntech-producao', async (_req, res) => {
   try {
-    const board = await readSyntechProducaoBoard();
+    const board = await readSyntechProducaoBoardCached();
     res.json(board);
   } catch (err) {
     res.status(500).json({
@@ -834,7 +837,7 @@ app.get('/api/programs/syntech-producao', async (_req, res) => {
 
 app.get('/api/quadro', async (_req, res) => {
   try {
-    const board = await readSyntechProducaoBoard();
+    const board = await readSyntechProducaoBoardCached();
     res.json(board);
   } catch (err) {
     res.status(500).json({
@@ -912,10 +915,31 @@ app.get('/api/programs/syntech-produto-opcoes', async (_req, res) => {
 
 app.get('/api/programs/syntech-produto/:codigo', async (req, res) => {
   try {
-    res.json(await getSyntechProdutoCadastro(String(req.params.codigo ?? '')));
+    const produto = await getSyntechProdutoCadastro(String(req.params.codigo ?? ''));
+    void publishSyntechProdutoNuvem(produto).catch((err) => {
+      console.warn('Nuvem cadastro após abrir:', err instanceof Error ? err.message : err);
+    });
+    res.json(produto);
   } catch (err) {
     res.status(404).json({
       error: err instanceof Error ? err.message : 'Não achei esse produto no Syntech.',
+    });
+  }
+});
+
+app.get('/api/programs/syntech-produto-foto/:codigo', async (req, res) => {
+  try {
+    const foto = await resolveSyntechProdutoFoto(String(req.params.codigo ?? ''));
+    if (!foto) {
+      res.status(404).json({ error: 'Esse código não tem foto no Syntech.' });
+      return;
+    }
+    res.setHeader('Cache-Control', 'private, max-age=120');
+    res.type(foto.mime);
+    res.send(foto.buffer);
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Não deu para ler a foto do Syntech.',
     });
   }
 });
@@ -1150,11 +1174,36 @@ app.post('/api/programs/backup', async (req, res) => {
   }
 });
 
+app.post('/api/programs/mensageiro-senha', async (req, res) => {
+  try {
+    const uid = String(req.body?.uid ?? '');
+    const senha = String(req.body?.senha ?? '');
+    await definirSenhaFirebase(uid, senha);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para gravar a senha neste login.',
+    });
+  }
+});
+
+app.post('/api/programs/mensageiro-excluir', async (req, res) => {
+  try {
+    const uid = String(req.body?.uid ?? '');
+    await excluirLoginFirebase(uid);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Não deu para excluir o login.',
+    });
+  }
+});
+
 app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 38,
+    version: 42,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -1180,6 +1229,7 @@ app.get('/api/programs/health', (_req, res) => {
       'desenv-produto-opcoes',
       'desenv-cadastrar-produto',
       'syntech-produto-cadastro',
+      'syntech-produto-foto',
       'cadastro-pdf',
       'cadastro-pdf-read',
       'm1-density',
@@ -1192,6 +1242,8 @@ app.get('/api/programs/health', (_req, res) => {
       'm1-mesh',
       'm1-fabric-lib',
       'backup',
+      'mensageiro-senha',
+      'mensageiro-excluir',
     ],
   });
 });
@@ -1209,5 +1261,13 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`${M1_SIN_CAPTURE_BUILD}: M1 processa → .sin + .simx em dados do programa/{{parte}}/`);
   console.log('Sintral tela: cheque aberto → controle-sintral.json + .txt em dados do programa/{parte}/');
   startSyntechCatalogPublish();
+  startSyntechCadastroFila();
   setTimeout(() => startCadastroPdfImportOnce(), 12000);
 });
+
+function fatalScanner(err: unknown) {
+  console.error('Scanner caiu:', err instanceof Error ? (err.stack ?? err.message) : err);
+  process.exit(1);
+}
+process.on('uncaughtException', fatalScanner);
+process.on('unhandledRejection', fatalScanner);

@@ -46,9 +46,23 @@ function probeTcp(host: string, port: number, ms = 2500): Promise<boolean> {
   });
 }
 
-function attachWithHost(host: string): Promise<FirebirdDb> {
+let lastGoodHost: string | null = null;
+
+function attachWithHost(host: string, ms = 8000): Promise<FirebirdDb> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`Syntech não respondeu em ${host}`));
+    }, ms);
     Firebird.attach({ ...syntechFbConfig(), host }, (err, db) => {
+      if (settled) {
+        if (db) db.detach(() => undefined);
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
       if (err) reject(err);
       else resolve(db);
     });
@@ -58,27 +72,29 @@ function attachWithHost(host: string): Promise<FirebirdDb> {
 export async function attachSyntechDb(): Promise<FirebirdDb> {
   const configured = syntechFbConfig().host;
   const hosts = [
-    ...new Set([
-      ...(isIp(configured) ? [configured] : []),
-      '192.168.1.52',
-      '192.168.1.69',
-      configured,
-      'RENATA',
-    ]),
+    ...new Set(
+      [lastGoodHost, ...(isIp(configured) ? [configured] : []), '192.168.1.52', '192.168.1.69', configured, 'RENATA'].filter(
+        (host): host is string => Boolean(host)
+      )
+    ),
   ];
   let lastErr: unknown;
   for (const host of hosts) {
-    const reachable = await probeTcp(host, syntechFbConfig().port);
+    const probeMs = host === lastGoodHost ? 800 : 2500;
+    const reachable = await probeTcp(host, syntechFbConfig().port, probeMs);
     if (!reachable) {
+      if (host === lastGoodHost) lastGoodHost = null;
       console.warn(`Syntech porta 3050 fechada em ${host}`);
       lastErr = new Error(`Porta 3050 fechada em ${host}`);
       continue;
     }
     try {
       const db = await attachWithHost(host);
+      lastGoodHost = host;
       if (host !== configured) console.warn(`Syntech conectou em ${host}`);
       return db;
     } catch (err) {
+      if (host === lastGoodHost) lastGoodHost = null;
       lastErr = err;
       console.warn(`Syntech falhou em ${host}:`, err instanceof Error ? err.message : err);
     }
@@ -86,19 +102,41 @@ export async function attachSyntechDb(): Promise<FirebirdDb> {
   throw lastErr instanceof Error ? lastErr : new Error('Nao conectou no Syntech.');
 }
 
-export function detachDb(db: FirebirdDb): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.detach((err) => (err ? reject(err) : resolve()));
+export function detachDb(db: FirebirdDb, ms = 3000): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    try {
+      db.detach(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    } catch {
+      clearTimeout(timer);
+      resolve();
+    }
   });
 }
 
 export function queryDb<T = Record<string, unknown>>(
   db: FirebirdDb,
   sql: string,
-  params: unknown[] = []
+  params: unknown[] = [],
+  timeoutMs = 15_000
 ): Promise<T[]> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(new Error('Consulta Syntech demorou demais.'));
+          }, timeoutMs)
+        : null;
     db.query(sql, params, (err, rows) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
       if (err) reject(err);
       else resolve((rows ?? []) as T[]);
     });
