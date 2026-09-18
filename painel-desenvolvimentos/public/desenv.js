@@ -1903,6 +1903,14 @@ function showApp(user) {
         if (nome) el.textContent = nome;
       })
       .catch(() => undefined);
+    const bater = () => {
+      db.collection('mensageiro_presenca')
+        .doc(user.uid)
+        .set({ visto_em: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+        .catch(() => undefined);
+    };
+    bater();
+    window.setInterval(bater, 20000);
   }
   document.getElementById('btn-sair').hidden = inIframe();
   listen();

@@ -5,7 +5,7 @@ import { isFabricaChatEmail, loginFromEmail } from '../../shared/mensageiro-auth
 import { BackupButton } from './BackupButton';
 import { MensageiroDock } from './MensageiroDock';
 import { useAuth } from '../hooks/useAuth';
-import { conversaNaoLida, garantirMeuPerfil, listenMinhasConversas } from '../lib/mensageiro-db';
+import { baterPresenca, conversaNaoLida, garantirMeuPerfil, listenMinhasConversas } from '../lib/mensageiro-db';
 import {
   atualizarTituloNaoLidas,
   avisosBloqueados,
@@ -57,6 +57,25 @@ export function Layout() {
       }
     });
   }, [user?.uid, user?.displayName, fabrica]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    let stop = false;
+    const bater = () => {
+      if (stop) return;
+      void baterPresenca(user.uid).catch(() => undefined);
+    };
+    bater();
+    const t = window.setInterval(bater, 20000);
+    document.addEventListener('visibilitychange', bater);
+    window.addEventListener('focus', bater);
+    return () => {
+      stop = true;
+      window.clearInterval(t);
+      document.removeEventListener('visibilitychange', bater);
+      window.removeEventListener('focus', bater);
+    };
+  }, [user?.uid]);
 
   return (
     <div className={`layout${wideBoard ? ' quadro-open' : ''}${fabrica ? ' layout-fabrica' : ''}`}>

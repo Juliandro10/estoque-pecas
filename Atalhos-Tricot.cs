@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -171,14 +172,31 @@ internal sealed class MainForm : Form
     static void OpenEstoque()
     {
         var dir = AppDir();
-        var vbs = Path.Combine(dir, "Abrir-Estoque.vbs");
-        var bat = Path.Combine(dir, "Iniciar.bat");
-        if (File.Exists(vbs))
-            Process.Start(new ProcessStartInfo { FileName = "wscript.exe", Arguments = "\"" + vbs + "\"", UseShellExecute = false });
-        else if (File.Exists(bat))
-            Process.Start(new ProcessStartInfo { FileName = bat, UseShellExecute = true });
-        else
-            OpenUrl("http://127.0.0.1:3847/");
+        var bg = Path.Combine(dir, "Iniciar-background.vbs");
+        if (File.Exists(bg))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "wscript.exe",
+                Arguments = "\"" + bg + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+        }
+        for (var i = 0; i < 40; i++)
+        {
+            try
+            {
+                using (var client = new TcpClient())
+                {
+                    var ar = client.BeginConnect("127.0.0.1", 3847, null, null);
+                    if (ar.AsyncWaitHandle.WaitOne(400) && client.Connected) break;
+                }
+            }
+            catch { }
+            Thread.Sleep(200);
+        }
+        OpenUrl("http://127.0.0.1:3847/");
     }
 
     static void OpenTv()

@@ -23,6 +23,8 @@ import { auth, db } from '../firebase';
 
 export const MENSAGEIRO_PESSOAS = 'mensageiro_pessoas';
 export const MENSAGEIRO_CONVERSAS = 'mensageiro_conversas';
+export const MENSAGEIRO_PRESENCA = 'mensageiro_presenca';
+export const PRESENCA_ONLINE_MS = 3 * 60 * 1000;
 
 export type MensageiroPapel = 'estoque' | 'fabrica';
 
@@ -33,6 +35,7 @@ export type MensageiroPessoa = {
   email: string;
   papel: MensageiroPapel;
   precisa_trocar_senha: boolean;
+  visto_em: string;
 };
 
 export type MensageiroConversa = {
@@ -103,6 +106,7 @@ export async function garantirMeuPerfil(opts?: { nome?: string; papel?: Mensagei
       email,
       papel: opts?.papel ?? 'estoque',
       atualizado_em: serverTimestamp(),
+      visto_em: serverTimestamp(),
     },
     { merge: true }
   );
@@ -154,6 +158,7 @@ function pessoaFromData(id: string, data: Record<string, unknown>): MensageiroPe
     email: String(data.email ?? ''),
     papel: data.papel === 'fabrica' ? 'fabrica' : 'estoque',
     precisa_trocar_senha: data.precisa_trocar_senha === true,
+    visto_em: tsToIso(data.visto_em),
   };
 }
 
@@ -195,6 +200,35 @@ export async function marcarSenhaTrocada(uid: string) {
 
 export async function excluirPessoa(uid: string) {
   await deleteDoc(doc(db, MENSAGEIRO_PESSOAS, uid));
+  await deleteDoc(doc(db, MENSAGEIRO_PRESENCA, uid)).catch(() => undefined);
+}
+
+export function presencaOnline(vistoIso: string, agora = Date.now()) {
+  if (!vistoIso) return false;
+  const t = Date.parse(vistoIso);
+  return Number.isFinite(t) && agora - t < PRESENCA_ONLINE_MS;
+}
+
+export async function baterPresenca(uid: string) {
+  if (!uid) return;
+  await Promise.allSettled([
+    setDoc(doc(db, MENSAGEIRO_PRESENCA, uid), { visto_em: serverTimestamp() }, { merge: true }),
+    setDoc(doc(db, MENSAGEIRO_PESSOAS, uid), { visto_em: serverTimestamp() }, { merge: true }),
+  ]);
+}
+
+export function listenPresenca(onData: (map: Record<string, string>) => void, onError?: (err: Error) => void) {
+  return onSnapshot(
+    collection(db, MENSAGEIRO_PRESENCA),
+    (snap) => {
+      const map: Record<string, string> = {};
+      for (const row of snap.docs) {
+        map[row.id] = tsToIso(row.data().visto_em);
+      }
+      onData(map);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function listenPessoas(onData: (rows: MensageiroPessoa[]) => void, onError?: (err: Error) => void) {
@@ -290,6 +324,7 @@ export async function marcarLida(conversa: string, uid: string) {
     { [`lidos.${uid}`]: serverTimestamp() },
     { merge: true }
   );
+  void baterPresenca(uid).catch(() => undefined);
 }
 
 export async function enviarMsg(input: { conversa: string; de: string; texto: string; ref?: string }) {
@@ -304,6 +339,7 @@ export async function enviarMsg(input: { conversa: string; de: string; texto: st
     ref,
     criado_em: serverTimestamp(),
   });
+  void baterPresenca(input.de).catch(() => undefined);
   await setDoc(
     doc(db, MENSAGEIRO_CONVERSAS, input.conversa),
     {

@@ -11,8 +11,12 @@ import {
 import {
   criarPessoaRemota,
   excluirPessoa,
+  listenMinhasConversas,
   listenPessoas,
+  listenPresenca,
   marcarPrecisaTrocarSenha,
+  presencaOnline,
+  type MensageiroConversa,
   type MensageiroPessoa,
 } from '../lib/mensageiro-db';
 import {
@@ -152,8 +156,36 @@ export function MensageiroPessoasPage() {
   const [excluindo, setExcluindo] = useState('');
   const [envio, setEnvio] = useState<Envio | null>(null);
   const [senhaEnvio, setSenhaEnvio] = useState(SENHA_PADRAO);
+  const [presenca, setPresenca] = useState<Record<string, string>>({});
+  const [conversas, setConversas] = useState<MensageiroConversa[]>([]);
+  const [agora, setAgora] = useState(Date.now());
 
   useEffect(() => listenPessoas(setPessoas, (err) => setErro(err.message)), []);
+  useEffect(() => listenPresenca(setPresenca, (err) => setErro(err.message)), []);
+  useEffect(() => {
+    if (!user?.uid) return;
+    return listenMinhasConversas(user.uid, setConversas);
+  }, [user?.uid]);
+  useEffect(() => {
+    const t = window.setInterval(() => setAgora(Date.now()), 15000);
+    return () => window.clearInterval(t);
+  }, []);
+  const lista = [...pessoas].sort((a, b) => {
+    const oa = pessoaOnline(a) ? 0 : 1;
+    const ob = pessoaOnline(b) ? 0 : 1;
+    if (oa !== ob) return oa - ob;
+    return a.nome.localeCompare(b.nome, 'pt');
+  });
+
+  function pessoaOnline(p: MensageiroPessoa) {
+    if (p.id === user?.uid) return true;
+    if (presencaOnline(presenca[p.id] ?? '', agora)) return true;
+    if (presencaOnline(p.visto_em, agora)) return true;
+    return conversas.some((c) => {
+      if (c.ultimo_de === p.id && presencaOnline(c.atualizado_em, agora)) return true;
+      return presencaOnline(c.lidos[p.id] ?? '', agora);
+    });
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -260,15 +292,33 @@ export function MensageiroPessoasPage() {
               <th>Nome</th>
               <th>Usuário</th>
               <th>Tipo</th>
+              <th>No programa</th>
               <th>Acesso</th>
             </tr>
           </thead>
           <tbody>
-            {pessoas.map((p) => (
+            {lista.map((p) => {
+              const online = pessoaOnline(p);
+              return (
               <tr key={p.id}>
-                <td>{p.nome}</td>
+                <td>{p.nome}{p.id === user?.uid ? ' (você)' : ''}</td>
                 <td>{p.login}</td>
                 <td>{p.papel === 'estoque' ? 'Estoque / programação' : 'Fábrica'}</td>
+                <td>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 700, color: online ? '#3dba7a' : 'var(--muted)' }}>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: 99,
+                        background: online ? '#3dba7a' : '#5a6578',
+                        boxShadow: online ? '0 0 8px #3dba7a' : 'none',
+                      }}
+                    />
+                    {online ? 'Online' : 'Offline'}
+                  </span>
+                </td>
                 <td>
                   {p.id === user?.uid ? null : (
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -287,7 +337,8 @@ export function MensageiroPessoasPage() {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

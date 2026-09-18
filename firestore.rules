@@ -27,7 +27,7 @@ service cloud.firestore {
 
     function isValidPessoa() {
       let data = request.resource.data;
-      return data.keys().hasOnly(['login', 'nome', 'email', 'papel', 'atualizado_em', 'precisa_trocar_senha'])
+      return data.keys().hasOnly(['login', 'nome', 'email', 'papel', 'atualizado_em', 'precisa_trocar_senha', 'visto_em'])
         && data.login is string
         && data.login.size() >= 3
         && data.login.size() < 40
@@ -39,7 +39,8 @@ service cloud.firestore {
         && data.email.size() < 120
       && data.papel in ['estoque', 'fabrica']
       && data.atualizado_em is timestamp
-      && (!('precisa_trocar_senha' in data) || data.precisa_trocar_senha is bool);
+      && (!('precisa_trocar_senha' in data) || data.precisa_trocar_senha is bool)
+      && (!('visto_em' in data) || data.visto_em is timestamp);
     }
 
     function isValidConversa() {
@@ -128,6 +129,15 @@ service cloud.firestore {
         && request.resource.data.codigo is string;
       allow update: if isLoggedIn();
       allow delete: if isLoggedIn() && !isPainelAccount() && !isDesenvBoardAccount();
+    }
+
+    match /mensageiro_presenca/{uid} {
+      allow read: if isLoggedIn() && !isPainelAccount();
+      allow create, update: if isLoggedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['visto_em'])
+        && request.resource.data.visto_em is timestamp;
+      allow delete: if isEstoqueStaff();
     }
 
     match /mensageiro_pessoas/{uid} {
