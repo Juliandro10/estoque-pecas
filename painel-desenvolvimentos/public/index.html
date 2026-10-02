@@ -269,19 +269,26 @@
           <button type="button" data-syncad-tab="ficha">Ficha técnica</button>
         </nav>
         <div class="syncad-pane" id="syncad-pane-produto">
-          <div class="ficha-grid3">
-            <label>Descrição<input id="sc-nome" maxlength="50" /></label>
-            <label>Unidade<input id="sc-unidade" maxlength="6" /></label>
-            <label>Peso bruto<input id="sc-peso-bruto" /></label>
-            <label>Peso líquido<input id="sc-peso-liq" /></label>
-            <label>Classificação<select id="sc-classificacao"></select></label>
-            <label>Grupo<select id="sc-grupo"></select></label>
-            <label>Fornecedor<select id="sc-fornecedor"></select></label>
-            <label>Funcionário<select id="sc-funcionario"></select></label>
-            <label>NCM<select id="sc-ncm"></select></label>
-            <label>Estoque mínimo<input id="sc-est-min" /></label>
-            <label>Dias p/ entrega<input id="sc-dias" /></label>
-            <label class="span3">Observações<textarea id="sc-obs" maxlength="200"></textarea></label>
+          <div class="syncad-produto">
+            <div class="ficha-grid3">
+              <label>Descrição<input id="sc-nome" maxlength="50" /></label>
+              <label>Unidade<input id="sc-unidade" maxlength="6" /></label>
+              <label>Peso bruto<input id="sc-peso-bruto" /></label>
+              <label>Peso líquido<input id="sc-peso-liq" /></label>
+              <label>Classificação<select id="sc-classificacao"></select></label>
+              <label>Grupo<select id="sc-grupo"></select></label>
+              <label>Fornecedor<select id="sc-fornecedor"></select></label>
+              <label>Funcionário<select id="sc-funcionario"></select></label>
+              <label>NCM<select id="sc-ncm"></select></label>
+              <label>Estoque mínimo<input id="sc-est-min" /></label>
+              <label>Dias p/ entrega<input id="sc-dias" /></label>
+              <label class="span3">Observações<textarea id="sc-obs" maxlength="200"></textarea></label>
+            </div>
+            <aside class="syncad-foto">
+              <img id="syncad-foto-img" alt="Foto Syntech" hidden />
+              <div id="syncad-foto-vazia">Abra um código para ver a foto do Syntech.</div>
+              <span>Foto de identificação do Syntech</span>
+            </aside>
           </div>
         </div>
         <div class="syncad-pane" id="syncad-pane-processos" hidden>
@@ -317,6 +324,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="./firebase-config.js"></script>
-    <script src="./desenv.js?v=43"></script>
+    <script src="./desenv.js?v=44"></script>
   </body>
 </html>

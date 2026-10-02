@@ -1618,6 +1618,33 @@ async function fetchSyncad(codigo) {
   throw new Error('Cadastro ainda não está na nuvem. Abra o código no Estoque (Desenv-Cadastro → Cadastro Syntech).');
 }
 
+function showSyncadFoto(codigo) {
+  const img = document.getElementById('syncad-foto-img');
+  const empty = document.getElementById('syncad-foto-vazia');
+  if (!img || !empty) return;
+  const ref = String(codigo || '').trim();
+  if (!ref || syncadNovo) {
+    img.hidden = true;
+    img.removeAttribute('src');
+    empty.hidden = false;
+    empty.textContent = 'Abra um código para ver a foto do Syntech.';
+    return;
+  }
+  empty.hidden = true;
+  img.hidden = false;
+  img.onerror = () => {
+    img.hidden = true;
+    img.removeAttribute('src');
+    empty.hidden = false;
+    empty.textContent = 'A foto está na pasta do Syntech. Este PC ainda não copiou o arquivo.';
+  };
+  img.onload = () => {
+    img.hidden = false;
+    empty.hidden = true;
+  };
+  img.src = `/api/programs/syntech-produto-foto/${encodeURIComponent(ref)}?t=${Date.now()}`;
+}
+
 async function openSyncad(codigo) {
   const erro = document.getElementById('syncad-erro');
   erro.textContent = '';
@@ -1625,6 +1652,7 @@ async function openSyncad(codigo) {
   syncadForm = emptySyncad(codigo || '');
   dlgSyncad.hidden = false;
   document.getElementById('syncad-codigo').value = codigo || '';
+  showSyncadFoto('');
   try {
     await loadSyncadOpcoes();
     if (codigo) {
@@ -1633,10 +1661,12 @@ async function openSyncad(codigo) {
     }
     paintSyncadLists();
     paintSyncadCabecalho();
+    showSyncadFoto(syncadForm.codigo || codigo || '');
     erro.textContent = '';
   } catch (err) {
     paintSyncadLists();
     paintSyncadCabecalho();
+    showSyncadFoto(syncadForm.codigo || codigo || '');
     erro.textContent = err instanceof Error ? err.message : 'Não deu para abrir o cadastro.';
   }
 }

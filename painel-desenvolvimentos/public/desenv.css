@@ -302,7 +302,7 @@ h1 { margin: 0; font-size: 34px; letter-spacing: 0.03em; }
 .erro { color: #e07a5f; min-height: 1.2em; font-size: 14px; }
 .empty { color: var(--muted); padding: 24px 8px; }
 .dlg-card.dlg-ficha {
-  width: min(980px, 100%);
+  width: min(1180px, 100%);
   max-height: min(96vh, 1200px);
   overflow: auto;
   background: var(--card);
@@ -383,6 +383,48 @@ h1 { margin: 0; font-size: 34px; letter-spacing: 0.03em; }
 .syncad-pane h3 { margin: 14px 0 8px; font-size: 14px; color: var(--wait); }
 .syncad-pane .span2 { grid-column: span 2; }
 .syncad-pane .span3 { grid-column: 1 / -1; }
+.syncad-produto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 16px;
+  align-items: start;
+}
+.syncad-foto {
+  border: 1px solid var(--line);
+  background: #10151d;
+  border-radius: 10px;
+  min-height: 280px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.syncad-foto img {
+  width: 100%;
+  height: 280px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
+}
+.syncad-foto span {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: center;
+}
+#syncad-foto-vazia {
+  width: 100%;
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
 .syncad-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .syncad-table th, .syncad-table td { border: 1px solid var(--line); padding: 4px; }
 .syncad-table input, .syncad-table select { width: 100%; }
@@ -461,6 +503,7 @@ h1 { margin: 0; font-size: 34px; letter-spacing: 0.03em; }
   .ficha-split { grid-template-columns: 1fr; }
   .ficha-foto-card { position: static; }
   .ficha-grid3 { grid-template-columns: 1fr 1fr; }
+  .syncad-produto { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .card { grid-template-columns: 44px 1fr; }
