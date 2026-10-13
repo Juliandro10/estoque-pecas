@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-01T19:11:25.712Z",
+  "updated_at": "2026-10-13T19:03:30.979Z",
   "source": "C:\\Textil\\Empresas\\FABRICA.MDB",
   "types": [
     {
@@ -682,6 +682,7 @@
         "ROSA CITRUS",
         "ROSA FLUORESCENTE",
         "ROSA LIGHT",
+        "ROSA POPOURI",
         "ROSA PRATA",
         "ROYAL INTENSO",
         "SHOK",
@@ -1708,10 +1709,12 @@
       "codigo": 50,
       "tipo": "MOUSSE FIDES",
       "cores": [
+        "BALLET",
         "BLUE",
         "BOMBOM",
         "BRANCO",
         "CEU",
+        "CHUMBO",
         "CRISTAL",
         "DENIN",
         "JOY LINHO",
