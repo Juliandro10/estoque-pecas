@@ -275,6 +275,7 @@ Reutilizar:
 
 - Servir mockup de símbolos em `/repo/...` (como no projeto antigo na porta 3777)
 - IA na programação usando densidade + símbolos como contexto
+- Editor de imagem com o agente do Cursor: ver `Desenv-M1-editor-rascunho.md`
 - Opcional: espelhar amostras consolidadas no Syntech (`REGULAGEM_PROD`) — só se fizer sentido depois
 
 ---

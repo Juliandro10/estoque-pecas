@@ -25,17 +25,22 @@
     "desenv:cloud-user": "tsx scripts/ensure-desenv-firebase-user.ts"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.37",
+    "@napi-rs/canvas": "^1.0.11",
     "adm-zip": "^0.5.17",
+    "ag-psd": "^31.0.3",
     "cfb": "^1.2.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "firebase": "^11.10.0",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
+    "mupdf": "^1.28.1",
     "node-firebird": "^2.3.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^7.6.2"
+    "react-router-dom": "^7.6.2",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

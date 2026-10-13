@@ -88,6 +88,7 @@ import {
   getProgramsRoots,
   requireProgramsRoots,
 } from './programs-roots';
+import { registerM1EditorRoutes, registerM1EditorUpload } from './m1-editor';
 
 const PORT = 3848;
 const STOLL_TMP = process.env.STOLL_TMP ?? 'C:\\Stoll\\Tmp';
@@ -240,6 +241,7 @@ function machinePayload(modelFolder: string, partRows: { file_name: string }[]) 
 
 const app = express();
 app.use(cors());
+registerM1EditorUpload(app);
 
 app.post(
   '/api/programs/m1-visual/upload',
@@ -283,6 +285,7 @@ app.post(
 );
 
 app.use(express.json({ limit: '32mb' }));
+registerM1EditorRoutes(app);
 
 app.get('/api/programs/lookup', (req, res) => {
   try {
@@ -1203,7 +1206,7 @@ app.get('/api/programs/health', (_req, res) => {
   const roots = getProgramsRoots();
   res.json({
     ok: true,
-    version: 42,
+    version: 43,
     sintral_capture: SINTRAL_CAPTURE_BUILD,
     m1_sin_capture: M1_SIN_CAPTURE_BUILD,
     root: formatProgramsRootsLabel(roots),
@@ -1244,6 +1247,7 @@ app.get('/api/programs/health', (_req, res) => {
       'backup',
       'mensageiro-senha',
       'mensageiro-excluir',
+      'm1-editor',
     ],
   });
 });

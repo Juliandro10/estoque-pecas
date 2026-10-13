@@ -139,7 +139,7 @@ export default defineConfig({
       ],
     },
     proxy: {
-      '/api/programs': { target: 'http://127.0.0.1:3848', changeOrigin: true },
+      '/api/programs': { target: 'http://127.0.0.1:3848', changeOrigin: true, timeout: 600000, proxyTimeout: 600000 },
       '/api/quadro': { target: 'http://127.0.0.1:3848', changeOrigin: true },
       '/api/paradas': { target: 'http://127.0.0.1:3848', changeOrigin: true },
     },

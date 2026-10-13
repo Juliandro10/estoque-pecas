@@ -24,6 +24,7 @@ export function Layout() {
   const quadroActive = location.pathname.startsWith('/quadro');
   const desenvActive = location.pathname.startsWith('/desenvolvimentos');
   const wideBoard = quadroActive || desenvActive || fabrica;
+  const editorWide = location.pathname.startsWith('/desenv-m1/editor');
   const [naoLidas, setNaoLidas] = useState(0);
   const [avisoEstado, setAvisoEstado] = useState(
     typeof Notification === 'undefined' ? 'denied' : Notification.permission
@@ -164,7 +165,7 @@ export function Layout() {
           </div>
         </aside>
       ) : null}
-      <main className="main">
+      <main className={`main${editorWide ? ' main-wide' : ''}`}>
         <Outlet />
       </main>
       <MensageiroDock />
@@ -189,6 +190,7 @@ export function Layout() {
         .sidebar-footer { margin-top: 24px; display: flex; flex-direction: column; gap: 8px; }
         .user-email { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .main { padding: 28px 32px 48px; max-width: 1100px; min-width: 0; }
+        .main.main-wide { max-width: 1280px; }
         .layout.quadro-open .main { padding: 0; max-width: none; min-height: 100vh; background: #0e1218; }
         .tecelagem-embed { height: 100%; min-height: 100vh; }
         .tecelagem-embed iframe { display: block; width: 100%; height: 100%; min-height: 100vh; border: 0; background: #0e1218; }

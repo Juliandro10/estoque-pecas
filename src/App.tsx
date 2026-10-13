@@ -22,6 +22,7 @@ import { DesenvCadastroLayout } from './pages/dev/DesenvCadastroLayout';
 import { DesenvCadastroFiosPage } from './pages/dev/DesenvCadastroFiosPage';
 import { DesenvCadastroPage } from './pages/dev/DesenvCadastroPage';
 import { DesenvCadastroSyntechPage } from './pages/dev/DesenvCadastroSyntechPage';
+import { DesenvM1EditorPage } from './pages/dev/DesenvM1EditorPage';
 import { DesenvM1Layout } from './pages/dev/DesenvM1Layout';
 import { DesenvM1MalhasPage } from './pages/dev/DesenvM1MalhasPage';
 import { DesenvM1Page } from './pages/dev/DesenvM1Page';
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="desenv-m1" element={<DesenvM1Layout />}>
             <Route index element={<DesenvM1Page />} />
             <Route path="malhas" element={<DesenvM1MalhasPage />} />
+            <Route path="editor" element={<DesenvM1EditorPage />} />
           </Route>
           <Route path="programacao" element={<Navigate to="/desenv-controle/extra" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

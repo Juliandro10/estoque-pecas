@@ -12,6 +12,9 @@ export function DesenvM1Layout() {
           <NavLink to="/desenv-m1/malhas" className={({ isActive }) => (isActive ? 'active' : '')}>
             Malhas
           </NavLink>
+          <NavLink to="/desenv-m1/editor" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Editor
+          </NavLink>
         </nav>
       </header>
       <Outlet />

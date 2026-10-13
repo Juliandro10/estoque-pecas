@@ -18,8 +18,11 @@ import type {
   SyntechYarnCatalogFile,
   ProducaoBoard,
 } from '../types-programming';
+import type { M1EditorModelChoice } from '../../shared/m1-editor-model';
 import type { SyntechProdutoCadastro, SyntechProdutoCadastroOpcoes } from '../../shared/syntech-produto-cadastro';
 import type { ClientFirestoreBackup } from './backup-export';
+
+export type { M1EditorModelChoice };
 
 async function localRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -236,6 +239,37 @@ export const localProgramsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uid }),
     }),
+  m1EditorStatus: () =>
+    localRequest<{ ok: boolean; configured: boolean; model: string }>('/api/programs/m1-editor/status'),
+  m1EditorSessions: () =>
+    localRequest<{ sessions: { id: string; title: string; reference: string; updatedAt: string }[] }>(
+      '/api/programs/m1-editor/sessions'
+    ),
+  m1EditorCreate: (model?: M1EditorModelChoice) =>
+    localRequest<{ session: M1EditorSession; files: M1EditorFile[] }>('/api/programs/m1-editor/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(model ? { model } : {}),
+    }),
+  m1EditorSession: (id: string) =>
+    localRequest<{ session: M1EditorSession; files: M1EditorFile[] }>(
+      `/api/programs/m1-editor/sessions/${encodeURIComponent(id)}`
+    ),
+  m1EditorUpdate: (id: string, patch: { title?: string; reference?: string; model?: M1EditorModelChoice; messages?: M1EditorMessage[] }) =>
+    localRequest<{ session: M1EditorSession }>(`/api/programs/m1-editor/sessions/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  m1EditorUpload: async (id: string, file: File) => {
+    const res = await fetch(
+      `/api/programs/m1-editor/sessions/${encodeURIComponent(id)}/files?file_name=${encodeURIComponent(file.name)}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file }
+    );
+    const body = (await res.json().catch(() => null)) as { error?: string; files?: M1EditorFile[] } | null;
+    if (!res.ok) throw new Error(body?.error || `Erro ${res.status}`);
+    return { files: body?.files ?? [] };
+  },
 };
 
 export type BackupApiResult = {
@@ -299,6 +333,74 @@ export function scannerSupportsMensageiroSenha(health: { version?: number; featu
 
 export function scannerSupportsMensageiroExcluir(health: { version?: number; features?: string[] }) {
   return (health.version ?? 0) >= 41 || health.features?.includes('mensageiro-excluir') === true;
+}
+
+export function scannerSupportsM1Editor(health: { version?: number; features?: string[] }) {
+  return (health.version ?? 0) >= 43 || health.features?.includes('m1-editor') === true;
+}
+
+export type M1EditorMessage = { role: 'user' | 'assistant'; text: string; at: string };
+
+export type M1EditorSession = {
+  id: string;
+  title: string;
+  reference: string;
+  model?: M1EditorModelChoice;
+  messages: M1EditorMessage[];
+};
+
+export type M1EditorFile = {
+  name: string;
+  bytes: number;
+  mtime: number;
+  image: boolean;
+  version: boolean;
+  url: string;
+};
+
+export type M1EditorEvent =
+  | { type: 'text'; text: string }
+  | { type: 'tool'; name: string }
+  | { type: 'done'; status: string }
+  | { type: 'error'; error: string };
+
+export async function streamM1EditorChat(
+  sessionId: string,
+  message: string,
+  model: M1EditorModelChoice,
+  onEvent: (event: M1EditorEvent) => void,
+  signal?: AbortSignal
+) {
+  const res = await fetch(`/api/programs/m1-editor/sessions/${encodeURIComponent(sessionId)}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, model }),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Erro ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const parts = pending.split('\n\n');
+      pending = parts.pop() ?? '';
+      for (const part of parts) {
+        const line = part.split('\n').find((row) => row.startsWith('data:'));
+        if (!line) continue;
+        onEvent(JSON.parse(line.slice(5).trim()) as M1EditorEvent);
+      }
+    }
+  } catch (err) {
+    if (signal?.aborted) return;
+    throw err;
+  }
 }
 
 export function isLocalScannerAvailable() {
