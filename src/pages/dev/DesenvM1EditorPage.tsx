@@ -39,6 +39,8 @@ export function DesenvM1EditorPage() {
   const [model, setModel] = useState<M1EditorModelChoice>(DEFAULT_M1_EDITOR_MODEL);
   const [saida, setSaida] = useState<M1EditorSaida>(DEFAULT_M1_EDITOR_SAIDA);
   const [localReady, setLocalReady] = useState(false);
+  const [localFallback, setLocalFallback] = useState(false);
+  const [localMessage, setLocalMessage] = useState('');
   const [regras, setRegras] = useState('');
   const regrasRef = useRef('');
   const [messages, setMessages] = useState<M1EditorMessage[]>([]);
@@ -115,7 +117,7 @@ export function DesenvM1EditorPage() {
         const status = await localProgramsApi.m1EditorStatus();
         if (cancel) return;
         setConfigured(status.configured);
-        setLocalReady(status.local === true);
+        applyLocalStatus(status);
         const padrao = await localProgramsApi.m1EditorPadrao();
         if (!cancel) {
           regrasRef.current = padrao.regras;
@@ -180,9 +182,18 @@ export function DesenvM1EditorPage() {
     }
   }
 
+  function applyLocalStatus(status: { local?: boolean; localFallback?: boolean; localMessage?: string }) {
+    setLocalReady(status.local === true);
+    setLocalFallback(status.localFallback === true);
+    setLocalMessage(status.localMessage?.trim() ?? '');
+  }
+
   async function saveModel(next: M1EditorModelChoice) {
     const choice = normalizeM1EditorModel(next);
     setModel(choice);
+    if (choice.id === 'local') {
+      void localProgramsApi.m1EditorStatus().then(applyLocalStatus).catch(() => undefined);
+    }
     if (!sessionId) return;
     try {
       await localProgramsApi.m1EditorUpdate(sessionId, { model: choice });
@@ -482,10 +493,11 @@ export function DesenvM1EditorPage() {
               <span>Fica gravado como padrão. O agente segue isso em todas as conversas.</span>
             </label>
             {model.id === 'local' && (
-              <p className="editor-hint">
-                {localReady
-                  ? 'Local neste PC, sem API. A resposta demora mais que o Composer.'
-                  : 'O modelo local ainda está sendo preparado neste PC.'}
+              <p className={!localReady || localFallback ? 'editor-local-warn' : 'editor-hint'}>
+                {localMessage ||
+                  (localReady
+                    ? 'Local neste PC, sem API. A resposta demora mais que o Composer.'
+                    : 'O modelo local ainda está sendo preparado neste PC.')}
               </p>
             )}
             <div className="editor-actions">
@@ -596,6 +608,7 @@ export function DesenvM1EditorPage() {
         .bubble { white-space: pre-wrap; padding: 10px 12px; border-radius: 12px; background: var(--inset); }
         .bubble.user { background: var(--accent-soft); }
         .editor-hint { margin: 0; color: var(--muted); font-size: 13px; }
+        .editor-local-warn { margin: 0; padding: 10px 12px; border-radius: 10px; background: rgba(248, 113, 113, 0.12); color: var(--danger); font-size: 13px; }
         .editor-form { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
         .editor-form textarea { min-height: 72px; max-height: 140px; }
         .editor-model { display: flex; flex-wrap: wrap; gap: 6px; }

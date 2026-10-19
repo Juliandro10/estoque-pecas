@@ -22,7 +22,9 @@ export const M1_EDITOR_MODELS: { id: M1EditorModelId; label: string }[] = [
   { id: 'local', label: 'Local' },
 ];
 
-export const LOCAL_EDITOR_MODEL = 'qwen2.5:7b';
+export const LOCAL_EDITOR_MODEL = 'qwen3:30b-a3b';
+export const LOCAL_EDITOR_FALLBACK_MODEL = 'qwen2.5:7b';
+export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
 
 export type M1EditorSaida = {
   largura: number;

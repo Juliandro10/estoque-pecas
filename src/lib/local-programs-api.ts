@@ -240,9 +240,16 @@ export const localProgramsApi = {
       body: JSON.stringify({ uid }),
     }),
   m1EditorStatus: () =>
-    localRequest<{ ok: boolean; configured: boolean; model: string; local?: boolean; localModel?: string }>(
-      '/api/programs/m1-editor/status'
-    ),
+    localRequest<{
+      ok: boolean;
+      configured: boolean;
+      model: string;
+      local?: boolean;
+      localModel?: string;
+      localPreferred?: string;
+      localFallback?: boolean;
+      localMessage?: string;
+    }>('/api/programs/m1-editor/status'),
   m1EditorPadrao: () => localRequest<{ regras: string }>('/api/programs/m1-editor/padrao'),
   m1EditorSavePadrao: (regras: string) =>
     localRequest<{ regras: string }>('/api/programs/m1-editor/padrao', {

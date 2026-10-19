@@ -2,9 +2,9 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { m1EditorSdkModel, normalizeM1EditorModel, normalizeM1EditorSaida, LOCAL_EDITOR_MODEL } from '../shared/m1-editor-model';
+import { m1EditorSdkModel, normalizeM1EditorModel, normalizeM1EditorSaida } from '../shared/m1-editor-model';
 import { converterParaImagem, describeImage, prepararBmp, previewPng, quantizarCores } from './m1-editor-convert';
-import { localModelReady, runLocalEditorTurn } from './m1-editor-local';
+import { inspectLocalEditor, runLocalEditorTurn } from './m1-editor-local';
 import {
   createSession,
   editorBrief,
@@ -202,12 +202,16 @@ export function registerM1EditorUpload(app: express.Express) {
 
 export function registerM1EditorRoutes(app: express.Express) {
   app.get('/api/programs/m1-editor/status', async (_req, res) => {
+    const local = await inspectLocalEditor();
     res.json({
       ok: true,
       configured: Boolean(process.env.CURSOR_API_KEY?.trim()),
       model: m1EditorSdkModel(undefined).id,
-      local: await localModelReady(),
-      localModel: LOCAL_EDITOR_MODEL,
+      local: local.ready,
+      localModel: local.model,
+      localPreferred: local.preferred,
+      localFallback: local.fallback,
+      localMessage: local.message,
     });
   });
 
