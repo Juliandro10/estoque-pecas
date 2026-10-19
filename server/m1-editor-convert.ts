@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { resolveInside } from './m1-editor-store';
+import { readEditorRegras, resolveInside } from './m1-editor-store';
 
 const RASTER_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.tif', '.tiff', '.bmp', '.svg']);
 
@@ -462,4 +462,154 @@ export async function quantizarCores(root: string, entrada: string, saida: strin
   const outPath = uniquePath(resolveInside(root, saida));
   await writeRaster(outPath, rgb, width, height);
   return `${relPosix(root, outPath)} — ${width} x ${height}, ${colors.length} cores.`;
+}
+
+export async function loadEditorRgb(root: string, entrada: string) {
+  const full = resolveInside(root, entrada);
+  if (!fs.existsSync(full)) throw new Error('Arquivo não encontrado.');
+  const buf = fs.readFileSync(full);
+  const ext = path.extname(full).toLowerCase();
+  if (ext === '.psd' || ext === '.psb') return rgbFromSharp(await flattenPsd(buf));
+  if (ext === '.pdf' || ext === '.ai' || isPdfBuffer(buf)) {
+    if (!isPdfBuffer(buf)) throw new Error('Este .ai não tem PDF embutido.');
+    const rendered = await renderPdf(buf, 1, 2000);
+    return rgbFromSharp(rendered.png);
+  }
+  if (!RASTER_EXT.has(ext)) throw new Error(`Formato ${ext || 'desconhecido'} sem conversor.`);
+  return rgbFromSharp(full);
+}
+
+function colorDist(a: number[], b: number[]) {
+  return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+}
+
+function pickPalette(rgb: Buffer, width: number, height: number, count: number) {
+  const buckets = new Map<string, { n: number; r: number; g: number; b: number }>();
+  const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 80000)));
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const i = (y * width + x) * 3;
+      const r = rgb[i] ?? 0;
+      const g = rgb[i + 1] ?? 0;
+      const b = rgb[i + 2] ?? 0;
+      const key = `${r >> 3},${g >> 3},${b >> 3}`;
+      const cur = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+      cur.n += 1;
+      cur.r += r;
+      cur.g += g;
+      cur.b += b;
+      buckets.set(key, cur);
+    }
+  }
+  const clusters = [...buckets.values()]
+    .map((c) => [Math.round(c.r / c.n), Math.round(c.g / c.n), Math.round(c.b / c.n), c.n] as [number, number, number, number])
+    .sort((a, b) => b[3] - a[3]);
+  const merged: [number, number, number, number][] = [];
+  for (const color of clusters) {
+    const hit = merged.find((item) => colorDist(item, color) < 22 * 22);
+    if (!hit) {
+      merged.push([...color]);
+      continue;
+    }
+    const n = hit[3] + color[3];
+    hit[0] = Math.round((hit[0] * hit[3] + color[0] * color[3]) / n);
+    hit[1] = Math.round((hit[1] * hit[3] + color[1] * color[3]) / n);
+    hit[2] = Math.round((hit[2] * hit[3] + color[2] * color[3]) / n);
+    hit[3] = n;
+  }
+  merged.sort((a, b) => b[3] - a[3]);
+  return merged.slice(0, count).map((c) => {
+    if (c[0] > 246 && c[1] > 246 && c[2] > 246) return [255, 255, 255];
+    if (c[0] < 18 && c[1] < 18 && c[2] < 18) return [0, 0, 0];
+    return [c[0], c[1], c[2]];
+  });
+}
+
+function snapPalette(rgb: Buffer, colors: number[][]) {
+  for (let i = 0; i < rgb.length; i += 3) {
+    let best = 0;
+    let bestD = Infinity;
+    for (let k = 0; k < colors.length; k += 1) {
+      const d = colorDist([rgb[i] ?? 0, rgb[i + 1] ?? 0, rgb[i + 2] ?? 0], colors[k] ?? [0, 0, 0]);
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    const chosen = colors[best] ?? [0, 0, 0];
+    rgb[i] = chosen[0] ?? 0;
+    rgb[i + 1] = chosen[1] ?? 0;
+    rgb[i + 2] = chosen[2] ?? 0;
+  }
+}
+
+function sameColor(rgb: Buffer, index: number, color: number[]) {
+  return rgb[index] === color[0] && rgb[index + 1] === color[1] && rgb[index + 2] === color[2];
+}
+
+function limparBorda(rgb: Buffer, width: number, height: number, palette: number[][]) {
+  const fundo = palette.find((color) => color[0] > 246 && color[1] > 246 && color[2] > 246);
+  const cabeca = palette.find((color) => color[0] < 30 && color[1] < 30 && color[2] < 30);
+  if (!fundo || !cabeca) return;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (let pass = 0; pass < 3; pass += 1) {
+    const next = Buffer.from(rgb);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = (y * width + x) * 3;
+        if (sameColor(rgb, i, fundo) || sameColor(rgb, i, cabeca)) continue;
+        let iguais = 0;
+        let tocaFundo = false;
+        let tocaCabeca = false;
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const j = (ny * width + nx) * 3;
+          if (sameColor(rgb, j, [rgb[i] ?? 0, rgb[i + 1] ?? 0, rgb[i + 2] ?? 0])) iguais += 1;
+          if (sameColor(rgb, j, fundo)) tocaFundo = true;
+          if (sameColor(rgb, j, cabeca)) tocaCabeca = true;
+        }
+        if (!tocaFundo || iguais > 1) continue;
+        const destino = tocaCabeca ? cabeca : fundo;
+        next[i] = destino[0] ?? 0;
+        next[i + 1] = destino[1] ?? 0;
+        next[i + 2] = destino[2] ?? 0;
+      }
+    }
+    rgb.set(next);
+  }
+}
+
+export async function prepararBmp(
+  root: string,
+  entrada: string,
+  saida: string | undefined,
+  largura: number,
+  altura: number,
+  cores: number,
+) {
+  const loaded = await loadEditorRgb(root, entrada);
+  const sharp = (await loadSharp()).default;
+  const fitted = await sharp(loaded.rgb, { raw: { width: loaded.width, height: loaded.height, channels: 3 } })
+    .resize(largura, altura, { fit: 'inside', kernel: 'lanczos3', withoutEnlargement: false })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const canvas = Buffer.alloc(largura * altura * 3, 255);
+  const ox = Math.floor((largura - fitted.info.width) / 2);
+  const oy = Math.floor((altura - fitted.info.height) / 2);
+  for (let y = 0; y < fitted.info.height; y += 1) {
+    fitted.data.copy(canvas, ((oy + y) * largura + ox) * 3, y * fitted.info.width * 3, (y + 1) * fitted.info.width * 3);
+  }
+  const palette = pickPalette(canvas, largura, altura, Math.max(2, Math.min(8, cores)));
+  if (palette.length === 0) throw new Error('Não achei cor na imagem.');
+  snapPalette(canvas, palette);
+  if (/borda|contorno|extremidade|limpeza/i.test(readEditorRegras())) limparBorda(canvas, largura, altura, palette);
+  const stem = path.basename(entrada, path.extname(entrada)).replace(/[^\w.\- ()\u00C0-\u024f]+/g, '_') || 'saida';
+  const rel = (saida?.trim() || `arquivos/${stem}-${largura}x${altura}.bmp`).replace(/\\/g, '/');
+  const outPath = uniquePath(resolveInside(root, rel.toLowerCase().endsWith('.bmp') ? rel : `${rel}.bmp`));
+  writeBmp24(outPath, largura, altura, canvas);
+  const used = [...new Set(palette.map((c) => c.join(',')))];
+  return `${relPosix(root, outPath)} — ${largura} x ${altura}, ${used.length} cores: ${used.join(' | ')}. Sem esticar.`;
 }

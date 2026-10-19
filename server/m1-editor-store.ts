@@ -2,7 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_M1_EDITOR_MODEL, normalizeM1EditorModel, type M1EditorModelChoice } from '../shared/m1-editor-model';
+import {
+  DEFAULT_M1_EDITOR_MODEL,
+  DEFAULT_M1_EDITOR_SAIDA,
+  normalizeM1EditorModel,
+  normalizeM1EditorSaida,
+  type M1EditorModelChoice,
+  type M1EditorSaida,
+} from '../shared/m1-editor-model';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +31,7 @@ export type M1EditorSession = {
   createdAt: string;
   updatedAt: string;
   model?: M1EditorModelChoice;
+  saida?: M1EditorSaida;
   messages: M1EditorMessage[];
 };
 
@@ -111,10 +119,11 @@ const BRIEF = `Você é o editor de arte de malha do Desenv-M1. A pasta desta co
 - Linha N contada de baixo para cima: numa imagem de altura A, a linha N fica em y = A - N, com y = 0 no topo. A linha 1 é a de baixo.
 - Para converter PDF, Photoshop (.psd), Illustrator (.ai), HTML ou imagem, use converter_para_imagem.
 - Para deixar só as cores do fio, use quantizar_cores.
+- Quando a medida e a quantidade de cores já estão no editor, grave o BMP com preparar_bmp. Essa ferramenta não estica o desenho.
 - Pode buscar na internet quando o pedido pedir uma referência. A referência não substitui o arquivo da malha.
 - Arquivo .ai de ficha costuma ser um PDF.
 - Se a pessoa pedir para medir, prever ou confirmar antes de editar, responda só com a medida e não grave arquivo ainda.
-- Grave a imagem pronta em arquivos/. O programa copia essa imagem para a pasta da referência.
+- Grave um único BMP novo em arquivos/, com a alteração pedida. Não grave PNG, recorte de teste nem arquivo temporário. O programa apaga as imagens extras desta resposta e copia só esse BMP para a pasta da referência.
 - Responda em português, curto, dizendo o arquivo gravado e a medida.`;
 
 export function createSession(title?: string) {
@@ -129,6 +138,7 @@ export function createSession(title?: string) {
     title: (title ?? '').trim() || 'Nova conversa',
     reference: '',
     model: { ...DEFAULT_M1_EDITOR_MODEL },
+    saida: { ...DEFAULT_M1_EDITOR_SAIDA },
     createdAt: now,
     updatedAt: now,
     messages: [],
@@ -136,13 +146,17 @@ export function createSession(title?: string) {
   return saveSession(session);
 }
 
-export function updateSession(id: string, patch: Partial<Pick<M1EditorSession, 'title' | 'reference' | 'agentId' | 'messages' | 'model'>>) {
+export function updateSession(
+  id: string,
+  patch: Partial<Pick<M1EditorSession, 'title' | 'reference' | 'agentId' | 'messages' | 'model' | 'saida'>>,
+) {
   const session = getSession(id);
   const next: M1EditorSession = {
     ...session,
     ...patch,
     id: session.id,
     model: patch.model ? normalizeM1EditorModel(patch.model) : normalizeM1EditorModel(session.model),
+    saida: normalizeM1EditorSaida(patch.saida ?? session.saida),
     updatedAt: new Date().toISOString(),
   };
   if (next.messages.length > 100) next.messages = next.messages.slice(-100);
@@ -151,6 +165,38 @@ export function updateSession(id: string, patch: Partial<Pick<M1EditorSession, '
 
 export function editorBrief() {
   return BRIEF;
+}
+
+export const DEFAULT_EDITOR_REGRAS = `Limpar a borda antes de gravar o BMP. Cor misturada na extremidade vira fio errado no M1 Plus.
+
+Só entra na limpeza o ponto de rosto, laço ou língua que encosta no fundo e tem no máximo 1 vizinho da mesma cor (cima, baixo, esquerda, direita).
+- Se esse ponto encosta ao mesmo tempo na cabeça e no fundo, vira a cor da cabeça.
+- Se ficou só no fundo, sem encostar na cabeça, vira a cor do fundo.
+- Rosto, laço, olhos e língua fechados ficam como estão.
+Gere uma única imagem BMP com a alteração pedida. Não grave PNG, teste, recorte parcial nem arquivo temporário.`;
+
+function padraoPath() {
+  return path.join(m1EditorRoot, 'padrao.json');
+}
+
+export function readEditorRegras() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(padraoPath(), 'utf8')) as { regras?: unknown };
+    if (typeof parsed.regras === 'string') return parsed.regras.slice(0, 4000);
+  } catch {
+    /* ainda não existe */
+  }
+  return DEFAULT_EDITOR_REGRAS;
+}
+
+export function writeEditorRegras(regras: string) {
+  fs.mkdirSync(m1EditorRoot, { recursive: true });
+  const text = regras.slice(0, 4000);
+  const tmp = `${padraoPath()}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ regras: text }, null, 2));
+  fs.copyFileSync(tmp, padraoPath());
+  fs.rmSync(tmp, { force: true });
+  return text;
 }
 
 function safeUploadName(name: string) {
@@ -265,10 +311,16 @@ function referenceFolderName(reference: string) {
 }
 
 export function publishEditedImages(id: string, reference: string, before: ArquivoStamp[]) {
+  keepSingleNewBmp(id, before);
   const folder = referenceFolderName(reference);
   if (!folder) return [];
   const previous = new Map(before.map((file) => [file.name, `${file.mtimeMs}:${file.bytes}`]));
-  const changed = listArquivoStamps(id).filter((file) => previous.get(file.name) !== `${file.mtimeMs}:${file.bytes}`);
+  const changed = listArquivoStamps(id).filter((file) => {
+    if (!file.name.toLowerCase().endsWith('.bmp')) return false;
+    const base = path.basename(file.name).toLowerCase();
+    if (base.startsWith('_') || base.includes('tmp')) return false;
+    return previous.get(file.name) !== `${file.mtimeMs}:${file.bytes}`;
+  });
   if (changed.length === 0) return [];
   const destDir = path.join(editedImagesRoot, folder);
   fs.mkdirSync(destDir, { recursive: true });
@@ -280,6 +332,25 @@ export function publishEditedImages(id: string, reference: string, before: Arqui
     saved.push(path.join(destDir, stored));
   }
   return saved;
+}
+
+export function keepSingleNewBmp(id: string, before: ArquivoStamp[]) {
+  const known = new Set(before.map((file) => file.name));
+  const created = listArquivoStamps(id).filter((file) => !known.has(file.name));
+  const tempName = (name: string) => {
+    const base = path.basename(name).toLowerCase();
+    return base.startsWith('_') || base.includes('tmp');
+  };
+  const finals = created.filter((file) => file.name.toLowerCase().endsWith('.bmp') && !tempName(file.name));
+  const bmps = finals.length > 0 ? finals : created.filter((file) => file.name.toLowerCase().endsWith('.bmp'));
+  bmps.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const keep = bmps[0]?.name;
+  const dir = path.join(sessionDir(id), 'arquivos');
+  for (const file of created) {
+    if (file.name === keep) continue;
+    fs.rmSync(path.join(dir, ...file.name.split('/')), { force: true });
+  }
+  return keep ?? null;
 }
 
 export function resolveSessionFile(id: string, name: string) {

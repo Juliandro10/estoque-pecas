@@ -18,7 +18,7 @@ import type {
   SyntechYarnCatalogFile,
   ProducaoBoard,
 } from '../types-programming';
-import type { M1EditorModelChoice } from '../../shared/m1-editor-model';
+import type { M1EditorModelChoice, M1EditorSaida } from '../../shared/m1-editor-model';
 import type { SyntechProdutoCadastro, SyntechProdutoCadastroOpcoes } from '../../shared/syntech-produto-cadastro';
 import type { ClientFirestoreBackup } from './backup-export';
 
@@ -240,7 +240,16 @@ export const localProgramsApi = {
       body: JSON.stringify({ uid }),
     }),
   m1EditorStatus: () =>
-    localRequest<{ ok: boolean; configured: boolean; model: string }>('/api/programs/m1-editor/status'),
+    localRequest<{ ok: boolean; configured: boolean; model: string; local?: boolean; localModel?: string }>(
+      '/api/programs/m1-editor/status'
+    ),
+  m1EditorPadrao: () => localRequest<{ regras: string }>('/api/programs/m1-editor/padrao'),
+  m1EditorSavePadrao: (regras: string) =>
+    localRequest<{ regras: string }>('/api/programs/m1-editor/padrao', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regras }),
+    }),
   m1EditorSessions: () =>
     localRequest<{ sessions: { id: string; title: string; reference: string; updatedAt: string }[] }>(
       '/api/programs/m1-editor/sessions'
@@ -255,7 +264,10 @@ export const localProgramsApi = {
     localRequest<{ session: M1EditorSession; files: M1EditorFile[] }>(
       `/api/programs/m1-editor/sessions/${encodeURIComponent(id)}`
     ),
-  m1EditorUpdate: (id: string, patch: { title?: string; reference?: string; model?: M1EditorModelChoice; messages?: M1EditorMessage[] }) =>
+  m1EditorUpdate: (
+    id: string,
+    patch: { title?: string; reference?: string; model?: M1EditorModelChoice; saida?: M1EditorSaida; messages?: M1EditorMessage[] },
+  ) =>
     localRequest<{ session: M1EditorSession }>(`/api/programs/m1-editor/sessions/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -346,6 +358,7 @@ export type M1EditorSession = {
   title: string;
   reference: string;
   model?: M1EditorModelChoice;
+  saida?: M1EditorSaida;
   messages: M1EditorMessage[];
 };
 
@@ -368,13 +381,14 @@ export async function streamM1EditorChat(
   sessionId: string,
   message: string,
   model: M1EditorModelChoice,
+  saida: M1EditorSaida,
   onEvent: (event: M1EditorEvent) => void,
   signal?: AbortSignal
 ) {
   const res = await fetch(`/api/programs/m1-editor/sessions/${encodeURIComponent(sessionId)}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, model }),
+    body: JSON.stringify({ message, model, saida }),
     signal,
   });
   if (!res.ok || !res.body) {

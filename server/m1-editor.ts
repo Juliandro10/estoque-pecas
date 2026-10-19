@@ -2,8 +2,9 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { m1EditorSdkModel, normalizeM1EditorModel } from '../shared/m1-editor-model';
-import { converterParaImagem, describeImage, previewPng, quantizarCores } from './m1-editor-convert';
+import { m1EditorSdkModel, normalizeM1EditorModel, normalizeM1EditorSaida, LOCAL_EDITOR_MODEL } from '../shared/m1-editor-model';
+import { converterParaImagem, describeImage, prepararBmp, previewPng, quantizarCores } from './m1-editor-convert';
+import { localModelReady, runLocalEditorTurn } from './m1-editor-local';
 import {
   createSession,
   editorBrief,
@@ -18,6 +19,8 @@ import {
   sessionDir,
   snapshotArquivos,
   updateSession,
+  readEditorRegras,
+  writeEditorRegras,
 } from './m1-editor-store';
 
 type LiveTurn = {
@@ -41,7 +44,7 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function editorTools(root: string) {
+function editorTools(root: string, saida: { largura: number; altura: number; cores: number }) {
   return {
     listar_arquivos: {
       description: 'Lista os arquivos desta conversa, com caminho relativo.',
@@ -65,7 +68,7 @@ function editorTools(root: string) {
     },
     converter_para_imagem: {
       description:
-        'Converte imagem, PDF, Photoshop, Illustrator ou HTML para PNG, JPG ou BMP de 24 bits. Se largura e altura vierem juntas, estica exatamente nessa medida.',
+        'Converte imagem, PDF, Photoshop, Illustrator ou HTML. Para a saída da máquina, na medida do editor, use preparar_bmp.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -106,6 +109,21 @@ function editorTools(root: string) {
       },
       async execute(args: Record<string, unknown>) {
         return quantizarCores(root, text(args.entrada), text(args.saida), args.cores);
+      },
+    },
+    preparar_bmp: {
+      description:
+        'Grava o BMP de 24 bits na largura, altura e quantidade de cores já definidas no editor. Não estica o desenho. Use esta ferramenta para a saída da máquina.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          entrada: { type: 'string', description: 'Arquivo de origem.' },
+          saida: { type: 'string', description: 'BMP novo em arquivos/.' },
+        },
+        required: ['entrada'],
+      },
+      async execute(args: Record<string, unknown>) {
+        return prepararBmp(root, text(args.entrada), text(args.saida) || undefined, saida.largura, saida.altura, saida.cores);
       },
     },
   };
@@ -183,12 +201,23 @@ export function registerM1EditorUpload(app: express.Express) {
 }
 
 export function registerM1EditorRoutes(app: express.Express) {
-  app.get('/api/programs/m1-editor/status', (_req, res) => {
+  app.get('/api/programs/m1-editor/status', async (_req, res) => {
     res.json({
       ok: true,
       configured: Boolean(process.env.CURSOR_API_KEY?.trim()),
       model: m1EditorSdkModel(undefined).id,
+      local: await localModelReady(),
+      localModel: LOCAL_EDITOR_MODEL,
     });
+  });
+
+  app.get('/api/programs/m1-editor/padrao', (_req, res) => {
+    res.json({ regras: readEditorRegras() });
+  });
+
+  app.put('/api/programs/m1-editor/padrao', (req, res) => {
+    const regras = typeof req.body?.regras === 'string' ? req.body.regras : '';
+    res.json({ regras: writeEditorRegras(regras) });
   });
 
   app.get('/api/programs/m1-editor/sessions', (_req, res) => {
@@ -218,11 +247,13 @@ export function registerM1EditorRoutes(app: express.Express) {
         title?: string;
         reference?: string;
         model?: ReturnType<typeof normalizeM1EditorModel>;
+        saida?: ReturnType<typeof normalizeM1EditorSaida>;
         messages?: { role: 'user' | 'assistant'; text: string; at: string }[];
       } = {};
       if (typeof req.body?.title === 'string') patch.title = req.body.title.trim() || 'Nova conversa';
       if (typeof req.body?.reference === 'string') patch.reference = req.body.reference.trim();
       if (req.body?.model && typeof req.body.model === 'object') patch.model = normalizeM1EditorModel(req.body.model);
+      if (req.body?.saida && typeof req.body.saida === 'object') patch.saida = normalizeM1EditorSaida(req.body.saida);
       if (Array.isArray(req.body?.messages)) {
         const incoming = req.body.messages.slice(-100).flatMap((row: { role?: string; text?: string; at?: string }) => {
           if (row?.role !== 'user' && row?.role !== 'assistant') return [];
@@ -275,8 +306,9 @@ export function registerM1EditorRoutes(app: express.Express) {
       res.status(400).json({ error: 'Pedido longo demais.' });
       return;
     }
+    const requested = normalizeM1EditorModel(req.body?.model);
     const apiKey = process.env.CURSOR_API_KEY?.trim();
-    if (!apiKey) {
+    if (requested.id !== 'local' && !apiKey) {
       res.status(400).json({
         error: 'Falta CURSOR_API_KEY no .env. Crie em Cursor Dashboard → API Keys, cole no .env e reinicie o scanner.',
       });
@@ -315,6 +347,7 @@ export function registerM1EditorRoutes(app: express.Express) {
     res.flushHeaders();
 
     const choice = normalizeM1EditorModel(req.body?.model ?? session.model);
+    const saida = normalizeM1EditorSaida(req.body?.saida ?? session.saida);
     const filesBefore = listSessionFiles(id)
       .filter((file) => !file.version)
       .map((file) => file.name)
@@ -323,11 +356,13 @@ export function registerM1EditorRoutes(app: express.Express) {
     const refLine = session.reference ? `Referência da peça: ${session.reference}\n` : '';
     const prompt = first
       ? `${editorBrief()}\n\n${refLine}Pedido:\n${message}\n\nArquivos:\n${filesBefore || '(nenhum)'}`
-      : `${refLine}Pedido:\n${message}\n\nArquivos agora:\n${filesBefore || '(nenhum)'}\n\nSe o pedido for só medir, prever ou confirmar antes de editar, responda em texto e não grave arquivo. Se for para editar, grave um arquivo novo em arquivos/, BMP de 24 bits, na medida exata pedida. Se o pedido for só a costa, não junte a frente. Quando o arquivo estiver gravado, responda e pare.`;
+      : `${refLine}Pedido:\n${message}\n\nArquivos agora:\n${filesBefore || '(nenhum)'}\n\nSe o pedido for só medir, prever ou confirmar antes de editar, responda em texto e não grave arquivo. Se for para editar, grave com preparar_bmp. A medida do editor é ${saida.largura} x ${saida.altura} pixels e no máximo ${saida.cores} cores chapadas, fundo incluído, sem esticar. Quando o arquivo estiver gravado, responda e pare.`;
+    const pedido = `${prompt}\n\nMedida do editor: ${saida.largura} x ${saida.altura} pixels, no máximo ${saida.cores} cores chapadas, sem esticar. Grave um único BMP com preparar_bmp e pare. Não grave PNG, recorte de teste nem arquivo temporário.\n\nParâmetros gravados, seguir sempre:\n${readEditorRegras()}`;
 
     session = updateSession(id, {
       title: session.title === 'Nova conversa' ? message.slice(0, 48) : session.title,
       model: choice,
+      saida,
       messages: [...session.messages, { role: 'user', text: message, at: new Date().toISOString() }],
     });
 
@@ -352,12 +387,38 @@ export function registerM1EditorRoutes(app: express.Express) {
     };
     try {
       snapshotArquivos(id);
-      const sdk = await import('@cursor/sdk');
       const root = sessionDir(id);
+      if (choice.id === 'local') {
+        const history = session.messages.slice(0, -1).flatMap((row) =>
+          row.role === 'user' || row.role === 'assistant' ? [{ role: row.role, text: row.text }] : [],
+        );
+        assistant = await runLocalEditorTurn({
+          sessionId: id,
+          root,
+          prompt: pedido,
+          history,
+          saida,
+          regras: readEditorRegras(),
+          dropped: () => turn.dropped,
+          onText: (chunk) => {
+            assistant = pushText(assistant, chunk, res);
+          },
+          onTool: (name) => sendEvent(res, { type: 'tool', name }),
+        });
+        if (!turn.dropped) {
+          publishNow();
+          saveAssistant(id, assistant, true);
+          sendEvent(res, { type: 'done', status: 'finished' });
+          closedByUs = true;
+          if (!res.writableEnded) res.end();
+        }
+        return;
+      }
+      const sdk = await import('@cursor/sdk');
       const local = {
         cwd: root,
         autoReview: true,
-        customTools: editorTools(root),
+        customTools: editorTools(root, saida),
       };
       const selection = m1EditorSdkModel(choice);
       const agent = session.agentId
@@ -367,7 +428,7 @@ export function registerM1EditorRoutes(app: express.Express) {
 
       try {
         const startRun = (force: boolean) =>
-          agent.send(prompt, { model: selection, local: force ? { force: true } : undefined });
+          agent.send(pedido, { model: selection, local: force ? { force: true } : undefined });
         let run: Awaited<ReturnType<typeof startRun>> | undefined;
         try {
           run = await startRun(false);

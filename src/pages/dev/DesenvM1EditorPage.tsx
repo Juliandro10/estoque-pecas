@@ -2,11 +2,15 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DEFAULT_M1_EDITOR_MODEL,
+  DEFAULT_M1_EDITOR_SAIDA,
   M1_EDITOR_EFFORTS,
   M1_EDITOR_MODELS,
   normalizeM1EditorModel,
+  normalizeM1EditorSaida,
   type M1EditorEffort,
   type M1EditorModelChoice,
+  type M1EditorModelId,
+  type M1EditorSaida,
 } from '../../../shared/m1-editor-model';
 import {
   isLocalScannerAvailable,
@@ -33,6 +37,10 @@ export function DesenvM1EditorPage() {
   const [sessions, setSessions] = useState<{ id: string; title: string }[]>([]);
   const [reference, setReference] = useState('');
   const [model, setModel] = useState<M1EditorModelChoice>(DEFAULT_M1_EDITOR_MODEL);
+  const [saida, setSaida] = useState<M1EditorSaida>(DEFAULT_M1_EDITOR_SAIDA);
+  const [localReady, setLocalReady] = useState(false);
+  const [regras, setRegras] = useState('');
+  const regrasRef = useRef('');
   const [messages, setMessages] = useState<M1EditorMessage[]>([]);
   const [files, setFiles] = useState<M1EditorFile[]>([]);
   const [selected, setSelected] = useState('');
@@ -45,6 +53,7 @@ export function DesenvM1EditorPage() {
   const selectedRef = useRef('');
   const messagesRef = useRef<M1EditorMessage[]>([]);
   const modelRef = useRef(model);
+  const saidaRef = useRef(saida);
   const chatAbortRef = useRef<AbortController | null>(null);
   const sendGen = useRef(0);
 
@@ -65,6 +74,10 @@ export function DesenvM1EditorPage() {
   }, [model]);
 
   useEffect(() => {
+    saidaRef.current = saida;
+  }, [saida]);
+
+  useEffect(() => {
     if (!sessionId || messages.length === 0) return;
     const timer = window.setTimeout(() => {
       void localProgramsApi.m1EditorUpdate(sessionId, { messages: messagesRef.current }).catch(() => undefined);
@@ -81,6 +94,7 @@ export function DesenvM1EditorPage() {
     setSessionId(id);
     setReference(data.session.reference);
     setModel(normalizeM1EditorModel(data.session.model));
+    setSaida(normalizeM1EditorSaida(data.session.saida));
     setMessages(data.session.messages);
     setFiles(data.files);
     setSelected((current) => pickPreview(data.files, current));
@@ -101,6 +115,12 @@ export function DesenvM1EditorPage() {
         const status = await localProgramsApi.m1EditorStatus();
         if (cancel) return;
         setConfigured(status.configured);
+        setLocalReady(status.local === true);
+        const padrao = await localProgramsApi.m1EditorPadrao();
+        if (!cancel) {
+          regrasRef.current = padrao.regras;
+          setRegras(padrao.regras);
+        }
         const listed = await localProgramsApi.m1EditorSessions();
         if (cancel) return;
         setSessions(listed.sessions.map((row) => ({ id: row.id, title: row.title })));
@@ -142,6 +162,22 @@ export function DesenvM1EditorPage() {
     setSelected('');
     localStorage.setItem(SESSION_KEY, id);
     return id;
+  }
+
+  function agentId(value: string): M1EditorModelId {
+    if (value === 'grok' || value === 'local') return value;
+    return 'composer';
+  }
+
+  async function saveSaida(next: M1EditorSaida) {
+    const choice = normalizeM1EditorSaida(next);
+    setSaida(choice);
+    if (!sessionId) return;
+    try {
+      await localProgramsApi.m1EditorUpdate(sessionId, { saida: choice });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não deu para salvar a medida.');
+    }
   }
 
   async function saveModel(next: M1EditorModelChoice) {
@@ -207,7 +243,7 @@ export function DesenvM1EditorPage() {
     setMessages((rows) => [...rows, { role: 'user', text: message, at: new Date().toISOString() }]);
     let assistant = '';
     const deliver = async () => {
-      await streamM1EditorChat(id, message, modelRef.current, (item) => {
+      await streamM1EditorChat(id, message, modelRef.current, saidaRef.current, (item) => {
         if (item.type === 'text') {
           assistant += item.text;
           const text = assistant;
@@ -333,14 +369,14 @@ export function DesenvM1EditorPage() {
                 }
               }}
               placeholder="Descreva a edição"
-              disabled={!supported || !configured}
+              disabled={!supported || (!configured && !localReady)}
             />
             <div className="editor-model">
               <select
                 aria-label="Agente"
                 value={model.id}
-                disabled={!supported || !configured}
-                onChange={(event) => void saveModel({ ...model, id: event.target.value === 'grok' ? 'grok' : 'composer' })}
+                disabled={!supported || (!configured && !localReady)}
+                onChange={(event) => void saveModel({ ...model, id: agentId(event.target.value) })}
               >
                 {M1_EDITOR_MODELS.map((row) => (
                   <option key={row.id} value={row.id}>
@@ -362,16 +398,96 @@ export function DesenvM1EditorPage() {
                   ))}
                 </select>
               )}
-              <select
-                aria-label="Velocidade"
-                value={model.fast ? 'fast' : 'normal'}
-                disabled={!supported || !configured}
-                onChange={(event) => void saveModel({ ...model, fast: event.target.value === 'fast' })}
-              >
-                <option value="fast">Rápido</option>
-                <option value="normal">Normal</option>
-              </select>
+              {model.id !== 'local' && (
+                <select
+                  aria-label="Velocidade"
+                  value={model.fast ? 'fast' : 'normal'}
+                  disabled={!supported || !configured}
+                  onChange={(event) => void saveModel({ ...model, fast: event.target.value === 'fast' })}
+                >
+                  <option value="fast">Rápido</option>
+                  <option value="normal">Normal</option>
+                </select>
+              )}
             </div>
+            <div className="editor-spec">
+              <label>
+                Largura
+                <input
+                  aria-label="Largura"
+                  type="number"
+                  min={16}
+                  max={2000}
+                  value={saida.largura}
+                  disabled={!supported}
+                  onChange={(event) => {
+                    const next = { ...saidaRef.current, largura: Number(event.target.value) };
+                    saidaRef.current = next;
+                    setSaida(next);
+                  }}
+                  onBlur={() => void saveSaida(saidaRef.current)}
+                />
+              </label>
+              <label>
+                Altura
+                <input
+                  aria-label="Altura"
+                  type="number"
+                  min={16}
+                  max={2000}
+                  value={saida.altura}
+                  disabled={!supported}
+                  onChange={(event) => {
+                    const next = { ...saidaRef.current, altura: Number(event.target.value) };
+                    saidaRef.current = next;
+                    setSaida(next);
+                  }}
+                  onBlur={() => void saveSaida(saidaRef.current)}
+                />
+              </label>
+              <label>
+                Cores
+                <input
+                  aria-label="Cores"
+                  type="number"
+                  min={2}
+                  max={8}
+                  value={saida.cores}
+                  disabled={!supported}
+                  onChange={(event) => {
+                    const next = { ...saidaRef.current, cores: Number(event.target.value) };
+                    saidaRef.current = next;
+                    setSaida(next);
+                  }}
+                  onBlur={() => void saveSaida(saidaRef.current)}
+                />
+              </label>
+            </div>
+            <label className="editor-regras">
+              Parâmetros
+              <textarea
+                aria-label="Parâmetros do agente"
+                value={regras}
+                disabled={!supported}
+                onChange={(event) => {
+                  regrasRef.current = event.target.value;
+                  setRegras(event.target.value);
+                }}
+                onBlur={() => {
+                  void localProgramsApi.m1EditorSavePadrao(regrasRef.current).catch((err) => {
+                    setError(err instanceof Error ? err.message : 'Não deu para salvar os parâmetros.');
+                  });
+                }}
+              />
+              <span>Fica gravado como padrão. O agente segue isso em todas as conversas.</span>
+            </label>
+            {model.id === 'local' && (
+              <p className="editor-hint">
+                {localReady
+                  ? 'Local neste PC, sem API. A resposta demora mais que o Composer.'
+                  : 'O modelo local ainda está sendo preparado neste PC.'}
+              </p>
+            )}
             <div className="editor-actions">
               <label className="btn btn-ghost btn-sm">
                 Anexar
@@ -386,7 +502,11 @@ export function DesenvM1EditorPage() {
                   }}
                 />
               </label>
-              <button type="submit" className="btn btn-sm" disabled={!supported || !configured || !draft.trim()}>
+              <button
+                type="submit"
+                className="btn btn-sm"
+                disabled={!supported || !draft.trim() || (model.id === 'local' ? !localReady : !configured)}
+              >
                 Enviar
               </button>
             </div>
@@ -480,6 +600,12 @@ export function DesenvM1EditorPage() {
         .editor-form textarea { min-height: 72px; max-height: 140px; }
         .editor-model { display: flex; flex-wrap: wrap; gap: 6px; }
         .editor-model select { width: auto; flex: 1 1 88px; min-width: 0; padding: 8px; font-size: 13px; }
+        .editor-spec { display: flex; gap: 8px; }
+        .editor-spec label { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+        .editor-spec input { width: 100%; padding: 8px; font-size: 14px; }
+        .editor-regras { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+        .editor-regras textarea { min-height: 72px; max-height: 120px; font-size: 13px; }
+        .editor-regras span { font-size: 11px; line-height: 1.3; }
         .editor-actions { display: flex; justify-content: space-between; gap: 8px; }
         .editor-actions .btn { width: auto; }
         .editor-stage img {

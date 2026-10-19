@@ -1,4 +1,4 @@
-export type M1EditorModelId = 'composer' | 'grok';
+export type M1EditorModelId = 'composer' | 'grok' | 'local';
 export type M1EditorEffort = 'low' | 'medium' | 'high' | 'xhigh';
 export type M1EditorContext = '256k' | '500k';
 
@@ -19,7 +19,36 @@ export const DEFAULT_M1_EDITOR_MODEL: M1EditorModelChoice = {
 export const M1_EDITOR_MODELS: { id: M1EditorModelId; label: string }[] = [
   { id: 'composer', label: 'Composer' },
   { id: 'grok', label: 'Grok' },
+  { id: 'local', label: 'Local' },
 ];
+
+export const LOCAL_EDITOR_MODEL = 'qwen2.5:7b';
+
+export type M1EditorSaida = {
+  largura: number;
+  altura: number;
+  cores: number;
+};
+
+export const DEFAULT_M1_EDITOR_SAIDA: M1EditorSaida = {
+  largura: 320,
+  altura: 240,
+  cores: 4,
+};
+
+export function normalizeM1EditorSaida(value: unknown): M1EditorSaida {
+  const row = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const largura = clampInt(row.largura, 16, 2000, DEFAULT_M1_EDITOR_SAIDA.largura);
+  const altura = clampInt(row.altura, 16, 2000, DEFAULT_M1_EDITOR_SAIDA.altura);
+  const cores = clampInt(row.cores, 2, 8, DEFAULT_M1_EDITOR_SAIDA.cores);
+  return { largura, altura, cores };
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
 
 export const M1_EDITOR_EFFORTS: { id: M1EditorEffort; label: string }[] = [
   { id: 'low', label: 'Baixo' },
@@ -36,7 +65,7 @@ export function normalizeM1EditorModel(value: unknown): M1EditorModelChoice {
   const row = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const effort = typeof row.effort === 'string' && EFFORTS.has(row.effort) ? (row.effort as M1EditorEffort) : DEFAULT_M1_EDITOR_MODEL.effort;
   return {
-    id: row.id === 'grok' ? 'grok' : 'composer',
+    id: row.id === 'grok' || row.id === 'local' ? row.id : 'composer',
     fast: typeof row.fast === 'boolean' ? row.fast : DEFAULT_M1_EDITOR_MODEL.fast,
     effort,
     context: '256k',
