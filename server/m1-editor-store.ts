@@ -179,24 +179,46 @@ function padraoPath() {
   return path.join(m1EditorRoot, 'padrao.json');
 }
 
-export function readEditorRegras() {
+function readPadrao() {
   try {
-    const parsed = JSON.parse(fs.readFileSync(padraoPath(), 'utf8')) as { regras?: unknown };
-    if (typeof parsed.regras === 'string') return parsed.regras.slice(0, 4000);
+    const parsed = JSON.parse(fs.readFileSync(padraoPath(), 'utf8')) as { regras?: unknown; modelo?: unknown };
+    return {
+      regras: typeof parsed.regras === 'string' ? parsed.regras.slice(0, 4000) : DEFAULT_EDITOR_REGRAS,
+      modelo: typeof parsed.modelo === 'string' ? parsed.modelo.trim().slice(0, 80) : '',
+    };
   } catch {
-    /* ainda não existe */
+    return { regras: DEFAULT_EDITOR_REGRAS, modelo: '' };
   }
-  return DEFAULT_EDITOR_REGRAS;
+}
+
+function writePadrao(next: { regras: string; modelo: string }) {
+  fs.mkdirSync(m1EditorRoot, { recursive: true });
+  const tmp = `${padraoPath()}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ regras: next.regras, modelo: next.modelo }, null, 2));
+  fs.copyFileSync(tmp, padraoPath());
+  fs.rmSync(tmp, { force: true });
+}
+
+export function readEditorRegras() {
+  return readPadrao().regras;
 }
 
 export function writeEditorRegras(regras: string) {
-  fs.mkdirSync(m1EditorRoot, { recursive: true });
+  const current = readPadrao();
   const text = regras.slice(0, 4000);
-  const tmp = `${padraoPath()}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify({ regras: text }, null, 2));
-  fs.copyFileSync(tmp, padraoPath());
-  fs.rmSync(tmp, { force: true });
+  writePadrao({ regras: text, modelo: current.modelo });
   return text;
+}
+
+export function readEditorModelo() {
+  return readPadrao().modelo;
+}
+
+export function writeEditorModelo(modelo: string) {
+  const current = readPadrao();
+  const name = modelo.trim().slice(0, 80);
+  writePadrao({ regras: current.regras, modelo: name });
+  return name;
 }
 
 function safeUploadName(name: string) {

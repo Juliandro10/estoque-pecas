@@ -41,6 +41,8 @@ export function DesenvM1EditorPage() {
   const [localReady, setLocalReady] = useState(false);
   const [localFallback, setLocalFallback] = useState(false);
   const [localMessage, setLocalMessage] = useState('');
+  const [localModel, setLocalModel] = useState('');
+  const [localModels, setLocalModels] = useState<string[]>([]);
   const [regras, setRegras] = useState('');
   const regrasRef = useRef('');
   const [messages, setMessages] = useState<M1EditorMessage[]>([]);
@@ -182,10 +184,30 @@ export function DesenvM1EditorPage() {
     }
   }
 
-  function applyLocalStatus(status: { local?: boolean; localFallback?: boolean; localMessage?: string }) {
+  function applyLocalStatus(status: {
+    local?: boolean;
+    localFallback?: boolean;
+    localMessage?: string;
+    localModel?: string;
+    localPreferred?: string;
+    localModels?: string[];
+  }) {
     setLocalReady(status.local === true);
     setLocalFallback(status.localFallback === true);
     setLocalMessage(status.localMessage?.trim() ?? '');
+    const chosen = status.localPreferred?.trim() || status.localModel?.trim() || '';
+    const installed = status.localModels ?? [];
+    setLocalModels(chosen && !installed.includes(chosen) ? [chosen, ...installed] : installed);
+    setLocalModel(chosen);
+  }
+
+  async function saveLocalModel(modelo: string) {
+    setLocalModel(modelo);
+    try {
+      applyLocalStatus(await localProgramsApi.m1EditorSaveModelo(modelo));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não deu para trocar o modelo local.');
+    }
   }
 
   async function saveModel(next: M1EditorModelChoice) {
@@ -395,6 +417,20 @@ export function DesenvM1EditorPage() {
                   </option>
                 ))}
               </select>
+              {model.id === 'local' && (
+                <select
+                  aria-label="Modelo local"
+                  value={localModel}
+                  disabled={!supported || localModels.length === 0}
+                  onChange={(event) => void saveLocalModel(event.target.value)}
+                >
+                  {localModels.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              )}
               {model.id === 'grok' && (
                 <select
                   aria-label="Esforço"

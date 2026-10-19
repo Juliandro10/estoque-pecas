@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { m1EditorSdkModel, normalizeM1EditorModel, normalizeM1EditorSaida } from '../shared/m1-editor-model';
 import { converterParaImagem, describeImage, prepararBmp, previewPng, quantizarCores } from './m1-editor-convert';
-import { inspectLocalEditor, runLocalEditorTurn } from './m1-editor-local';
+import { inspectLocalEditor, isLocalModelName, runLocalEditorTurn } from './m1-editor-local';
 import {
   createSession,
   editorBrief,
@@ -20,6 +20,7 @@ import {
   snapshotArquivos,
   updateSession,
   readEditorRegras,
+  writeEditorModelo,
   writeEditorRegras,
 } from './m1-editor-store';
 
@@ -210,6 +211,26 @@ export function registerM1EditorRoutes(app: express.Express) {
       local: local.ready,
       localModel: local.model,
       localPreferred: local.preferred,
+      localModels: local.installed,
+      localFallback: local.fallback,
+      localMessage: local.message,
+    });
+  });
+
+  app.put('/api/programs/m1-editor/modelo', async (req, res) => {
+    const modelo = typeof req.body?.modelo === 'string' ? req.body.modelo.trim() : '';
+    if (!isLocalModelName(modelo)) {
+      res.status(400).json({ error: 'Escolha um modelo local.' });
+      return;
+    }
+    writeEditorModelo(modelo);
+    const local = await inspectLocalEditor();
+    res.json({
+      modelo: local.preferred,
+      local: local.ready,
+      localModel: local.model,
+      localPreferred: local.preferred,
+      localModels: local.installed,
       localFallback: local.fallback,
       localMessage: local.message,
     });

@@ -247,9 +247,24 @@ export const localProgramsApi = {
       local?: boolean;
       localModel?: string;
       localPreferred?: string;
+      localModels?: string[];
       localFallback?: boolean;
       localMessage?: string;
     }>('/api/programs/m1-editor/status'),
+  m1EditorSaveModelo: (modelo: string) =>
+    localRequest<{
+      modelo: string;
+      local: boolean;
+      localModel: string;
+      localPreferred: string;
+      localModels: string[];
+      localFallback: boolean;
+      localMessage: string;
+    }>('/api/programs/m1-editor/modelo', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelo }),
+    }),
   m1EditorPadrao: () => localRequest<{ regras: string }>('/api/programs/m1-editor/padrao'),
   m1EditorSavePadrao: (regras: string) =>
     localRequest<{ regras: string }>('/api/programs/m1-editor/padrao', {

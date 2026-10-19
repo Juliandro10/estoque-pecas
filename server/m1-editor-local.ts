@@ -5,7 +5,7 @@ import {
   type M1EditorSaida,
 } from '../shared/m1-editor-model';
 import { prepararBmp, describeImage } from './m1-editor-convert';
-import { listSessionFiles } from './m1-editor-store';
+import { listSessionFiles, readEditorModelo } from './m1-editor-store';
 
 const TAGS_TIMEOUT_MS = 4000;
 const CHAT_TIMEOUT_MS = 8 * 60 * 1000;
@@ -26,6 +26,7 @@ export type LocalEditorAvailability = {
   preferred: string;
   fallback: boolean;
   message: string;
+  installed: string[];
 };
 
 function readEnv(name: string) {
@@ -43,10 +44,28 @@ export function ollamaUrl() {
   return DEFAULT_OLLAMA_URL;
 }
 
+export function isLocalModelName(value: string) {
+  return /^[\w.:-]{1,80}$/.test(value);
+}
+
 export function preferredLocalModel() {
+  const saved = readEditorModelo();
+  if (isLocalModelName(saved)) return saved;
   const value = readEnv('OLLAMA_MODEL');
-  if (!value || /[\s"'`$\\]/.test(value)) return LOCAL_EDITOR_MODEL;
+  if (!value || !isLocalModelName(value)) return LOCAL_EDITOR_MODEL;
   return value;
+}
+
+export function uniqueModelNames(names: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of names) {
+    const key = name.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name.trim());
+  }
+  return out.sort((a, b) => a.localeCompare(b, 'pt'));
 }
 
 function installedNames(body: { models?: { name?: string; model?: string }[] }) {
@@ -88,27 +107,31 @@ export function resolveLocalEditor(options: {
       model: preferred,
       preferred,
       fallback: false,
+      installed: uniqueModelNames(options.installed),
       message: `${detail} Abra o Ollama neste PC. Para baixar o modelo, rode ${pullLine(preferred)}.`,
     };
   }
-  const installed = findInstalledModel(options.installed, preferred);
+  const names = uniqueModelNames(options.installed);
+  const installed = findInstalledModel(names, preferred);
   if (installed) {
     return {
       ready: true,
       model: installed,
       preferred,
       fallback: false,
+      installed: names,
       message: `Local neste PC (${installed}), sem API. A resposta demora mais que o Composer.`,
     };
   }
   const fallbackName = LOCAL_EDITOR_FALLBACK_MODEL;
-  const fallback = fallbackName.toLowerCase() === preferred.toLowerCase() ? '' : findInstalledModel(options.installed, fallbackName);
+  const fallback = fallbackName.toLowerCase() === preferred.toLowerCase() ? '' : findInstalledModel(names, fallbackName);
   if (fallback) {
     return {
       ready: true,
       model: fallback,
       preferred,
       fallback: true,
+      installed: names,
       message: `Falta o modelo ${preferred} no Ollama. Rode ${pullLine(preferred)}. Enquanto isso, o editor usa ${fallback}.`,
     };
   }
@@ -117,6 +140,7 @@ export function resolveLocalEditor(options: {
     model: preferred,
     preferred,
     fallback: false,
+    installed: names,
     message: `Falta o modelo ${preferred} no Ollama. Rode ${pullLine(preferred)}.`,
   };
 }
