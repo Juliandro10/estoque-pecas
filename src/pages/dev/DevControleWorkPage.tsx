@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { exportProgrammingPixImage, exportProgrammingPixPdf } from '../../lib/programming-pix-export';
 import { exportProgrammingPdf } from '../../lib/programming-report-export';
 import { isLocalScannerAvailable, localProgramsApi } from '../../lib/local-programs-api';
 import { programmingClientsDb } from '../../lib/programming-clients-db';
@@ -369,6 +370,39 @@ export function DevControleWorkPage({ workType }: Props) {
     setSelectedIds(new Set());
   }
 
+  async function reportFromSelection(entries: ProgramEntry[]) {
+    const sorted = [...entries].sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const rangeStart = sorted[0].start_date;
+    const rangeEnd = sorted[sorted.length - 1].start_date;
+    let clientName: string | null = null;
+    if (clientFilter) {
+      const client = await programmingClientsDb.get(clientFilter);
+      clientName = client?.name ?? sorted[0]?.client_name ?? null;
+    } else {
+      const names = new Set(sorted.map((row) => row.client_name).filter(Boolean));
+      clientName = names.size === 1 ? sorted[0].client_name : null;
+    }
+
+    const totalScope = resolveReportTotalScope(
+      rangeStart,
+      rangeEnd,
+      pdfSelectionMode === 'day' ? 'day' : pdfSelectionMode === 'week' ? 'week' : null
+    );
+
+    return {
+      fileTag: `selecao-${pdfFileTagFromRange(rangeStart, rangeEnd)}`,
+      report: buildReportFromEntries(
+        entries,
+        workType,
+        clientFilter || null,
+        rangeStart === rangeEnd ? formatDayLabel(rangeStart) : periodLabelFromRange(rangeStart, rangeEnd),
+        clientName,
+        'day',
+        totalScope
+      ),
+    };
+  }
+
   async function exportSelectedPdf() {
     if (selectedRows.length === 0) {
       setError('Selecione ao menos um programa para gerar o PDF.');
@@ -376,37 +410,36 @@ export function DevControleWorkPage({ workType }: Props) {
     }
 
     try {
-      const sorted = [...selectedRows].sort((a, b) => a.start_date.localeCompare(b.start_date));
-      const rangeStart = sorted[0].start_date;
-      const rangeEnd = sorted[sorted.length - 1].start_date;
-      let clientName: string | null = null;
-      if (clientFilter) {
-        const client = await programmingClientsDb.get(clientFilter);
-        clientName = client?.name ?? sorted[0]?.client_name ?? null;
-      }
-
-      const totalScope = resolveReportTotalScope(
-        rangeStart,
-        rangeEnd,
-        pdfSelectionMode === 'day' ? 'day' : pdfSelectionMode === 'week' ? 'week' : null
-      );
-
-      const report = buildReportFromEntries(
-        selectedRows,
-        workType,
-        clientFilter || null,
-        rangeStart === rangeEnd
-          ? formatDayLabel(rangeStart)
-          : periodLabelFromRange(rangeStart, rangeEnd),
-        clientName,
-        'day',
-        totalScope
-      );
-      exportProgrammingPdf(report, { fileTag: `selecao-${pdfFileTagFromRange(rangeStart, rangeEnd)}` });
+      const { report, fileTag } = await reportFromSelection(selectedRows);
+      exportProgrammingPdf(report, { fileTag });
       setError('');
       setInfo(`PDF gerado com ${selectedRows.length} programa(s).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao gerar PDF.');
+    }
+  }
+
+  async function exportSelectedPix(kind: 'pdf' | 'imagem') {
+    const chargeable = selectedRows.filter((row) => !row.paid && row.value > 0);
+    if (chargeable.length === 0) {
+      setError('Selecione programas que ainda estão a pagar.');
+      return;
+    }
+
+    try {
+      const { report, fileTag } = await reportFromSelection(chargeable);
+      if (kind === 'pdf') await exportProgrammingPixPdf(report, { fileTag });
+      else await exportProgrammingPixImage(report, { fileTag });
+      const skipped = selectedRows.length - chargeable.length;
+      const formato = kind === 'pdf' ? 'PDF' : 'imagem';
+      setError('');
+      setInfo(
+        skipped > 0
+          ? `Guia PIX em ${formato} com ${chargeable.length} programa(s) a pagar. ${skipped} já pago(s) ficaram de fora.`
+          : `Guia PIX em ${formato} com ${chargeable.length} programa(s).`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao gerar a guia PIX.');
     }
   }
 
@@ -532,9 +565,30 @@ export function DevControleWorkPage({ workType }: Props) {
           >
             Gerar PDF{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
           </button>
+          {isExtra ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void exportSelectedPix('pdf')}
+                disabled={selectedIds.size === 0}
+              >
+                PIX PDF
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void exportSelectedPix('imagem')}
+                disabled={selectedIds.size === 0}
+              >
+                PIX imagem
+              </button>
+            </>
+          ) : null}
         </div>
         <p className="pdf-selection-hint">
           Marque linhas na tabela ou use Hoje, Semana ou Personalizado. O PDF inclui só os selecionados.
+          {isExtra ? ' O PIX, em PDF ou imagem, cobra os selecionados que ainda estão a pagar.' : ''}
         </p>
       </div>
 
